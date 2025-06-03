@@ -20,6 +20,7 @@ import {
 import { statusOptions, channelOptions, agentTypes } from '@/data/sectors';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { TicketChat } from './TicketChat';
 
 interface TicketManagementProps {
   sector: any;
@@ -39,6 +40,7 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
     dateTo: null as Date | null
   });
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [ticketCounts, setTicketCounts] = useState({
     nonVisualized: sector.nonVisualized || 0,
     total: sector.total || 0
@@ -79,6 +81,10 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleTicketClick = (ticket: any) => {
+    setSelectedTicket(ticket);
   };
 
   const getStatusColor = (status: string) => {
@@ -324,6 +330,7 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
             {mockTickets.map((ticket) => (
               <div
                 key={ticket.id}
+                onClick={() => handleTicketClick(ticket)}
                 className={`p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors border-l-4 ${getPriorityColor(ticket.priority)}`}
               >
                 <div className="flex items-center justify-between">
@@ -357,6 +364,14 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
           </div>
         </CardContent>
       </Card>
+
+      {/* Ticket Chat Modal */}
+      {selectedTicket && (
+        <TicketChat 
+          ticket={selectedTicket} 
+          onClose={() => setSelectedTicket(null)} 
+        />
+      )}
     </div>
   );
 };
