@@ -53,16 +53,17 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
 
   return (
     <div className={cn(
-      "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col",
-      collapsed ? "w-16" : "w-64"
+      "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col shadow-sm",
+      collapsed ? "w-16" : "w-72"
     )}>
       {/* Toggle Button */}
-      <div className="p-3 border-b border-gray-200">
+      <div className="p-3 border-b border-gray-100">
         <Button
           variant="ghost"
           size="sm"
           onClick={onToggle}
-          className="w-full flex justify-center"
+          className="w-full flex justify-center hover:bg-gray-100 transition-colors"
+          title={collapsed ? "Expandir sidebar" : "Recolher sidebar"}
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </Button>
@@ -70,7 +71,7 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
 
       {/* Sectors List */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-2 space-y-1">
+        <div className="p-2 space-y-2">
           {sectors.map((sector) => {
             const IconComponent = getIconComponent(sector.icon);
             const counts = getSectorCounts(sector);
@@ -81,17 +82,17 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
                 key={sector.id}
                 variant="ghost"
                 className={cn(
-                  "w-full justify-start text-left transition-all duration-200",
-                  collapsed ? "px-2" : "px-3",
-                  isSelected && "bg-gray-100 border-l-4 border-blue-500"
+                  "w-full justify-start text-left transition-all duration-200 h-auto p-0",
+                  collapsed ? "px-2 py-3" : "px-3 py-3",
+                  isSelected && "bg-gradient-to-r from-blue-50 to-indigo-50 border-r-4 border-blue-500 shadow-sm"
                 )}
                 onClick={() => onSectorChange(sector)}
               >
                 <div className="flex items-center w-full">
                   <div className={cn(
-                    "flex items-center justify-center rounded-md text-white text-xs font-medium",
+                    "flex items-center justify-center rounded-lg text-white text-xs font-medium shadow-sm transition-transform duration-200 hover:scale-105",
                     sector.color,
-                    collapsed ? "w-8 h-8" : "w-10 h-10 mr-3"
+                    collapsed ? "w-8 h-8" : "w-12 h-12 mr-3"
                   )}>
                     <IconComponent className={cn(collapsed ? "w-4 h-4" : "w-5 h-5")} />
                   </div>
@@ -99,22 +100,29 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
                   {!collapsed && (
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium truncate">
+                        <span className="text-sm font-semibold truncate text-gray-900">
                           {sector.name}
                         </span>
-                        <div className="flex items-center space-x-1 ml-2">
+                        <div className="flex items-center space-x-1.5 ml-2">
                           {counts.nonVisualized > 0 && (
-                            <Badge variant="destructive" className="text-xs px-1 py-0">
+                            <Badge 
+                              variant="destructive" 
+                              className="text-xs px-2 py-0.5 animate-pulse"
+                            >
                               {counts.nonVisualized}
                             </Badge>
                           )}
-                          <Badge variant="secondary" className="text-xs px-1 py-0">
+                          <Badge 
+                            variant="secondary" 
+                            className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700"
+                          >
                             {counts.total}
                           </Badge>
                         </div>
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {counts.nonVisualized} / {counts.total}
+                      <div className="text-xs text-gray-500 mt-1 flex items-center">
+                        <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+                        {counts.nonVisualized} não visualizados de {counts.total}
                       </div>
                     </div>
                   )}
@@ -127,9 +135,14 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
 
       {/* Footer */}
       {!collapsed && (
-        <div className="p-3 border-t border-gray-200 text-xs text-gray-500">
-          <div>Setores/Departamentos</div>
-          <div className="mt-1">Atualizando em tempo real</div>
+        <div className="p-4 border-t border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50">
+          <div className="text-xs text-gray-600 font-medium">
+            📊 Setores/Departamentos
+          </div>
+          <div className="text-xs text-gray-500 mt-1 flex items-center">
+            <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+            Atualizando em tempo real
+          </div>
         </div>
       )}
     </div>
