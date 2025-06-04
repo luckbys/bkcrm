@@ -6,6 +6,22 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { 
   X, 
   Send, 
@@ -25,7 +41,11 @@ import {
   AlertCircle,
   Minimize2,
   Maximize2,
-  CheckCircle2
+  CheckCircle2,
+  Plus,
+  Eye,
+  UserCheck,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -45,15 +65,54 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [lastSentMessage, setLastSentMessage] = useState<number | null>(null);
   const [isFinishingTicket, setIsFinishingTicket] = useState(false);
+  
+  // Estados para os modais das ações rápidas
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [showTagModal, setShowTagModal] = useState(false);
+  
+  // Estados para os dados do ticket (que podem ser alterados)
+  const [currentTicket, setCurrentTicket] = useState(ticket);
+  const [newAssignee, setNewAssignee] = useState('');
+  const [newStatus, setNewStatus] = useState('');
+  const [newTag, setNewTag] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Mock data para responsáveis disponíveis
+  const availableAgents = [
+    { id: '1', name: 'João Silva', email: 'joao@empresa.com', department: 'Suporte Técnico' },
+    { id: '2', name: 'Maria Santos', email: 'maria@empresa.com', department: 'Vendas' },
+    { id: '3', name: 'Pedro Costa', email: 'pedro@empresa.com', department: 'Suporte Técnico' },
+    { id: '4', name: 'Ana Oliveira', email: 'ana@empresa.com', department: 'Atendimento' },
+    { id: '5', name: 'Carlos Lima', email: 'carlos@empresa.com', department: 'Técnico' },
+  ];
+
+  // Status disponíveis
+  const availableStatuses = [
+    { value: 'pendente', label: 'Pendente', color: 'amber' },
+    { value: 'atendimento', label: 'Em Atendimento', color: 'blue' },
+    { value: 'aguardando', label: 'Aguardando Cliente', color: 'orange' },
+    { value: 'resolvido', label: 'Resolvido', color: 'green' },
+    { value: 'finalizado', label: 'Finalizado', color: 'emerald' },
+    { value: 'cancelado', label: 'Cancelado', color: 'red' },
+  ];
+
+  // Tags disponíveis
+  const availableTags = [
+    'Bug', 'Feature Request', 'Urgente', 'Cliente VIP', 'Primeira Ocorrência',
+    'Recorrente', 'Treinamento', 'Configuração', 'Integração', 'Performance'
+  ];
 
   const mockMessages = [
     {
       id: 1,
       content: 'Olá, estou com problema no sistema. Não consigo acessar minha conta.',
       sender: 'client',
-      senderName: ticket.client,
+      senderName: currentTicket.client,
       timestamp: new Date(Date.now() - 25 * 60 * 1000), // 25 min atrás
       type: 'text',
       status: 'read'
@@ -71,7 +130,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       id: 3,
       content: 'Meu e-mail é cliente@exemplo.com',
       sender: 'client',
-      senderName: ticket.client,
+      senderName: currentTicket.client,
       timestamp: new Date(Date.now() - 22 * 60 * 1000), // 22 min atrás
       type: 'text',
       status: 'read'
@@ -124,7 +183,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       console.log('Enviando mensagem:', {
         content: message,
         isInternal,
-        ticketId: ticket.id
+        ticketId: currentTicket.id
       });
 
       setLastSentMessage(Date.now());
@@ -152,10 +211,13 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       // Simular API call para finalizar ticket
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      console.log('Finalizando ticket:', ticket.id);
+      console.log('Finalizando ticket:', currentTicket.id);
       
-      // Aqui você pode atualizar o status do ticket ou chamar uma callback
-      // Por exemplo: onFinishTicket?.(ticket.id);
+      // Atualizar o status do ticket localmente
+      setCurrentTicket({
+        ...currentTicket,
+        status: 'finalizado'
+      });
       
       toast({
         title: 'Ticket finalizado',
@@ -168,6 +230,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       toast({
         title: 'Erro ao finalizar ticket',
         description: 'Erro ao finalizar ticket. Tente novamente mais tarde.',
+        variant: 'destructive',
       });
     } finally {
       setIsFinishingTicket(false);
@@ -209,6 +272,173 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     }
   };
 
+  // Função para alterar responsável
+  const handleAssignTicket = async () => {
+    if (!newAssignee) {
+      toast({
+        title: 'Erro',
+        description: 'Selecione um responsável',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUpdating(true);
+    
+    try {
+      // Simular API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const selectedAgent = availableAgents.find(agent => agent.id === newAssignee);
+      
+      console.log('Alterando responsável do ticket:', {
+        ticketId: currentTicket.id,
+        newAssignee: selectedAgent?.name,
+        agentId: newAssignee
+      });
+
+      // Atualizar o ticket localmente
+      setCurrentTicket({
+        ...currentTicket,
+        assignedTo: selectedAgent?.name || 'Não atribuído'
+      });
+
+      toast({
+        title: 'Responsável alterado',
+        description: `Ticket atribuído para ${selectedAgent?.name}`,
+      });
+
+      setShowAssignModal(false);
+      setNewAssignee('');
+      
+    } catch (error) {
+      console.error('Erro ao alterar responsável:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao alterar responsável. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Função para alterar status
+  const handleChangeStatus = async () => {
+    if (!newStatus) {
+      toast({
+        title: 'Erro',
+        description: 'Selecione um status',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUpdating(true);
+    
+    try {
+      // Simular API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const selectedStatus = availableStatuses.find(status => status.value === newStatus);
+      
+      console.log('Alterando status do ticket:', {
+        ticketId: currentTicket.id,
+        oldStatus: currentTicket.status,
+        newStatus: newStatus
+      });
+
+      // Atualizar o ticket localmente
+      setCurrentTicket({
+        ...currentTicket,
+        status: newStatus
+      });
+
+      toast({
+        title: 'Status alterado',
+        description: `Status alterado para "${selectedStatus?.label}"`,
+      });
+
+      setShowStatusModal(false);
+      setNewStatus('');
+      
+    } catch (error) {
+      console.error('Erro ao alterar status:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao alterar status. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Função para adicionar etiqueta
+  const handleAddTag = async () => {
+    if (!newTag.trim()) {
+      toast({
+        title: 'Erro',
+        description: 'Digite uma etiqueta',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUpdating(true);
+    
+    try {
+      // Simular API call
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      console.log('Adicionando etiqueta ao ticket:', {
+        ticketId: currentTicket.id,
+        tag: newTag
+      });
+
+      // Atualizar o ticket localmente (assumindo que existe um array de tags)
+      const currentTags = currentTicket.tags || [];
+      if (!currentTags.includes(newTag)) {
+        setCurrentTicket({
+          ...currentTicket,
+          tags: [...currentTags, newTag]
+        });
+      }
+
+      toast({
+        title: 'Etiqueta adicionada',
+        description: `Etiqueta "${newTag}" adicionada ao ticket`,
+      });
+
+      setShowTagModal(false);
+      setNewTag('');
+      
+    } catch (error) {
+      console.error('Erro ao adicionar etiqueta:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao adicionar etiqueta. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Função para ver detalhes do cliente
+  const handleViewClient = () => {
+    console.log('Visualizando cliente:', currentTicket.client);
+    
+    // Aqui você pode implementar navegação para uma página de detalhes do cliente
+    // ou abrir um modal com as informações completas
+    toast({
+      title: 'Abrindo perfil do cliente',
+      description: `Carregando informações de ${currentTicket.client}`,
+    });
+    
+    setShowClientModal(true);
+  };
+
   if (isMinimized) {
     return (
       <div className="fixed bottom-4 right-4 z-[9999]">
@@ -217,9 +447,9 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <MessageSquare className="w-4 h-4" />
-                <span className="font-medium">Ticket #{ticket.id}</span>
+                <span className="font-medium">Ticket #{currentTicket.id}</span>
                 <Badge className="bg-white/20 text-white border-white/30">
-                  {ticket.status}
+                  {currentTicket.status}
                 </Badge>
               </div>
               <div className="flex items-center space-x-1">
@@ -276,16 +506,16 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                   <MessageSquare className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">Ticket #{ticket.id}</h2>
-                  <p className="text-blue-100 text-sm truncate">{ticket.subject}</p>
+                  <h2 className="text-lg font-semibold">Ticket #{currentTicket.id}</h2>
+                  <p className="text-blue-100 text-sm truncate">{currentTicket.subject}</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <Badge className={cn("text-xs font-medium px-3 py-1", getStatusColor(ticket.status))}>
-                  {ticket.status}
+                <Badge className={cn("text-xs font-medium px-3 py-1", getStatusColor(currentTicket.status))}>
+                  {currentTicket.status}
                 </Badge>
-                <Badge className={cn("text-xs font-medium px-3 py-1 border", getPriorityColor(ticket.priority))}>
-                  {ticket.priority}
+                <Badge className={cn("text-xs font-medium px-3 py-1 border", getPriorityColor(currentTicket.priority))}>
+                  {currentTicket.priority}
                 </Badge>
               </div>
             </div>
@@ -321,7 +551,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                   {msg.sender === 'client' && (
                     <Avatar className="w-8 h-8 ring-2 ring-white shadow-sm">
                       <AvatarFallback className="bg-gradient-to-br from-blue-400 to-blue-600 text-white text-xs">
-                        {ticket.client.charAt(0)}
+                        {currentTicket.client.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                   )}
@@ -375,7 +605,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 <div className="flex items-end space-x-2">
                   <Avatar className="w-8 h-8 ring-2 ring-white shadow-sm">
                     <AvatarFallback className="bg-gradient-to-br from-blue-400 to-blue-600 text-white text-xs">
-                      {ticket.client.charAt(0)}
+                      {currentTicket.client.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm">
@@ -507,11 +737,11 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 <div className="flex items-center space-x-3 mt-2">
                   <Avatar className="w-10 h-10 ring-2 ring-white shadow-sm">
                     <AvatarFallback className="bg-gradient-to-br from-blue-400 to-blue-600 text-white">
-                      {ticket.client.charAt(0)}
+                      {currentTicket.client.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900">{ticket.client}</p>
+                    <p className="font-medium text-gray-900">{currentTicket.client}</p>
                     <p className="text-sm text-gray-500 truncate">cliente@exemplo.com</p>
                     <div className="flex items-center space-x-2 mt-1">
                       <div className="w-2 h-2 bg-green-400 rounded-full"></div>
@@ -523,25 +753,41 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
 
               <div>
                 <label className="text-sm font-medium text-gray-600">Assunto</label>
-                <p className="mt-1 text-sm bg-gray-50 p-3 rounded-lg border">{ticket.subject}</p>
+                <p className="mt-1 text-sm bg-gray-50 p-3 rounded-lg border">{currentTicket.subject}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium text-gray-600">Canal</label>
                   <Badge variant="outline" className="mt-1 w-full justify-center">
-                    {ticket.channel}
+                    {currentTicket.channel}
                   </Badge>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Tempo de Resposta</label>
-                  <p className="mt-1 text-sm text-green-600 font-medium">2min</p>
+                  <label className="text-sm font-medium text-gray-600">Responsável</label>
+                  <p className="mt-1 text-sm text-gray-900 font-medium">
+                    {currentTicket.assignedTo || 'Não atribuído'}
+                  </p>
                 </div>
               </div>
 
+              {/* Exibir tags se existirem */}
+              {currentTicket.tags && currentTicket.tags.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Etiquetas</label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {currentTicket.tags.map((tag, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-sm font-medium text-gray-600">Última Atividade</label>
-                <p className="mt-1 text-sm text-gray-500">{ticket.lastMessage}</p>
+                <p className="mt-1 text-sm text-gray-500">{currentTicket.lastMessage}</p>
               </div>
             </div>
           </div>
@@ -550,21 +796,36 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center">
-                  <Clock className="w-4 h-4 mr-2 text-blue-600" />
+                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
                   Ações Rápidas
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button variant="outline" size="sm" className="w-full justify-start hover:bg-blue-50 hover:border-blue-300 transition-colors">
-                  <User className="w-4 h-4 mr-2" />
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                  onClick={() => setShowAssignModal(true)}
+                >
+                  <UserCheck className="w-4 h-4 mr-2" />
                   Alterar Responsável
                 </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start hover:bg-green-50 hover:border-green-300 transition-colors">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start hover:bg-green-50 hover:border-green-300 transition-colors"
+                  onClick={() => setShowStatusModal(true)}
+                >
                   <Clock className="w-4 h-4 mr-2" />
                   Alterar Status
                 </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start hover:bg-purple-50 hover:border-purple-300 transition-colors">
-                  <Building className="w-4 h-4 mr-2" />
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start hover:bg-purple-50 hover:border-purple-300 transition-colors"
+                  onClick={handleViewClient}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
                   Ver Cliente
                 </Button>
                 <Button 
@@ -572,14 +833,14 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                   size="sm" 
                   className={cn(
                     "w-full justify-start transition-colors",
-                    ticket.status === 'finalizado' 
+                    currentTicket.status === 'finalizado' 
                       ? "bg-green-50 border-green-300 text-green-700 cursor-not-allowed"
                       : "hover:bg-green-50 hover:border-green-300"
                   )}
                   onClick={handleFinishTicket}
-                  disabled={isFinishingTicket || ticket.status === 'finalizado'}
+                  disabled={isFinishingTicket || currentTicket.status === 'finalizado'}
                 >
-                  {ticket.status === 'finalizado' ? (
+                  {currentTicket.status === 'finalizado' ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />
                       Ticket Finalizado
@@ -596,8 +857,13 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                     </>
                   )}
                 </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start hover:bg-amber-50 hover:border-amber-300 transition-colors">
-                  <Tag className="w-4 h-4 mr-2" />
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start hover:bg-amber-50 hover:border-amber-300 transition-colors"
+                  onClick={() => setShowTagModal(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
                   Adicionar Etiqueta
                 </Button>
               </CardContent>
@@ -633,6 +899,297 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
           </div>
         </div>
       </div>
+
+      {/* Modal para Alterar Responsável */}
+      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <UserCheck className="w-5 h-5 mr-2 text-blue-600" />
+              Alterar Responsável
+            </DialogTitle>
+            <DialogDescription>
+              Selecione o novo responsável para este ticket.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="assignee">Responsável</Label>
+              <Select value={newAssignee} onValueChange={setNewAssignee}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableAgents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      <div className="flex items-center space-x-2">
+                        <Avatar className="w-6 h-6">
+                          <AvatarFallback className="text-xs bg-blue-100 text-blue-600">
+                            {agent.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{agent.name}</div>
+                          <div className="text-xs text-gray-500">{agent.department}</div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAssignModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAssignTicket} disabled={isUpdating}>
+              {isUpdating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Alterando...
+                </>
+              ) : (
+                'Alterar Responsável'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Alterar Status */}
+      <Dialog open={showStatusModal} onOpenChange={setShowStatusModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Clock className="w-5 h-5 mr-2 text-green-600" />
+              Alterar Status
+            </DialogTitle>
+            <DialogDescription>
+              Selecione o novo status para este ticket.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableStatuses.map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                      <div className="flex items-center space-x-2">
+                        <div className={cn("w-3 h-3 rounded-full", {
+                          'bg-amber-400': status.color === 'amber',
+                          'bg-blue-400': status.color === 'blue',
+                          'bg-orange-400': status.color === 'orange',
+                          'bg-green-400': status.color === 'green',
+                          'bg-emerald-400': status.color === 'emerald',
+                          'bg-red-400': status.color === 'red',
+                        })} />
+                        <span>{status.label}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStatusModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleChangeStatus} disabled={isUpdating}>
+              {isUpdating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Alterando...
+                </>
+              ) : (
+                'Alterar Status'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Adicionar Etiqueta */}
+      <Dialog open={showTagModal} onOpenChange={setShowTagModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Tag className="w-5 h-5 mr-2 text-amber-600" />
+              Adicionar Etiqueta
+            </DialogTitle>
+            <DialogDescription>
+              Adicione uma etiqueta para categorizar este ticket.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="tag">Etiqueta</Label>
+              <Select value={newTag} onValueChange={setNewTag}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione ou digite uma etiqueta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableTags.map((tag) => (
+                    <SelectItem key={tag} value={tag}>
+                      <div className="flex items-center space-x-2">
+                        <Tag className="w-3 h-3 text-gray-400" />
+                        <span>{tag}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="custom-tag">Ou digite uma etiqueta personalizada</Label>
+              <Input
+                id="custom-tag"
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
+                placeholder="Digite uma nova etiqueta..."
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTagModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAddTag} disabled={isUpdating}>
+              {isUpdating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Adicionando...
+                </>
+              ) : (
+                'Adicionar Etiqueta'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Ver Cliente */}
+      <Dialog open={showClientModal} onOpenChange={setShowClientModal}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Building className="w-5 h-5 mr-2 text-purple-600" />
+              Detalhes do Cliente
+            </DialogTitle>
+            <DialogDescription>
+              Informações completas do cliente
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Informações básicas */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div className="flex items-center space-x-4">
+                  <Avatar className="w-16 h-16 ring-4 ring-blue-100">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-400 to-blue-600 text-white text-xl">
+                      {currentTicket.client.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="text-lg font-semibold">{currentTicket.client}</h3>
+                    <p className="text-gray-600">Cliente Premium</p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      <span className="text-sm text-gray-500">Online agora</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">E-mail</Label>
+                  <p className="text-sm">cliente@exemplo.com</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Telefone</Label>
+                  <p className="text-sm">(11) 99999-9999</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Empresa</Label>
+                  <p className="text-sm">Empresa Exemplo Ltda</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Estatísticas */}
+            <div className="grid grid-cols-3 gap-4">
+              <Card className="p-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">12</p>
+                  <p className="text-sm text-gray-600">Tickets Totais</p>
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">8</p>
+                  <p className="text-sm text-gray-600">Resolvidos</p>
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-amber-600">4.5</p>
+                  <p className="text-sm text-gray-600">Avaliação Média</p>
+                </div>
+              </Card>
+            </div>
+
+            {/* Histórico recente */}
+            <div>
+              <Label className="text-sm font-medium text-gray-600 mb-3 block">Histórico Recente</Label>
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {[
+                  { date: '2024-01-15', action: 'Ticket #12345 resolvido', type: 'success' },
+                  { date: '2024-01-10', action: 'Ticket #12344 criado', type: 'info' },
+                  { date: '2024-01-05', action: 'Avaliação 5 estrelas', type: 'success' },
+                ].map((item, index) => (
+                  <div key={index} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50">
+                    <div className={cn("w-2 h-2 rounded-full", {
+                      'bg-green-400': item.type === 'success',
+                      'bg-blue-400': item.type === 'info',
+                    })} />
+                    <div className="flex-1">
+                      <p className="text-sm">{item.action}</p>
+                      <p className="text-xs text-gray-500">{item.date}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClientModal(false)}>
+              Fechar
+            </Button>
+            <Button>
+              <Mail className="w-4 h-4 mr-2" />
+              Enviar E-mail
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,0 +1,206 @@
+import { Customer, CustomerStats } from '@/types/customer';
+
+export const mockCustomers: Customer[] = [
+  {
+    id: '1',
+    name: 'João Silva',
+    email: 'joao.silva@email.com',
+    phone: '(11) 99999-1234',
+    document: '123.456.789-00',
+    documentType: 'cpf',
+    company: 'Silva & Associados',
+    position: 'Diretor',
+    address: {
+      street: 'Rua das Flores',
+      number: '123',
+      complement: 'Sala 45',
+      neighborhood: 'Centro',
+      city: 'São Paulo',
+      state: 'SP',
+      zipCode: '01234-567'
+    },
+    status: 'ativo',
+    category: 'ouro',
+    channel: 'whatsapp',
+    tags: ['VIP', 'Recorrente'],
+    notes: 'Cliente muito satisfeito com o atendimento. Sempre pontual nos pagamentos.',
+    customerSince: '2022-03-15',
+    lastInteraction: '2024-01-10',
+    totalOrders: 24,
+    totalValue: 125000,
+    averageTicket: 5208.33,
+    responsibleAgent: 'Ana Costa',
+    createdAt: '2022-03-15T10:30:00Z',
+    updatedAt: '2024-01-10T15:45:00Z'
+  },
+  {
+    id: '2',
+    name: 'Maria Santos',
+    email: 'maria.santos@empresa.com.br',
+    phone: '(21) 98888-5678',
+    document: '12.345.678/0001-90',
+    documentType: 'cnpj',
+    company: 'Santos Tecnologia',
+    position: 'CEO',
+    address: {
+      street: 'Av. Paulista',
+      number: '1000',
+      neighborhood: 'Bela Vista',
+      city: 'São Paulo',
+      state: 'SP',
+      zipCode: '01310-100'
+    },
+    status: 'ativo',
+    category: 'diamante',
+    channel: 'email',
+    tags: ['Corporativo', 'Volume Alto'],
+    notes: 'Empresa com grande potencial. Interessada em soluções enterprise.',
+    customerSince: '2021-08-20',
+    lastInteraction: '2024-01-08',
+    totalOrders: 45,
+    totalValue: 890000,
+    averageTicket: 19777.78,
+    responsibleAgent: 'Carlos Oliveira',
+    createdAt: '2021-08-20T14:20:00Z',
+    updatedAt: '2024-01-08T11:30:00Z'
+  },
+  {
+    id: '3',
+    name: 'Pedro Mendes',
+    email: 'pedro.mendes@gmail.com',
+    phone: '(85) 97777-9012',
+    document: '987.654.321-11',
+    documentType: 'cpf',
+    company: 'Freelancer',
+    position: 'Desenvolvedor',
+    address: {
+      street: 'Rua do Sol',
+      number: '456',
+      neighborhood: 'Aldeota',
+      city: 'Fortaleza',
+      state: 'CE',
+      zipCode: '60110-123'
+    },
+    status: 'prospect',
+    category: 'bronze',
+    channel: 'site',
+    tags: ['Novo', 'Freelancer'],
+    notes: 'Demonstrou interesse em nossos produtos. Aguardando proposta.',
+    customerSince: '2024-01-05',
+    lastInteraction: '2024-01-05',
+    totalOrders: 0,
+    totalValue: 0,
+    averageTicket: 0,
+    responsibleAgent: 'Sofia Lima',
+    createdAt: '2024-01-05T09:15:00Z',
+    updatedAt: '2024-01-05T09:15:00Z'
+  },
+  {
+    id: '4',
+    name: 'Ana Carolina',
+    email: 'ana.carolina@loja.com',
+    phone: '(47) 96666-3456',
+    document: '456.789.123-22',
+    documentType: 'cpf',
+    company: 'Loja da Ana',
+    position: 'Proprietária',
+    address: {
+      street: 'Rua Principal',
+      number: '789',
+      neighborhood: 'Centro',
+      city: 'Blumenau',
+      state: 'SC',
+      zipCode: '89010-100'
+    },
+    status: 'ativo',
+    category: 'prata',
+    channel: 'telefone',
+    tags: ['Loja Física', 'Pequeno Negócio'],
+    notes: 'Proprietária de loja local. Busca soluções para gestão de estoque.',
+    customerSince: '2023-05-12',
+    lastInteraction: '2024-01-07',
+    totalOrders: 12,
+    totalValue: 45000,
+    averageTicket: 3750,
+    responsibleAgent: 'Roberto Silva',
+    createdAt: '2023-05-12T16:00:00Z',
+    updatedAt: '2024-01-07T10:20:00Z'
+  },
+  {
+    id: '5',
+    name: 'Tech Solutions LTDA',
+    email: 'contato@techsolutions.com.br',
+    phone: '(11) 95555-7890',
+    document: '98.765.432/0001-10',
+    documentType: 'cnpj',
+    company: 'Tech Solutions LTDA',
+    position: 'Gerente de TI',
+    address: {
+      street: 'Av. das Nações',
+      number: '2000',
+      complement: '15º andar',
+      neighborhood: 'Vila Olímpia',
+      city: 'São Paulo',
+      state: 'SP',
+      zipCode: '04794-000'
+    },
+    status: 'inativo',
+    category: 'ouro',
+    channel: 'indicacao',
+    tags: ['Corporativo', 'Inativo'],
+    notes: 'Cliente inativo desde dezembro. Motivo: mudança de fornecedor.',
+    customerSince: '2020-11-30',
+    lastInteraction: '2023-12-15',
+    totalOrders: 36,
+    totalValue: 320000,
+    averageTicket: 8888.89,
+    responsibleAgent: 'Marina Ferreira',
+    createdAt: '2020-11-30T13:45:00Z',
+    updatedAt: '2023-12-15T17:30:00Z'
+  }
+];
+
+export const customerStats: CustomerStats = {
+  total: 1247,
+  active: 892,
+  inactive: 234,
+  prospects: 121,
+  newThisMonth: 45,
+  totalValue: 12450000,
+  averageTicket: 6523.50
+};
+
+export const customerCategories = [
+  { value: 'todos', label: 'Todas as Categorias' },
+  { value: 'bronze', label: 'Bronze', color: 'orange' },
+  { value: 'prata', label: 'Prata', color: 'gray' },
+  { value: 'ouro', label: 'Ouro', color: 'yellow' },
+  { value: 'diamante', label: 'Diamante', color: 'blue' }
+];
+
+export const customerStatuses = [
+  { value: 'todos', label: 'Todos os Status' },
+  { value: 'ativo', label: 'Ativo', color: 'green' },
+  { value: 'inativo', label: 'Inativo', color: 'red' },
+  { value: 'suspenso', label: 'Suspenso', color: 'orange' },
+  { value: 'prospect', label: 'Prospect', color: 'blue' }
+];
+
+export const customerChannels = [
+  { value: 'todos', label: 'Todos os Canais' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'email', label: 'E-mail' },
+  { value: 'telefone', label: 'Telefone' },
+  { value: 'site', label: 'Site' },
+  { value: 'indicacao', label: 'Indicação' },
+  { value: 'marketplace', label: 'Marketplace' }
+];
+
+export const responsibleAgents = [
+  { value: 'todos', label: 'Todos os Agentes' },
+  { value: 'Ana Costa', label: 'Ana Costa' },
+  { value: 'Carlos Oliveira', label: 'Carlos Oliveira' },
+  { value: 'Sofia Lima', label: 'Sofia Lima' },
+  { value: 'Roberto Silva', label: 'Roberto Silva' },
+  { value: 'Marina Ferreira', label: 'Marina Ferreira' }
+]; 

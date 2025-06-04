@@ -1,8 +1,8 @@
-
 import { useState } from 'react';
 import { TicketManagement } from './TicketManagement';
 import { SalesFunnel } from './SalesFunnel';
-import { Loader2, MessageSquare, Filter } from 'lucide-react';
+import { CustomerManagement } from './customers/CustomerManagement';
+import { Loader2, MessageSquare, Filter, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MainContentProps {
@@ -47,6 +47,56 @@ export const MainContent = ({
         );
       case 'funil':
         return <SalesFunnel sector={selectedSector} />;
+      case 'clientes':
+        return <CustomerManagement />;
+      case 'dashboard':
+        return (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center p-8">
+              <div className="bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl p-8 mb-6 inline-block">
+                <MessageSquare className="w-12 h-12 text-blue-600 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Dashboard
+                </h3>
+                <p className="text-gray-600">
+                  Em desenvolvimento...
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      case 'produtos':
+        return (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center p-8">
+              <div className="bg-gradient-to-br from-green-100 to-emerald-100 rounded-2xl p-8 mb-6 inline-block">
+                <MessageSquare className="w-12 h-12 text-green-600 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Produtos
+                </h3>
+                <p className="text-gray-600">
+                  Em desenvolvimento...
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      case 'disparos':
+        return (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center p-8">
+              <div className="bg-gradient-to-br from-orange-100 to-red-100 rounded-2xl p-8 mb-6 inline-block">
+                <MessageSquare className="w-12 h-12 text-orange-600 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Disparos
+                </h3>
+                <p className="text-gray-600">
+                  Em desenvolvimento...
+                </p>
+              </div>
+            </div>
+          </div>
+        );
       default:
         return (
           <div className="flex items-center justify-center h-full">
@@ -74,6 +124,13 @@ export const MainContent = ({
                 >
                   <Filter className="w-4 h-4 mr-2" />
                   Ver Funil
+                </button>
+                <button
+                  onClick={() => onViewChange('clientes')}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  Ver Clientes
                 </button>
               </div>
             </div>

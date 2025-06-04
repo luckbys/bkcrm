@@ -1,4 +1,3 @@
-
 import { MainMenu } from './header/MainMenu';
 import { SectorTitle } from './header/SectorTitle';
 import { SectorActions } from './header/SectorActions';
@@ -32,7 +31,7 @@ export const Header = ({
       <div className="flex items-center justify-between h-16 px-4 lg:px-6">
         {/* Left Side */}
         <div className="flex items-center space-x-3">
-          <MainMenu />
+          <MainMenu onNavigate={onViewChange} />
           <SectorTitle selectedSector={selectedSector} />
           <SectorActions currentView={currentView} onViewChange={onViewChange} />
         </div>
