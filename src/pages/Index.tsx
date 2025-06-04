@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/crm/Header';
-import { Sidebar } from '@/components/crm/Sidebar';
 import { MainContent } from '@/components/crm/MainContent';
 import { ImagePasteModal } from '@/components/crm/ImagePasteModal';
 import { AddTicketModal } from '@/components/crm/AddTicketModal';

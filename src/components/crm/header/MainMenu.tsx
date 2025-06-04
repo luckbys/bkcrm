@@ -19,7 +19,8 @@ import {
   Settings,
   Boxes,
   Activity,
-  ChevronRight
+  ChevronRight,
+  Smartphone
 } from 'lucide-react';
 
 interface MainMenuProps {
@@ -59,6 +60,7 @@ export const MainMenu = ({ onNavigate }: MainMenuProps) => {
       'user': User,
       'box-open': Package,
       'chart-line': TrendingUp,
+      'smartphone': Smartphone,
       'sitemap': Folder,
       'clipboard-check': ClipboardCheck,
       'chart-bar': Activity,

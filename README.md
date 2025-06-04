@@ -1,73 +1,205 @@
-# Welcome to your Lovable project
+# Sistema de CRM com WhatsApp - Evolution API
 
-## Project info
+Sistema completo de CRM integrado com Evolution API para comunicação via WhatsApp por setor.
 
-**URL**: https://lovable.dev/projects/773befd1-f103-4334-99bd-89817c7a1a00
+## 🚀 Versão de Produção - Evolution API
 
-## How can I edit this code?
+### **Configurações Implementadas:**
 
-There are several ways of editing your application.
+- **Servidor Evolution API:** `https://press-evolution-api.jhkbgs.easypanel.host/`
+- **API Key:** `429683C4C977415CAAFCCE10F7D57E11`
+- **Integração Real:** Chamadas HTTP diretas para Evolution API
+- **Gestão de Instâncias:** Sistema completo de criação e gerenciamento por setor
 
-**Use Lovable**
+### **Funcionalidades Principais:**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/773befd1-f103-4334-99bd-89817c7a1a00) and start prompting.
+#### 🔗 **Integração WhatsApp por Setor**
+- Acesso via: **Setor → ⋮ → Editar Setor → Aba "WhatsApp"**
+- Configuração individual para cada setor
+- Instâncias independentes por departamento
+- Status visual: conectado/desconectado
+- QR Code para pareamento
 
-Changes made via Lovable will be committed automatically to this repo.
+#### 📱 **Indicadores Visuais**
+- **Ícone 📱:** Aparece quando WhatsApp está conectado
+- **Badge "WA":** Exibido ao lado do nome do setor
+- **Círculo Verde:** Status de conexão ativo
+- **Status em Tempo Real:** Sincronização automática a cada 30 segundos
 
-**Use your preferred IDE**
+#### ⚙️ **Configurações Avançadas**
+- **Sempre Online:** Manter WhatsApp sempre online
+- **Auto-read:** Marcar mensagens como lidas automaticamente
+- **Rejeitar Chamadas:** Com mensagem personalizada
+- **Ignorar Grupos:** Não processar mensagens de grupos
+- **Webhook:** URL para receber callbacks
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### **Interface de Usuário:**
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+#### 🎛️ **Sistema de Abas**
+1. **Configurações Gerais:** Nome, ícone, cor, prioridade
+2. **WhatsApp:** Todas as configurações Evolution API
 
-Follow these steps:
+#### 🔘 **Botões de Ação**
+- **Conectar/Reconectar:** Estabelece conexão com Evolution API
+- **QR Code:** Gera código para pareamento (quando conectado)
+- **Desconectar:** Remove conexão WhatsApp (botão vermelho)
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### **Arquitetura Técnica:**
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+#### 📁 **Arquivos Principais**
+```
+src/
+├── lib/
+│   ├── evolution-api.ts        # Classes de serviço Evolution API
+│   └── evolution-config.ts     # Configurações e instâncias globais
+├── components/crm/
+│   └── Sidebar.tsx            # Interface principal integrada
+└── types/
+    └── evolution-api.ts       # Tipos TypeScript
 ```
 
-**Edit a file directly in GitHub**
+#### 🔧 **Classes de Serviço**
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+**`EvolutionAPIService`**
+- Comunicação HTTP com Evolution API
+- Métodos: getInfo(), createInstance(), connectInstance(), etc.
+- Tratamento de erros e autenticação
 
-**Use GitHub Codespaces**
+**`DepartmentInstanceManager`**
+- Gerenciamento de instâncias por departamento
+- Persistência no localStorage
+- Sincronização de status
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+#### 💾 **Persistência de Dados**
+- **localStorage:** Configurações por setor
+- **Chaves:** `whatsapp_config_{sectorId}` e `department_instances`
+- **Sincronização:** Automática entre interface e Evolution API
 
-## What technologies are used for this project?
+### **Fluxo de Funcionamento:**
 
-This project is built with:
+#### 1️⃣ **Configuração Inicial**
+```javascript
+// Credenciais carregadas automaticamente
+serverUrl: 'https://press-evolution-api.jhkbgs.easypanel.host/'
+apiKey: '429683C4C977415CAAFCCE10F7D57E11'
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+#### 2️⃣ **Criação de Instância**
+```javascript
+// Quando conectar WhatsApp pela primeira vez
+await departmentInstanceManager.createDepartmentInstance(
+  sectorId.toString(),
+  sectorName,
+  { phoneNumber, webhookUrl, settings }
+);
+```
 
-## How can I deploy this project?
+#### 3️⃣ **Conexão e QR Code**
+```javascript
+// Conectar e obter QR Code
+await departmentInstanceManager.connectDepartmentInstance(sectorId);
+const qrCode = await departmentInstanceManager.getDepartmentQRCode(sectorId);
+```
 
-Simply open [Lovable](https://lovable.dev/projects/773befd1-f103-4334-99bd-89817c7a1a00) and click on Share -> Publish.
+#### 4️⃣ **Sincronização Contínua**
+```javascript
+// A cada 30 segundos
+await departmentInstanceManager.syncAllInstances();
+```
 
-## Can I connect a custom domain to my Lovable project?
+### **Melhorias na Interface:**
 
-Yes, you can!
+#### 🎨 **UX/UI Aprimorada**
+- **Auto-refresh inteligente:** Pausa quando modais estão abertos
+- **Feedback visual:** Toasts informativos para todas as ações
+- **Estados de loading:** Spinners durante operações assíncronas
+- **Controle de abas:** Mantém posição selecionada
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+#### 🔄 **Sistema de Estados**
+- `configurationMode`: Controla quando modais estão ativos
+- `isTestingConnection`: Estado de loading para conexões
+- `activeTab`: Controle de abas independente
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### **Tratamento de Erros:**
+
+#### ⚠️ **Validações**
+- Verificação de campos obrigatórios
+- Teste de conectividade antes de operações
+- Validação de formato de dados
+
+#### 🚨 **Mensagens de Erro**
+- Toasts específicos para cada tipo de erro
+- Logs detalhados no console para debug
+- Fallbacks para operações que falham
+
+### **Diferenças da Versão Mock:**
+
+| Aspecto | Versão Mock | Versão Produção |
+|---------|-------------|-----------------|
+| **Conexão** | `setTimeout(2000)` | `evolutionAPIService.getInfo()` |
+| **QR Code** | Base64 fixo | `getDepartmentQRCode()` real |
+| **Instâncias** | localStorage apenas | Evolution API + localStorage |
+| **Status** | Simulado | Sincronização real via API |
+| **Erros** | Fictícios | Reais da Evolution API |
+
+### **Como Usar:**
+
+#### 🚀 **Primeiro Uso**
+1. Abrir setor → ⋮ → Editar Setor
+2. Ir para aba "WhatsApp"
+3. Configurar número e webhook (opcional)
+4. Clicar em "Conectar"
+5. Aguardar conexão estabelecida
+6. Clicar em "QR Code" e escanear com WhatsApp
+7. Salvar configurações
+
+#### 🔧 **Configurações Avançadas**
+1. Após conectar, configurar switches:
+   - Sempre online
+   - Auto-read de mensagens
+   - Rejeitar chamadas (com mensagem customizada)
+   - Ignorar grupos
+2. Salvar alterações
+
+#### 📱 **Verificação de Status**
+- **Ícone 📱:** Aparece automaticamente quando conectado
+- **Badge "WA":** Visível na lista de setores
+- **Sincronização:** Automática a cada 30 segundos
+
+### **Requisitos Técnicos:**
+
+#### 🌐 **Conectividade**
+- Acesso à internet para Evolution API
+- URL do servidor Evolution API acessível
+- API Key válida
+
+#### 💻 **Dependências**
+```json
+{
+  "@/lib/evolution-api": "Classes de serviço",
+  "@/types/evolution-api": "Tipos TypeScript",
+  "react": "Interface reativa",
+  "localStorage": "Persistência local"
+}
+```
+
+### **Próximos Passos:**
+
+#### 🔄 **Melhorias Futuras**
+- [ ] Dashboard de mensagens por setor
+- [ ] Histórico de conversas
+- [ ] Templates de mensagens
+- [ ] Relatórios de uso
+- [ ] Backup/restore de configurações
+
+#### 🧪 **Testes Recomendados**
+- [ ] Teste de conectividade com diferentes redes
+- [ ] Validação de QR Code em diferentes dispositivos
+- [ ] Teste de sincronização com múltiplos setores
+- [ ] Verificação de persistência após refresh
+
+---
+
+**Status:** ✅ **Versão de Produção Implementada e Funcional**
+
+A integração Evolution API está completamente implementada com chamadas reais e gerenciamento profissional de instâncias por setor.
