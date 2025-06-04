@@ -1,15 +1,16 @@
-
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/crm/Header';
 import { Sidebar } from '@/components/crm/Sidebar';
 import { MainContent } from '@/components/crm/MainContent';
 import { ImagePasteModal } from '@/components/crm/ImagePasteModal';
 import { AddTicketModal } from '@/components/crm/AddTicketModal';
-import { sectors } from '@/data/sectors';
+import { sectors as initialSectors } from '@/data/sectors';
 import { toast } from '@/hooks/use-toast';
 
 const Index = () => {
-  const [selectedSector, setSelectedSector] = useState(sectors[0]);
+  // Estado para os setores (agora gerenciado localmente)
+  const [sectors, setSectors] = useState(initialSectors);
+  const [selectedSector, setSelectedSector] = useState(initialSectors[0]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return sessionStorage.getItem('sidebarCollapsed') === 'true';
   });
@@ -26,6 +27,39 @@ const Index = () => {
     return sessionStorage.getItem('soundEnabled') !== 'false';
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  // Função para atualizar os setores
+  const handleSectorUpdate = (updatedSectors: typeof sectors) => {
+    setSectors(updatedSectors);
+    
+    // Se o setor selecionado ainda existe, manter; senão, selecionar o primeiro
+    const currentSectorExists = updatedSectors.find(s => s.id === selectedSector.id);
+    if (!currentSectorExists && updatedSectors.length > 0) {
+      setSelectedSector(updatedSectors[0]);
+    }
+    
+    // Salvar no localStorage para persistir entre sessões
+    localStorage.setItem('customSectors', JSON.stringify(updatedSectors));
+  };
+
+  // Carregar setores personalizados do localStorage na inicialização
+  useEffect(() => {
+    const savedSectors = localStorage.getItem('customSectors');
+    if (savedSectors) {
+      try {
+        const parsedSectors = JSON.parse(savedSectors);
+        setSectors(parsedSectors);
+        
+        // Verificar se o setor selecionado ainda existe
+        const currentSectorExists = parsedSectors.find((s: any) => s.id === selectedSector.id);
+        if (!currentSectorExists && parsedSectors.length > 0) {
+          setSelectedSector(parsedSectors[0]);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar setores personalizados:', error);
+      }
+    }
+  }, []);
 
   // Handle image paste globally
   useEffect(() => {
@@ -108,8 +142,13 @@ const Index = () => {
     }, 300);
   };
 
-  const toggleSidebar = (collapse?: boolean) => {
-    setSidebarCollapsed(collapse !== undefined ? collapse : !sidebarCollapsed);
+  const toggleSidebar = () => {
+    console.log('toggleSidebar called! Current state:', sidebarCollapsed);
+    setSidebarCollapsed(prev => {
+      const newState = !prev;
+      console.log('Setting sidebar to:', newState);
+      return newState;
+    });
   };
 
   const toggleFullScreen = () => {
@@ -144,6 +183,7 @@ const Index = () => {
             onSectorChange={handleSectorChange}
             collapsed={sidebarCollapsed}
             onToggle={toggleSidebar}
+            onSectorUpdate={handleSectorUpdate}
           />
           
           <MainContent

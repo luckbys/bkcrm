@@ -1,4 +1,3 @@
-
 export const sectors = [
   {
     id: 1,
@@ -86,7 +85,7 @@ export const menuItems = [
 ];
 
 export const statusOptions = [
-  { value: 'todos', label: 'Todos' },
+  { value: 'todos', label: 'Todos os Status' },
   { value: 'pendente', label: 'Pendente' },
   { value: 'atendimento', label: 'Em Atendimento' },
   { value: 'finalizado', label: 'Finalizado' },
@@ -95,14 +94,40 @@ export const statusOptions = [
 
 export const channelOptions = [
   { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'facebook', label: 'Facebook' },
   { value: 'email', label: 'Email' },
   { value: 'telefone', label: 'Telefone' },
-  { value: 'site', label: 'Site' }
+  { value: 'chat', label: 'Chat do Site' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'telegram', label: 'Telegram' },
+  { value: 'presencial', label: 'Atendimento Presencial' },
+  { value: 'sms', label: 'SMS' },
+  { value: 'marketplace', label: 'Marketplace' }
 ];
 
 export const agentTypes = [
-  { value: 'tec', label: 'TEC' },
-  { value: 'ia', label: 'I.A' },
-  { value: 'bot', label: 'BOT' }
+  { value: 'humano', label: 'Agente Humano' },
+  { value: 'ia', label: 'Inteligência Artificial' },
+  { value: 'bot', label: 'Chatbot' },
+  { value: 'hibrido', label: 'Híbrido (Humano + IA)' }
+];
+
+export const priorityOptions = [
+  { value: 'baixa', label: 'Baixa Prioridade', color: 'green' },
+  { value: 'normal', label: 'Prioridade Normal', color: 'blue' },
+  { value: 'alta', label: 'Alta Prioridade', color: 'orange' },
+  { value: 'urgente', label: 'Urgente', color: 'red' }
+];
+
+export const ticketCategories = [
+  { value: 'suporte', label: 'Suporte Técnico' },
+  { value: 'vendas', label: 'Vendas' },
+  { value: 'financeiro', label: 'Financeiro' },
+  { value: 'comercial', label: 'Comercial' },
+  { value: 'produto', label: 'Dúvida sobre Produto' },
+  { value: 'reclamacao', label: 'Reclamação' },
+  { value: 'elogio', label: 'Elogio' },
+  { value: 'cancelamento', label: 'Cancelamento' },
+  { value: 'integracao', label: 'Integração' },
+  { value: 'outros', label: 'Outros' }
 ];
