@@ -1,76 +1,56 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { TicketChat } from './TicketChat';
 import { 
   Search,
-  Filter,
   Plus,
-  MoreVertical,
-  Calendar,
   DollarSign,
   TrendingUp,
-  TrendingDown,
   User,
   Phone,
   Mail,
-  Eye,
   Edit,
   Trash2,
   Target,
-  Clock,
-  Star,
-  AlertCircle,
   CheckCircle,
-  RefreshCw,
-  Download,
-  Settings,
-  Zap,
+  FileText,
+  MessageSquare,
   Save,
   X,
-  Copy,
-  Share,
-  BarChart3,
-  PieChart,
-  FileText,
-  Calendar as CalendarIcon,
-  MapPin,
-  Building,
-  Tag,
-  History,
-  MessageSquare,
-  Video,
-  PhoneCall,
-  ExternalLink,
+  Calendar,
+  Clock,
+  AlertTriangle,
+  ArrowUp,
   ArrowRight,
   ArrowDown,
-  ArrowUp,
-  Filter as FilterIcon,
-  SortAsc,
-  SortDesc,
-  Archive,
-  AlertTriangle,
-  Info,
-  Loader2,
-  CheckCheck,
-  Grid3X3,
-  List
+  MoreVertical,
+  Grip,
+  Filter,
+  RefreshCw,
+  BarChart3,
+  TrendingDown,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SalesFunnelProps {
   sector: any;
+}
+
+interface Activity {
+  id: number;
+  type: 'note' | 'call' | 'email' | 'meeting' | 'stage_change' | 'created';
+  description: string;
+  createdAt: Date;
+  createdBy: string;
 }
 
 interface Opportunity {
@@ -81,146 +61,118 @@ interface Opportunity {
   stage: string;
   probability: number;
   responsible: string;
-  createdAt: Date;
-  updatedAt: Date;
-  nextAction: string;
   priority: 'baixa' | 'normal' | 'alta' | 'urgente';
-  source: string;
-  tags: string[];
   description: string;
   contact: {
     phone: string;
     email: string;
   };
-  address?: string;
-  website?: string;
+  createdAt: Date;
   expectedCloseDate?: Date;
-  lastContactDate?: Date;
-  notes?: string;
-}
-
-interface OpportunityFormData {
-  client: string;
-  company: string;
-  value: number;
-  stage: string;
-  probability: number;
-  responsible: string;
-  priority: 'baixa' | 'normal' | 'alta' | 'urgente';
-  source: string;
+  lastActivity?: Date;
+  activities: Activity[];
   tags: string[];
-  description: string;
-  phone: string;
-  email: string;
-  address?: string;
-  website?: string;
-  expectedCloseDate?: Date;
-  nextAction: string;
-  notes?: string;
+  source: string;
 }
 
 export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
-  // Hook do toast
   const { toast } = useToast();
   
-  // Estados principais
+  // Estados
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStage, setSelectedStage] = useState('all');
-  const [selectedResponsible, setSelectedResponsible] = useState('all');
-  const [selectedPriority, setSelectedPriority] = useState('all');
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
-  const [draggedOpportunity, setDraggedOpportunity] = useState<Opportunity | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
-  
-  // Estados do modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState<OpportunityFormData>({
+  const [draggedOpportunity, setDraggedOpportunity] = useState<Opportunity | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [selectedOpportunities, setSelectedOpportunities] = useState<Set<number>>(new Set());
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'card' | 'compact' | 'detailed'>('card');
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [activityModal, setActivityModal] = useState<{ isOpen: boolean; opportunityId: number | null }>({
+    isOpen: false,
+    opportunityId: null
+  });
+  const [filters, setFilters] = useState({
+    responsible: '',
+    priority: '',
+    dateRange: '',
+    minValue: '',
+    maxValue: '',
+    tags: '',
+    source: '',
+    lastActivity: ''
+  });
+  const [formData, setFormData] = useState({
     client: '',
     company: '',
     value: 0,
     stage: 'leads',
     probability: 20,
     responsible: '',
-    priority: 'normal',
-    source: '',
-    tags: [],
+    priority: 'normal' as 'baixa' | 'normal' | 'alta' | 'urgente',
     description: '',
     phone: '',
     email: '',
-    address: '',
-    website: '',
-    expectedCloseDate: undefined,
-    nextAction: '',
-    notes: ''
+    expectedCloseDate: '',
+    tags: '',
+    source: 'Website'
   });
 
-  // Estados de UI
-  const [showFilters, setShowFilters] = useState(false);
-  const [sortBy, setSortBy] = useState<'value' | 'probability' | 'date' | 'priority'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-
-  // Estados do chat
-  const [selectedOpportunityForChat, setSelectedOpportunityForChat] = useState<any | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-
-  // Dados do funil
+  // Dados do funil com cores modernas
   const funnelStages = [
     { 
       id: 'leads', 
       name: 'Leads', 
-      color: 'bg-blue-500', 
-      textColor: 'text-blue-700',
-      bgColor: 'bg-blue-50',
+      color: 'from-blue-500 to-blue-600',
+      bgColor: 'bg-gradient-to-br from-blue-50 to-blue-100',
       borderColor: 'border-blue-200',
-      description: 'Primeiros contatos',
-      icon: User
+      textColor: 'text-blue-700',
+      icon: User,
+      description: 'Primeiros contatos'
     },
     { 
       id: 'qualified', 
       name: 'Qualificados', 
-      color: 'bg-green-500', 
-      textColor: 'text-green-700',
-      bgColor: 'bg-green-50',
-      borderColor: 'border-green-200',
-      description: 'Leads validados',
-      icon: CheckCircle
+      color: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-gradient-to-br from-emerald-50 to-emerald-100',
+      borderColor: 'border-emerald-200',
+      textColor: 'text-emerald-700',
+      icon: CheckCircle,
+      description: 'Leads validados'
     },
     { 
       id: 'proposal', 
       name: 'Propostas', 
-      color: 'bg-orange-500', 
-      textColor: 'text-orange-700',
-      bgColor: 'bg-orange-50',
+      color: 'from-orange-500 to-orange-600',
+      bgColor: 'bg-gradient-to-br from-orange-50 to-orange-100',
       borderColor: 'border-orange-200',
-      description: 'Propostas enviadas',
-      icon: FileText
+      textColor: 'text-orange-700',
+      icon: FileText,
+      description: 'Propostas enviadas'
     },
     { 
       id: 'negotiation', 
       name: 'Negociação', 
-      color: 'bg-purple-500', 
-      textColor: 'text-purple-700',
-      bgColor: 'bg-purple-50',
+      color: 'from-purple-500 to-purple-600',
+      bgColor: 'bg-gradient-to-br from-purple-50 to-purple-100',
       borderColor: 'border-purple-200',
-      description: 'Em negociação',
-      icon: MessageSquare
+      textColor: 'text-purple-700',
+      icon: MessageSquare,
+      description: 'Em negociação'
     },
     { 
       id: 'closed', 
       name: 'Fechados', 
-      color: 'bg-emerald-500', 
-      textColor: 'text-emerald-700',
-      bgColor: 'bg-emerald-50',
-      borderColor: 'border-emerald-200',
-      description: 'Vendas concluídas',
-      icon: Target
+      color: 'from-green-500 to-green-600',
+      bgColor: 'bg-gradient-to-br from-green-50 to-green-100',
+      borderColor: 'border-green-200',
+      textColor: 'text-green-700',
+      icon: Target,
+      description: 'Vendas concluídas'
     }
   ];
 
-  // Mock de oportunidades expandido
   const [opportunities, setOpportunities] = useState<Opportunity[]>([
     {
       id: 1,
@@ -230,19 +182,18 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
       stage: 'leads',
       probability: 20,
       responsible: 'Ana Costa',
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
-      nextAction: 'Agendar demo do produto',
       priority: 'alta',
-      source: 'Website',
-      tags: ['novo', 'enterprise'],
       description: 'Interessado em solução enterprise para 100+ usuários',
       contact: { phone: '(11) 99999-9999', email: 'joao@techcorp.com' },
-      address: 'São Paulo, SP',
-      website: 'www.techcorp.com',
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
       expectedCloseDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      lastContactDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-      notes: 'Cliente muito interessado, tem budget aprovado'
+      lastActivity: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      activities: [
+        { id: 1, type: 'created', description: 'Oportunidade criada', createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), createdBy: 'Ana Costa' },
+        { id: 2, type: 'call', description: 'Ligação inicial - cliente interessado', createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), createdBy: 'Ana Costa' }
+      ],
+      tags: ['Enterprise', 'Hot Lead', '100+ Users'],
+      source: 'Website'
     },
     {
       id: 2,
@@ -252,17 +203,18 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
       stage: 'qualified',
       probability: 45,
       responsible: 'Carlos Silva',
-      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      nextAction: 'Enviar proposta personalizada',
       priority: 'normal',
-      source: 'LinkedIn',
-      tags: ['mid-market', 'recorrente'],
       description: 'Procura solução para automação de processos',
       contact: { phone: '(11) 88888-8888', email: 'maria@inovacao.com' },
-      address: 'Rio de Janeiro, RJ',
+      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
       expectedCloseDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-      lastContactDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+      lastActivity: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      activities: [
+        { id: 3, type: 'created', description: 'Oportunidade criada', createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), createdBy: 'Carlos Silva' },
+        { id: 4, type: 'email', description: 'Enviou proposta inicial', createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), createdBy: 'Carlos Silva' }
+      ],
+      tags: ['Automação', 'SMB'],
+      source: 'Indicação'
     },
     {
       id: 3,
@@ -272,18 +224,18 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
       stage: 'proposal',
       probability: 65,
       responsible: 'Ana Costa',
-      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 30 * 60 * 1000),
-      nextAction: 'Follow-up da proposta',
       priority: 'normal',
-      source: 'Indicação',
-      tags: ['startup', 'growth'],
       description: 'Startup em crescimento, precisa escalar operações',
       contact: { phone: '(11) 77777-7777', email: 'pedro@startupxyz.com' },
-      address: 'São Paulo, SP',
-      website: 'www.startupxyz.com',
+      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
       expectedCloseDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      lastContactDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)
+      lastActivity: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      activities: [
+        { id: 5, type: 'created', description: 'Oportunidade criada', createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), createdBy: 'Ana Costa' },
+        { id: 6, type: 'meeting', description: 'Reunião de apresentação', createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), createdBy: 'Ana Costa' }
+      ],
+      tags: ['Startup', 'Crescimento', 'Escalabilidade'],
+      source: 'LinkedIn'
     },
     {
       id: 4,
@@ -293,19 +245,18 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
       stage: 'negotiation',
       probability: 80,
       responsible: 'Roberto Lima',
-      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 15 * 60 * 1000),
-      nextAction: 'Reunião com decisores',
       priority: 'urgente',
-      source: 'Cold Email',
-      tags: ['enterprise', 'high-value'],
       description: 'Grande oportunidade, multinacional interessada',
       contact: { phone: '(11) 66666-6666', email: 'ana@megacorp.com' },
-      address: 'São Paulo, SP',
-      website: 'www.megacorp.com',
+      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
       expectedCloseDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-      lastContactDate: new Date(Date.now() - 1 * 60 * 60 * 1000),
-      notes: 'Decisão final na próxima semana'
+      lastActivity: new Date(),
+      activities: [
+        { id: 7, type: 'created', description: 'Oportunidade criada', createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), createdBy: 'Roberto Lima' },
+        { id: 8, type: 'call', description: 'Negociação de preços', createdAt: new Date(), createdBy: 'Roberto Lima' }
+      ],
+      tags: ['Enterprise', 'Multinacional', 'Alto Valor'],
+      source: 'Event'
     },
     {
       id: 5,
@@ -315,132 +266,118 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
       stage: 'closed',
       probability: 100,
       responsible: 'Fernanda Souza',
-      createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 60 * 60 * 1000),
-      nextAction: 'Implementação',
       priority: 'normal',
-      source: 'Google Ads',
-      tags: ['fechado', 'implementação'],
       description: 'Venda fechada, iniciar implementação',
       contact: { phone: '(11) 55555-5555', email: 'lucas@devsolutions.com' },
-      address: 'Belo Horizonte, MG',
-      website: 'www.devsolutions.com',
+      createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
       expectedCloseDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-      lastContactDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-      notes: 'Cliente muito satisfeito, possível upsell futuro'
+      lastActivity: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      activities: [
+        { id: 9, type: 'created', description: 'Oportunidade criada', createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), createdBy: 'Fernanda Souza' },
+        { id: 10, type: 'stage_change', description: 'Venda fechada com sucesso!', createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), createdBy: 'Fernanda Souza' }
+      ],
+      tags: ['Fechado', 'Implementação'],
+      source: 'Cold Call'
     }
   ]);
 
-  // Computeds
-  const filteredOpportunities = useMemo(() => {
-    let filtered = opportunities;
+  // Filtrar oportunidades
+  const filteredOpportunities = opportunities.filter(opp => {
+    // Filtro de busca por texto
+    const matchesSearch = searchQuery === '' || (
+      opp.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      opp.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      opp.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      opp.responsible.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-    if (searchQuery) {
-      filtered = filtered.filter(opp => 
-        opp.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        opp.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        opp.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        opp.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    }
+    // Filtros avançados
+    const matchesResponsible = !filters.responsible || filters.responsible === '' || filters.responsible === 'all' || opp.responsible === filters.responsible;
+    const matchesPriority = !filters.priority || filters.priority === '' || filters.priority === 'all' || opp.priority === filters.priority;
+    
+    const matchesValueRange = (() => {
+      const minValue = filters.minValue ? parseFloat(filters.minValue) : 0;
+      const maxValue = filters.maxValue ? parseFloat(filters.maxValue) : Infinity;
+      return opp.value >= minValue && opp.value <= maxValue;
+    })();
 
-    if (selectedStage !== 'all') {
-      filtered = filtered.filter(opp => opp.stage === selectedStage);
-    }
-
-    if (selectedResponsible !== 'all') {
-      filtered = filtered.filter(opp => opp.responsible === selectedResponsible);
-    }
-
-    if (selectedPriority !== 'all') {
-      filtered = filtered.filter(opp => opp.priority === selectedPriority);
-    }
-
-    // Ordenação
-    filtered.sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
-
-      switch (sortBy) {
-        case 'value':
-          aValue = a.value;
-          bValue = b.value;
-          break;
-        case 'probability':
-          aValue = a.probability;
-          bValue = b.probability;
-          break;
-        case 'date':
-          aValue = a.updatedAt;
-          bValue = b.updatedAt;
-          break;
-        case 'priority':
-          const priorityOrder = { 'urgente': 4, 'alta': 3, 'normal': 2, 'baixa': 1 };
-          aValue = priorityOrder[a.priority];
-          bValue = priorityOrder[b.priority];
-          break;
-        default:
-          return 0;
-      }
-
-      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return filtered;
-  }, [opportunities, searchQuery, selectedStage, selectedResponsible, selectedPriority, sortBy, sortOrder]);
-
-  const stageStats = useMemo(() => {
-    return funnelStages.map(stage => {
-      const stageOpportunities = filteredOpportunities.filter(opp => opp.stage === stage.id);
-      const totalValue = stageOpportunities.reduce((sum, opp) => sum + opp.value, 0);
-      const avgProbability = stageOpportunities.length > 0 
-        ? stageOpportunities.reduce((sum, opp) => sum + opp.probability, 0) / stageOpportunities.length 
-        : 0;
+    const matchesDateRange = (() => {
+      if (!filters.dateRange || filters.dateRange === '' || filters.dateRange === 'all' || !opp.expectedCloseDate) return true;
+      const today = new Date();
+      const closeDate = opp.expectedCloseDate;
       
-      return {
-        ...stage,
-        count: stageOpportunities.length,
-        totalValue,
-        avgProbability,
-        opportunities: stageOpportunities
-      };
-    });
-  }, [funnelStages, filteredOpportunities]);
+      switch (filters.dateRange) {
+        case 'this_week':
+          const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+          return closeDate <= weekFromNow;
+        case 'this_month':
+          const monthFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+          return closeDate <= monthFromNow;
+        case 'overdue':
+          return closeDate < today;
+        default:
+          return true;
+      }
+    })();
 
-  const totalValue = filteredOpportunities.reduce((sum, opp) => sum + opp.value, 0);
-  const totalLeads = filteredOpportunities.filter(opp => opp.stage === 'leads').length;
-  const totalClosed = filteredOpportunities.filter(opp => opp.stage === 'closed').length;
-  const conversionRate = totalLeads > 0 ? (totalClosed / totalLeads) * 100 : 0;
-  const avgDealSize = filteredOpportunities.length > 0 ? totalValue / filteredOpportunities.length : 0;
+    const matchesTags = !filters.tags || filters.tags === '' || opp.tags.some(tag => 
+      tag.toLowerCase().includes(filters.tags.toLowerCase())
+    );
 
-  // Handlers
-  const getPriorityColor = (priority: string) => {
-    const colors = {
-      baixa: 'bg-green-100 text-green-800 border-green-200',
-      normal: 'bg-blue-100 text-blue-800 border-blue-200',
-      alta: 'bg-orange-100 text-orange-800 border-orange-200',
-      urgente: 'bg-red-100 text-red-800 border-red-200'
-    };
-    return colors[priority as keyof typeof colors] || colors.normal;
-  };
+    const matchesSource = !filters.source || filters.source === '' || filters.source === 'all' || opp.source === filters.source;
 
-  const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case 'urgente':
-        return <AlertTriangle className="w-3 h-3" />;
-      case 'alta':
-        return <ArrowUp className="w-3 h-3" />;
-      case 'normal':
-        return <ArrowRight className="w-3 h-3" />;
-      case 'baixa':
-        return <ArrowDown className="w-3 h-3" />;
-      default:
-        return <ArrowRight className="w-3 h-3" />;
+    const matchesLastActivity = (() => {
+      if (!filters.lastActivity || filters.lastActivity === '' || filters.lastActivity === 'all' || !opp.lastActivity) return true;
+      const today = new Date();
+      const activityDate = opp.lastActivity;
+      
+      switch (filters.lastActivity) {
+        case 'today':
+          return activityDate.toDateString() === today.toDateString();
+        case 'week':
+          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+          return activityDate >= weekAgo;
+        case 'month':
+          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+          return activityDate >= monthAgo;
+        case 'inactive':
+          const twoWeeksAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000);
+          return activityDate < twoWeeksAgo;
+        default:
+          return true;
+      }
+    })();
+
+    const matches = matchesSearch && matchesResponsible && matchesPriority && matchesValueRange && 
+           matchesDateRange && matchesTags && matchesSource && matchesLastActivity;
+    
+    // Debug log para ver quais oportunidades passam no filtro
+    if (!matches) {
+      console.log('🚫 Oportunidade filtrada:', opp.client, {
+        matchesSearch,
+        matchesResponsible,
+        matchesPriority,
+        matchesValueRange,
+        matchesDateRange,
+        matchesTags,
+        matchesSource,
+        matchesLastActivity,
+        filters
+      });
     }
-  };
+           
+    return matches;
+  });
 
+  console.log('📊 Opportunities:', opportunities.length, 'Filtered:', filteredOpportunities.length);
+
+  // Calcular estatísticas
+  const totalValue = filteredOpportunities.reduce((sum, opp) => sum + opp.value, 0);
+  const totalOpportunities = filteredOpportunities.length;
+  const weightedValue = filteredOpportunities.reduce((sum, opp) => sum + (opp.value * opp.probability / 100), 0);
+  const conversionRate = opportunities.length > 0 ? (opportunities.filter(opp => opp.stage === 'closed').length / opportunities.length) * 100 : 0;
+
+  // Funções utilitárias
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -449,19 +386,40 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
   };
 
   const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('pt-BR').format(date);
+    return new Intl.DateTimeFormat('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit',
+      year: 'numeric'
+    }).format(date);
   };
 
   const formatRelativeDate = (date: Date) => {
     const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    const diffInDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     
-    if (diffInMinutes < 60) {
-      return `${diffInMinutes}min atrás`;
-    } else if (diffInMinutes < 1440) {
-      return `${Math.floor(diffInMinutes / 60)}h atrás`;
-    } else {
-      return `${Math.floor(diffInMinutes / 1440)} dias atrás`;
+    if (diffInDays < 0) return `${Math.abs(diffInDays)} dias atrasado`;
+    if (diffInDays === 0) return 'Hoje';
+    if (diffInDays === 1) return 'Amanhã';
+    return `${diffInDays} dias`;
+  };
+
+  const getPriorityColor = (priority: string) => {
+    const colors = {
+      baixa: 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-green-300',
+      normal: 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300',
+      alta: 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-orange-300',
+      urgente: 'bg-gradient-to-r from-red-100 to-red-200 text-red-800 border-red-300'
+    };
+    return colors[priority as keyof typeof colors] || colors.normal;
+  };
+
+  const getPriorityIcon = (priority: string) => {
+    switch (priority) {
+      case 'urgente': return <AlertTriangle className="w-3 h-3" />;
+      case 'alta': return <ArrowUp className="w-3 h-3" />;
+      case 'normal': return <ArrowRight className="w-3 h-3" />;
+      case 'baixa': return <ArrowDown className="w-3 h-3" />;
+      default: return <ArrowRight className="w-3 h-3" />;
     }
   };
 
@@ -471,6 +429,42 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
     setIsDragging(true);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', opportunity.id.toString());
+    
+    // Criar imagem de drag personalizada
+    const dragImage = document.createElement('div');
+    dragImage.innerHTML = `
+      <div style="
+        background: white; 
+        border: 2px solid #3b82f6; 
+        padding: 12px; 
+        border-radius: 8px; 
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        font-family: system-ui;
+        max-width: 250px;
+      ">
+        <div style="font-weight: bold; color: #1f2937; margin-bottom: 4px;">${opportunity.client}</div>
+        <div style="font-size: 12px; color: #6b7280;">${opportunity.company} • ${formatCurrency(opportunity.value)}</div>
+      </div>
+    `;
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 125, 50);
+    
+    // Remover elemento após um tempo
+    setTimeout(() => document.body.removeChild(dragImage), 0);
+    
+    // Adicionar classe de transparência
+    setTimeout(() => {
+      (e.target as HTMLElement).style.opacity = '0.5';
+    }, 0);
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    (e.target as HTMLElement).style.opacity = '1';
+    setDraggedOpportunity(null);
+    setIsDragging(false);
+    setDragOverStage(null);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, stageId: string) => {
@@ -481,71 +475,45 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    // Só remove o drag over se realmente saiu da área (não de um filho)
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDragOverStage(null);
     }
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent, targetStage: string) => {
+  const handleDrop = useCallback((e: React.DragEvent, targetStage: string) => {
     e.preventDefault();
     setDragOverStage(null);
     setIsDragging(false);
     
     if (draggedOpportunity && draggedOpportunity.stage !== targetStage) {
-      setIsLoading(true);
-      
-      try {
-        // Simular API call
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Atualizar a oportunidade
-        setOpportunities(prev => 
-          prev.map(opp => 
-            opp.id === draggedOpportunity.id 
-              ? { 
-                  ...opp, 
-                  stage: targetStage, 
-                  updatedAt: new Date(),
-                  // Ajustar probabilidade baseada no estágio
-                  probability: targetStage === 'leads' ? 20 :
-                              targetStage === 'qualified' ? 40 :
-                              targetStage === 'proposal' ? 60 :
-                              targetStage === 'negotiation' ? 80 :
-                              targetStage === 'closed' ? 100 : opp.probability
-                }
-              : opp
-          )
-        );
+      // Atualizar probabilidade baseada no estágio
+      const newProbability = 
+        targetStage === 'leads' ? 20 :
+        targetStage === 'qualified' ? 40 :
+        targetStage === 'proposal' ? 60 :
+        targetStage === 'negotiation' ? 80 :
+        targetStage === 'closed' ? 100 : draggedOpportunity.probability;
 
-        toast({
-          title: "Oportunidade movida!",
-          description: `${draggedOpportunity.client} foi movido para ${funnelStages.find(s => s.id === targetStage)?.name}`,
-        });
+      setOpportunities(prev => 
+        prev.map(opp => 
+          opp.id === draggedOpportunity.id 
+            ? { ...opp, stage: targetStage, probability: newProbability }
+            : opp
+        )
+      );
 
-      } catch (error) {
-        toast({
-          title: "Erro",
-          description: "Erro ao mover oportunidade. Tente novamente.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
-      }
+      const stageName = funnelStages.find(s => s.id === targetStage)?.name;
+      toast({
+        title: "✅ Oportunidade movida!",
+        description: `${draggedOpportunity.client} foi movido para ${stageName}`,
+      });
     }
     
     setDraggedOpportunity(null);
   }, [draggedOpportunity, funnelStages, toast]);
 
-  const handleDragEnd = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDraggedOpportunity(null);
-    setIsDragging(false);
-    setDragOverStage(null);
-  }, []);
-
-  // Modal Handlers
-  const openModal = useCallback((opportunity?: Opportunity) => {
+  // Handlers do Modal
+  const openModal = (opportunity?: Opportunity) => {
     if (opportunity) {
       setEditingOpportunity(opportunity);
       setFormData({
@@ -556,16 +524,12 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
         probability: opportunity.probability,
         responsible: opportunity.responsible,
         priority: opportunity.priority,
-        source: opportunity.source,
-        tags: opportunity.tags,
         description: opportunity.description,
         phone: opportunity.contact.phone,
         email: opportunity.contact.email,
-        address: opportunity.address || '',
-        website: opportunity.website || '',
-        expectedCloseDate: opportunity.expectedCloseDate,
-        nextAction: opportunity.nextAction,
-        notes: opportunity.notes || ''
+        expectedCloseDate: opportunity.expectedCloseDate ? opportunity.expectedCloseDate.toISOString().split('T')[0] : '',
+        tags: opportunity.tags.join(', '),
+        source: opportunity.source
       });
     } else {
       setEditingOpportunity(null);
@@ -577,1447 +541,1183 @@ export const SalesFunnel = ({ sector }: SalesFunnelProps) => {
         probability: 20,
         responsible: '',
         priority: 'normal',
-        source: '',
-        tags: [],
         description: '',
         phone: '',
         email: '',
-        address: '',
-        website: '',
-        expectedCloseDate: undefined,
-        nextAction: '',
-        notes: ''
+        expectedCloseDate: '',
+        tags: '',
+        source: 'Website'
       });
     }
     setIsModalOpen(true);
-  }, []);
+  };
 
-  const closeModal = useCallback(() => {
+  const closeModal = () => {
+    console.log('🔒 Fechando modal...');
     setIsModalOpen(false);
     setEditingOpportunity(null);
-  }, []);
+    console.log('🔒 Modal fechado');
+  };
 
-  const handleSaveOpportunity = useCallback(async () => {
-    setIsLoading(true);
+  const handleSave = () => {
+    console.log('🔥 handleSave chamado', { formData, editingOpportunity });
+    console.log('🔥 Validação - client:', formData.client, 'company:', formData.company);
     
-    try {
-      // Simular API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      if (editingOpportunity) {
-        // Editar oportunidade existente
-        setOpportunities(prev => 
-          prev.map(opp => 
-            opp.id === editingOpportunity.id 
-              ? {
-                  ...opp,
-                  ...formData,
-                  contact: {
-                    phone: formData.phone,
-                    email: formData.email
-                  },
-                  updatedAt: new Date()
-                }
-              : opp
-          )
-        );
-        
-        toast({
-          title: "Oportunidade atualizada!",
-          description: `${formData.client} foi atualizado com sucesso.`,
-        });
-      } else {
-        // Criar nova oportunidade
-        const newOpportunity: Opportunity = {
-          id: Math.max(...opportunities.map(o => o.id)) + 1,
-          ...formData,
-          contact: {
-            phone: formData.phone,
-            email: formData.email
-          },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          lastContactDate: new Date()
-        };
-        
-        setOpportunities(prev => [...prev, newOpportunity]);
-        
-        toast({
-          title: "Oportunidade criada!",
-          description: `${formData.client} foi adicionado ao funil.`,
-        });
-      }
-      
-      closeModal();
-      
-    } catch (error) {
+    // Validação melhorada - temporariamente relaxada para debug
+    if (!formData.client || formData.client.trim() === '') {
+      console.log('❌ Validação falhou - cliente vazio');
       toast({
-        title: "Erro",
-        description: "Erro ao salvar oportunidade. Tente novamente.",
+        title: "❌ Erro de validação",
+        description: "O nome do cliente é obrigatório.",
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
+      return;
     }
-  }, [editingOpportunity, formData, opportunities, closeModal]);
-
-  // Contact Handlers
-  const handleCall = useCallback((phone: string) => {
-    window.open(`tel:${phone}`, '_self');
-    toast({
-      title: "Iniciando chamada",
-      description: `Ligando para ${phone}`,
-    });
-  }, []);
-
-  const handleEmail = useCallback((email: string, subject?: string) => {
-    const mailtoLink = `mailto:${email}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`;
-    window.open(mailtoLink, '_self');
-    toast({
-      title: "Abrindo cliente de email",
-      description: `Enviando email para ${email}`,
-    });
-  }, []);
-
-  const handleWhatsApp = useCallback((opportunity: Opportunity) => {
-    // Converter oportunidade para formato de ticket
-    const ticketData = {
-      id: opportunity.id,
-      client: opportunity.client,
-      subject: `Chat sobre oportunidade - ${opportunity.company}`,
-      status: 'atendimento',
-      channel: 'whatsapp',
-      lastMessage: 'Iniciando conversa',
-      priority: opportunity.priority,
-      contact: opportunity.contact,
-      description: opportunity.description,
-      company: opportunity.company
-    };
     
-    setSelectedOpportunityForChat(ticketData);
-    setIsChatOpen(true);
-    
-    toast({
-      title: "Chat iniciado",
-      description: `Iniciando conversa com ${opportunity.client}`,
-    });
-  }, [toast]);
+    if (!formData.company || formData.company.trim() === '') {
+      console.log('❌ Validação falhou - empresa vazia');
+      toast({
+        title: "❌ Erro de validação", 
+        description: "O nome da empresa é obrigatório.",
+        variant: "destructive"
+      });
+      return;
+    }
 
-  const handleDeleteOpportunity = useCallback(async (opportunityId: number) => {
-    if (!confirm('Tem certeza que deseja deletar esta oportunidade?')) return;
-    
-    setIsLoading(true);
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('✅ Validação passou, continuando...');
+
+    if (editingOpportunity) {
+      console.log('📝 Editando oportunidade existente');
+      setOpportunities(prev => 
+        prev.map(opp => 
+          opp.id === editingOpportunity.id 
+            ? {
+                ...opp,
+                client: formData.client,
+                company: formData.company,
+                value: formData.value,
+                stage: formData.stage,
+                probability: formData.probability,
+                responsible: formData.responsible,
+                priority: formData.priority,
+                description: formData.description,
+                contact: { phone: formData.phone, email: formData.email },
+                expectedCloseDate: formData.expectedCloseDate ? new Date(formData.expectedCloseDate) : undefined,
+                tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+                source: formData.source
+              }
+            : opp
+        )
+      );
+      toast({
+        title: "✅ Oportunidade atualizada!",
+        description: `${formData.client} foi atualizado com sucesso.`,
+      });
+    } else {
+      console.log('🆕 Criando nova oportunidade');
+      const currentOpportunities = opportunities;
+      console.log('📊 Oportunidades atuais:', currentOpportunities.length);
       
-      setOpportunities(prev => prev.filter(opp => opp.id !== opportunityId));
+      const maxId = currentOpportunities.length > 0 ? Math.max(...currentOpportunities.map(o => o.id)) : 0;
+      console.log('🔢 Próximo ID:', maxId + 1);
+      
+      const newOpportunity: Opportunity = {
+        id: maxId + 1,
+        client: formData.client,
+        company: formData.company,
+        value: formData.value || 0,
+        stage: formData.stage,
+        probability: formData.probability,
+        responsible: formData.responsible,
+        priority: formData.priority,
+        description: formData.description,
+        contact: { phone: formData.phone, email: formData.email },
+        createdAt: new Date(),
+        expectedCloseDate: formData.expectedCloseDate ? new Date(formData.expectedCloseDate) : undefined,
+        lastActivity: new Date(),
+        activities: [{
+          id: Date.now(),
+          type: 'created',
+          description: 'Oportunidade criada',
+          createdAt: new Date(),
+          createdBy: 'Usuário Atual'
+        }],
+        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
+        source: formData.source
+      };
+      
+      console.log('🆕 Nova oportunidade criada:', newOpportunity);
+      
+      setOpportunities(prev => {
+        const newList = [...prev, newOpportunity];
+        console.log('📋 Lista atualizada:', newList.length, 'itens');
+        console.log('📋 Última oportunidade:', newList[newList.length - 1]);
+        return newList;
+      });
       
       toast({
-        title: "Oportunidade deletada",
+        title: "🎉 Oportunidade criada!",
+        description: `${formData.client} foi adicionado ao funil na etapa ${funnelStages.find(s => s.id === formData.stage)?.name}.`,
+      });
+    }
+    console.log('🔄 Fechando modal...');
+    closeModal();
+  };
+
+  const handleDelete = (id: number) => {
+    if (confirm('Tem certeza que deseja deletar esta oportunidade?')) {
+      setOpportunities(prev => prev.filter(opp => opp.id !== id));
+      setSelectedOpportunities(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+      toast({
+        title: "🗑️ Oportunidade deletada",
         description: "A oportunidade foi removida do funil.",
       });
-      
-    } catch (error) {
+    }
+  };
+
+  // Funções para seleção múltipla
+  const toggleOpportunitySelection = (id: number) => {
+    setSelectedOpportunities(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllOpportunities = () => {
+    setSelectedOpportunities(new Set(filteredOpportunities.map(opp => opp.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedOpportunities(new Set());
+  };
+
+  const moveSelectedOpportunities = (targetStage: string) => {
+    if (selectedOpportunities.size === 0) return;
+    
+    const newProbability = 
+      targetStage === 'leads' ? 20 :
+      targetStage === 'qualified' ? 40 :
+      targetStage === 'proposal' ? 60 :
+      targetStage === 'negotiation' ? 80 :
+      targetStage === 'closed' ? 100 : 20;
+
+    setOpportunities(prev => 
+      prev.map(opp => 
+        selectedOpportunities.has(opp.id)
+          ? { ...opp, stage: targetStage, probability: newProbability }
+          : opp
+      )
+    );
+
+    const stageName = funnelStages.find(s => s.id === targetStage)?.name;
+    toast({
+      title: "✅ Oportunidades movidas!",
+      description: `${selectedOpportunities.size} oportunidades foram movidas para ${stageName}`,
+    });
+    
+    clearSelection();
+  };
+
+  const deleteSelectedOpportunities = () => {
+    if (selectedOpportunities.size === 0) return;
+    
+    if (confirm(`Tem certeza que deseja deletar ${selectedOpportunities.size} oportunidades?`)) {
+      setOpportunities(prev => prev.filter(opp => !selectedOpportunities.has(opp.id)));
       toast({
-        title: "Erro",
-        description: "Erro ao deletar oportunidade. Tente novamente.",
-        variant: "destructive"
+        title: "🗑️ Oportunidades deletadas",
+        description: `${selectedOpportunities.size} oportunidades foram removidas.`,
       });
-    } finally {
-      setIsLoading(false);
+      clearSelection();
     }
-  }, []);
+  };
 
-  // Other Handlers
-  const handleSort = useCallback((field: typeof sortBy) => {
-    if (sortBy === field) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortOrder('desc');
+  // Limpar filtros
+  const clearFilters = () => {
+    setFilters({
+      responsible: '',
+      priority: '',
+      dateRange: '',
+      minValue: '',
+      maxValue: '',
+      tags: '',
+      source: '',
+      lastActivity: ''
+    });
+    setSearchQuery('');
+  };
+
+  // Funções para atividades
+  const addActivity = (opportunityId: number, type: Activity['type'], description: string) => {
+    const newActivity: Activity = {
+      id: Date.now(),
+      type,
+      description,
+      createdAt: new Date(),
+      createdBy: 'Usuário Atual' // Em produção viria do contexto de auth
+    };
+
+    setOpportunities(prev => 
+      prev.map(opp => 
+        opp.id === opportunityId 
+          ? { 
+              ...opp, 
+              activities: [...opp.activities, newActivity],
+              lastActivity: new Date()
+            }
+          : opp
+      )
+    );
+
+    toast({
+      title: "✅ Atividade adicionada!",
+      description: `${type === 'note' ? 'Nota' : type === 'call' ? 'Ligação' : type === 'email' ? 'Email' : 'Reunião'} registrada com sucesso.`,
+    });
+  };
+
+  // Obter ícone da atividade
+  const getActivityIcon = (type: Activity['type']) => {
+    switch (type) {
+      case 'call': return <Phone className="w-3 h-3 text-blue-600" />;
+      case 'email': return <Mail className="w-3 h-3 text-green-600" />;
+      case 'meeting': return <Calendar className="w-3 h-3 text-purple-600" />;
+      case 'note': return <FileText className="w-3 h-3 text-orange-600" />;
+      case 'stage_change': return <ArrowRight className="w-3 h-3 text-indigo-600" />;
+      case 'created': return <Plus className="w-3 h-3 text-gray-600" />;
+      default: return <FileText className="w-3 h-3 text-gray-600" />;
     }
-  }, [sortBy]);
+  };
 
-  const handleCloseChatWhatsApp = useCallback(() => {
-    setIsChatOpen(false);
-    setSelectedOpportunityForChat(null);
-  }, []);
+  // Verificar se há filtros ativos
+  const hasActiveFilters = Object.values(filters).some(filter => filter !== '') || searchQuery !== '';
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Esc para fechar modal ou limpar seleção
+      if (e.key === 'Escape') {
+        if (isModalOpen) {
+          closeModal();
+        } else if (selectedOpportunities.size > 0) {
+          clearSelection();
+        }
+      }
+      
+      // Ctrl+A para selecionar todos
+      if (e.ctrlKey && e.key === 'a' && !isModalOpen) {
+        e.preventDefault();
+        selectAllOpportunities();
+      }
+      
+      // Delete para deletar selecionados
+      if (e.key === 'Delete' && selectedOpportunities.size > 0 && !isModalOpen) {
+        deleteSelectedOpportunities();
+      }
+      
+      // Ctrl+N para nova oportunidade
+      if (e.ctrlKey && e.key === 'n' && !isModalOpen) {
+        e.preventDefault();
+        openModal();
+      }
+      
+      // Ctrl+F para focar na busca
+      if (e.ctrlKey && e.key === 'f' && !isModalOpen) {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[placeholder*="Buscar"]') as HTMLInputElement;
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, selectedOpportunities.size, selectAllOpportunities, clearSelection, deleteSelectedOpportunities, closeModal, openModal]);
+
+  const handleAddCard = (stageId: string) => {
+    console.log('🎯 handleAddCard chamado com stageId:', stageId);
+    setEditingOpportunity(null);
+    
+    const newFormData = {
+      client: '',
+      company: '',
+      value: 0,
+      stage: stageId,
+      probability: stageId === 'leads' ? 20 : stageId === 'qualified' ? 40 : stageId === 'proposal' ? 60 : stageId === 'negotiation' ? 80 : 100,
+      responsible: '',
+      priority: 'normal' as const,
+      description: '',
+      phone: '',
+      email: '',
+      expectedCloseDate: '',
+      tags: '',
+      source: 'Website'
+    };
+    
+    console.log('📝 FormData resetado:', newFormData);
+    setFormData(newFormData);
+    console.log('🚀 Abrindo modal...');
+    setIsModalOpen(true);
+  };
 
   return (
     <TooltipProvider>
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Funil de Vendas - {sector.name}</h1>
-          <p className="text-gray-600 mt-1">Gerencie suas oportunidades de forma visual e eficiente</p>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-          <Button variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Atualizar
-          </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Atualizar dados do funil</p>
-              </TooltipContent>
-            </Tooltip>
-            
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Relatórios
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Ver relatórios detalhados</p>
-              </TooltipContent>
-            </Tooltip>
-            
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
-          </Button>
-            
-            <Button 
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => openModal()}
-            >
-            <Plus className="w-4 h-4 mr-2" />
+      <div className="space-y-6 p-6 bg-gradient-to-br from-gray-50 to-white min-h-screen">
+        {/* Header com gradiente */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+              Funil de Vendas - {sector.name}
+            </h1>
+            <p className="text-gray-600 mt-2 text-lg">Gerencie suas oportunidades com drag & drop</p>
+          </div>
+          
+          <Button 
+            onClick={() => openModal()} 
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <Plus className="w-5 h-5 mr-2" />
             Nova Oportunidade
           </Button>
+          
+          <Button 
+            onClick={() => {
+              console.log('🔄 Reset de emergência - limpando todos os filtros');
+              setFilters({
+                responsible: '',
+                priority: '',
+                dateRange: '',
+                minValue: '',
+                maxValue: '',
+                tags: '',
+                source: '',
+                lastActivity: ''
+              });
+              setSearchQuery('');
+              console.log('✅ Filtros resetados');
+            }}
+            variant="outline"
+            className="border-red-300 text-red-600 hover:bg-red-50"
+          >
+            <RefreshCw className="w-5 h-5 mr-2" />
+            Reset Debug
+          </Button>
         </div>
-      </div>
 
-      {/* Métricas Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-600 text-sm font-medium">Valor Total</p>
-                <p className="text-2xl font-bold text-blue-900">{formatCurrency(totalValue)}</p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    +12% vs mês anterior
+        {/* Métricas melhoradas */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-100 border-green-200 shadow-lg hover:shadow-xl transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-700">Valor Total</p>
+                  <p className="text-3xl font-bold text-green-800">{formatCurrency(totalValue)}</p>
+                  <p className="text-xs text-green-600 mt-1">Pipeline completo</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-green-500 to-green-600 rounded-full shadow-lg">
+                  <DollarSign className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 shadow-lg hover:shadow-xl transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-700">Valor Ponderado</p>
+                  <p className="text-3xl font-bold text-blue-800">{formatCurrency(weightedValue)}</p>
+                  <p className="text-xs text-blue-600 mt-1">Por probabilidade</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full shadow-lg">
+                  <TrendingUp className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 shadow-lg hover:shadow-xl transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-700">Oportunidades</p>
+                  <p className="text-3xl font-bold text-purple-800">{totalOpportunities}</p>
+                  <p className="text-xs text-purple-600 mt-1">Total ativas</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full shadow-lg">
+                  <Target className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 shadow-lg hover:shadow-xl transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-orange-700">Taxa de Conversão</p>
+                  <p className="text-3xl font-bold text-orange-800">
+                    {conversionRate.toFixed(1)}%
                   </p>
+                  <p className="text-xs text-orange-600 mt-1">Leads → Fechados</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full shadow-lg">
+                  <Target className="w-8 h-8 text-white" />
+                </div>
               </div>
-              <div className="p-3 bg-blue-500 rounded-full">
-                <DollarSign className="w-6 h-6 text-white" />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Busca e Filtros Aprimorados */}
+        <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-6 space-y-4">
+            {/* Barra de busca principal */}
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Input
+                  placeholder="🔍 Buscar por cliente, empresa, responsável ou descrição..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-12 pr-12 py-3 text-lg border-2 border-gray-200 focus:border-blue-400 rounded-xl transition-colors shadow-sm"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-          <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-600 text-sm font-medium">Taxa de Conversão</p>
-                <p className="text-2xl font-bold text-green-900">{conversionRate.toFixed(1)}%</p>
-                  <p className="text-xs text-green-600 mt-1">
-                    {conversionRate > 15 ? '+5%' : '-2%'} vs mês anterior
-                  </p>
-              </div>
-              <div className="p-3 bg-green-500 rounded-full">
-                <Target className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-          <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-600 text-sm font-medium">Oportunidades</p>
-                <p className="text-2xl font-bold text-purple-900">{filteredOpportunities.length}</p>
-                  <p className="text-xs text-purple-600 mt-1">
-                    {filteredOpportunities.length} ativas
-                  </p>
-              </div>
-              <div className="p-3 bg-purple-500 rounded-full">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-          <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-600 text-sm font-medium">Ticket Médio</p>
-                <p className="text-2xl font-bold text-orange-900">
-                    {formatCurrency(avgDealSize)}
-                  </p>
-                  <p className="text-xs text-orange-600 mt-1">
-                    +8% vs mês anterior
-                </p>
-              </div>
-              <div className="p-3 bg-orange-500 rounded-full">
-                <TrendingUp className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-        {/* Filtros e Busca */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                  placeholder="Buscar por cliente, empresa, tags..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-                <Select
-                  value={selectedStage}
-                  onValueChange={setSelectedStage}
-                >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Etapa" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as Etapas</SelectItem>
-                  {funnelStages.map(stage => (
-                      <SelectItem key={stage.id} value={stage.id}>
-                        <div className="flex items-center space-x-2">
-                          <stage.icon className="w-4 h-4" />
-                          <span>{stage.name}</span>
-                        </div>
-                      </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedResponsible} onValueChange={setSelectedResponsible}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="Ana Costa">Ana Costa</SelectItem>
-                  <SelectItem value="Carlos Silva">Carlos Silva</SelectItem>
-                  <SelectItem value="Roberto Lima">Roberto Lima</SelectItem>
-                  <SelectItem value="Fernanda Souza">Fernanda Souza</SelectItem>
-                </SelectContent>
-              </Select>
-
-                <Select
-                  value={selectedPriority}
-                  onValueChange={setSelectedPriority}
-                >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Prioridade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                    <SelectItem value="urgente">
-                      <div className="flex items-center space-x-2">
-                        <AlertTriangle className="w-4 h-4 text-red-500" />
-                        <span>Urgente</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="alta">
-                      <div className="flex items-center space-x-2">
-                        <ArrowUp className="w-4 h-4 text-orange-500" />
-                        <span>Alta</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="normal">
-                      <div className="flex items-center space-x-2">
-                        <ArrowRight className="w-4 h-4 text-blue-500" />
-                        <span>Normal</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="baixa">
-                      <div className="flex items-center space-x-2">
-                        <ArrowDown className="w-4 h-4 text-green-500" />
-                        <span>Baixa</span>
-                      </div>
-                    </SelectItem>
-                </SelectContent>
-              </Select>
-
-              <div className="flex items-center border rounded-lg">
-                <Button
-                  variant={viewMode === 'kanban' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('kanban')}
-                  className="rounded-r-none"
-                >
-                    <Grid3X3 className="w-4 h-4 mr-1" />
-                  Kanban
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('list')}
-                  className="rounded-l-none"
-                >
-                    <List className="w-4 h-4 mr-1" />
-                  Lista
-                </Button>
-              </div>
-
+              
+              {/* Botões de controle */}
+              <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={cn(showFilters && "bg-gray-100")}
+                  onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                  className={cn(
+                    "px-4 py-3 h-auto border-2 transition-all duration-200",
+                    isFiltersOpen || hasActiveFilters 
+                      ? "border-blue-400 bg-blue-50 text-blue-700" 
+                      : "border-gray-200"
+                  )}
                 >
-                  <FilterIcon className="w-4 h-4" />
+                  <Filter className="w-4 h-4 mr-2" />
+                  Filtros
+                  {hasActiveFilters && (
+                    <Badge className="ml-2 bg-blue-600 text-white text-xs px-2 py-1">
+                      {Object.values(filters).filter(f => f !== '').length + (searchQuery ? 1 : 0)}
+                    </Badge>
+                  )}
                 </Button>
+                
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    onClick={clearFilters}
+                    className="px-4 py-3 h-auto text-gray-600 hover:text-gray-800"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Limpar
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
 
-            {/* Filtros Avançados */}
-            {showFilters && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Filtros expandidos */}
+            {isFiltersOpen && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
                   <div>
-                    <Label className="text-xs font-medium text-gray-600">Ordenar por</Label>
-                    <div className="flex items-center space-x-1 mt-1">
-                      <Button
-                        variant={sortBy === 'value' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => handleSort('value')}
-                      >
-                        Valor
-                        {sortBy === 'value' && (
-                          sortOrder === 'asc' ? <SortAsc className="w-3 h-3 ml-1" /> : <SortDesc className="w-3 h-3 ml-1" />
-                        )}
-                      </Button>
-                      <Button
-                        variant={sortBy === 'probability' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => handleSort('probability')}
-                      >
-                        Probabilidade
-                        {sortBy === 'probability' && (
-                          sortOrder === 'asc' ? <SortAsc className="w-3 h-3 ml-1" /> : <SortDesc className="w-3 h-3 ml-1" />
-                        )}
-                      </Button>
-                      <Button
-                        variant={sortBy === 'date' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => handleSort('date')}
-                      >
-                        Data
-                        {sortBy === 'date' && (
-                          sortOrder === 'asc' ? <SortAsc className="w-3 h-3 ml-1" /> : <SortDesc className="w-3 h-3 ml-1" />
-                        )}
-                      </Button>
-                    </div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Responsável</Label>
+                    <Select value={filters.responsible} onValueChange={(value) => setFilters(prev => ({ ...prev, responsible: value }))}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="Ana Costa">Ana Costa</SelectItem>
+                        <SelectItem value="Carlos Silva">Carlos Silva</SelectItem>
+                        <SelectItem value="Roberto Lima">Roberto Lima</SelectItem>
+                        <SelectItem value="Fernanda Souza">Fernanda Souza</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+
                   <div>
-                    <Label className="text-xs font-medium text-gray-600">Origem</Label>
-                    <Select>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Todas as origens" />
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Prioridade</Label>
+                    <Select value={filters.priority} onValueChange={(value) => setFilters(prev => ({ ...prev, priority: value }))}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Todas" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas</SelectItem>
-                        <SelectItem value="website">Website</SelectItem>
-                        <SelectItem value="linkedin">LinkedIn</SelectItem>
-                        <SelectItem value="indicacao">Indicação</SelectItem>
-                        <SelectItem value="cold-email">Cold Email</SelectItem>
-                        <SelectItem value="google-ads">Google Ads</SelectItem>
+                        <SelectItem value="urgente">Urgente</SelectItem>
+                        <SelectItem value="alta">Alta</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="baixa">Baixa</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
                   <div>
-                    <Label className="text-xs font-medium text-gray-600">Período</Label>
-                    <Select>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Último mês" />
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Fonte</Label>
+                    <Select value={filters.source} onValueChange={(value) => setFilters(prev => ({ ...prev, source: value }))}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Todas" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="last-week">Última semana</SelectItem>
-                        <SelectItem value="last-month">Último mês</SelectItem>
-                        <SelectItem value="last-quarter">Último trimestre</SelectItem>
-                        <SelectItem value="last-year">Último ano</SelectItem>
+                        <SelectItem value="all">Todas</SelectItem>
+                        <SelectItem value="Website">Website</SelectItem>
+                        <SelectItem value="Indicação">Indicação</SelectItem>
+                        <SelectItem value="LinkedIn">LinkedIn</SelectItem>
+                        <SelectItem value="Event">Evento</SelectItem>
+                        <SelectItem value="Cold Call">Cold Call</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Última Atividade</Label>
+                    <Select value={filters.lastActivity} onValueChange={(value) => setFilters(prev => ({ ...prev, lastActivity: value }))}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Todas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        <SelectItem value="today">Hoje</SelectItem>
+                        <SelectItem value="week">Esta semana</SelectItem>
+                        <SelectItem value="month">Este mês</SelectItem>
+                        <SelectItem value="inactive">Inativas (14+ dias)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Prazo de Fechamento</Label>
+                    <Select value={filters.dateRange} onValueChange={(value) => setFilters(prev => ({ ...prev, dateRange: value }))}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="overdue">Em atraso</SelectItem>
+                        <SelectItem value="this_week">Esta semana</SelectItem>
+                        <SelectItem value="this_month">Este mês</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Valor Mín.</Label>
+                    <Input
+                      type="number"
+                      placeholder="R$ 0"
+                      value={filters.minValue}
+                      onChange={(e) => setFilters(prev => ({ ...prev, minValue: e.target.value }))}
+                      className="bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Valor Máx.</Label>
+                    <Input
+                      type="number"
+                      placeholder="R$ ∞"
+                      value={filters.maxValue}
+                      onChange={(e) => setFilters(prev => ({ ...prev, maxValue: e.target.value }))}
+                      className="bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <Label className="text-sm font-medium text-gray-700 mb-2 block">Tags (separadas por vírgula)</Label>
+                  <Input
+                    placeholder="ex: Enterprise, Hot Lead, SMB..."
+                    value={filters.tags}
+                    onChange={(e) => setFilters(prev => ({ ...prev, tags: e.target.value }))}
+                    className="bg-white"
+                  />
                 </div>
               </div>
             )}
-        </CardContent>
-      </Card>
 
-      {/* Kanban Board */}
-      {viewMode === 'kanban' && (
-          <div className={cn(
-            "grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-[600px]",
-            isDragging && "select-none"
-          )}>
-          {stageStats.map((stage) => (
-            <div
-              key={stage.id}
-              className={cn(
-                "flex flex-col rounded-lg border-2 transition-all duration-200",
-                dragOverStage === stage.id 
-                  ? cn("border-solid border-blue-400 shadow-lg bg-blue-50/50")
-                  : stage.borderColor + " border-dashed",
-                "hover:shadow-md relative"
-              )}
-              onDragOver={(e) => handleDragOver(e, stage.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, stage.id)}
-            >
-              {/* Cabeçalho da Coluna */}
-              <div className={cn("p-4 rounded-t-lg", stage.bgColor)}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <stage.icon className={cn("w-5 h-5", stage.textColor)} />
-                  <h3 className={cn("font-semibold", stage.textColor)}>{stage.name}</h3>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {stage.count}
-                  </Badge>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              // Menu de ações
-                            }}
-                            onMouseDown={(e) => e.stopPropagation()}
-                          >
-                            <MoreVertical className="w-3 h-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Adicionar oportunidade em {stage.name}</p>
-                        </TooltipContent>
-                      </Tooltip>
+            {/* Ações em lote */}
+            {selectedOpportunities.size > 0 && (
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
+                <div className="flex items-center space-x-4">
+                  <span className="text-blue-800 font-semibold">
+                    {selectedOpportunities.size} oportunidade(s) selecionada(s)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSelection}
+                    className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                  >
+                    Limpar seleção
+                  </Button>
                 </div>
-                  </div>
-                  
-                <p className="text-xs text-gray-600 mb-3">{stage.description}</p>
                 
-                {/* Estatísticas da Coluna */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-600">Valor Total:</span>
-                    <span className={cn("font-medium", stage.textColor)}>
-                      {formatCurrency(stage.totalValue)}
-                    </span>
-                  </div>
-                  {stage.count > 0 && (
-                      <>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-600">Prob. Média:</span>
-                      <span className={cn("font-medium", stage.textColor)}>
-                        {stage.avgProbability.toFixed(0)}%
-                      </span>
-                    </div>
-                        <Progress 
-                          value={stage.avgProbability} 
-                          className="h-2" 
-                        />
-                      </>
-                  )}
+                <div className="flex items-center space-x-2">
+                  <Select onValueChange={moveSelectedOpportunities}>
+                    <SelectTrigger className="w-48 bg-white border-blue-300">
+                      <SelectValue placeholder="Mover para..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {funnelStages.map((stage) => (
+                        <SelectItem key={stage.id} value={stage.id}>
+                          <div className="flex items-center space-x-2">
+                            <stage.icon className="w-4 h-4" />
+                            <span>{stage.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteSelectedOpportunities}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Deletar
+                  </Button>
                 </div>
               </div>
+            )}
+            
+            {/* Ação de seleção rápida */}
+            {filteredOpportunities.length > 0 && selectedOpportunities.size === 0 && (
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={selectAllOpportunities}
+                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                >
+                  Selecionar todas ({filteredOpportunities.length})
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-              {/* Cards das Oportunidades */}
-                <div 
-                  className="flex-1 p-3 space-y-3 bg-gray-50/50 overflow-y-auto max-h-[600px] min-h-[200px]"
+        {/* Informações rápidas antes do kanban */}
+        {searchQuery && (
+          <Card className="bg-blue-50 border-blue-200">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Search className="w-5 h-5 text-blue-600" />
+                  <span className="text-blue-800 font-medium">
+                    {filteredOpportunities.length} resultado(s) encontrado(s) para "{searchQuery}"
+                  </span>
+                </div>
+                <div className="text-blue-700 font-semibold">
+                  {formatCurrency(filteredOpportunities.reduce((sum, opp) => sum + opp.value, 0))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Dicas de uso */}
+        {!hasActiveFilters && selectedOpportunities.size === 0 && (
+          <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full">
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-indigo-800 font-medium">💡 Dicas rápidas</p>
+                    <p className="text-sm text-indigo-600">
+                      Arraste os cards • Ctrl+Click para seleção múltipla • Ctrl+N: nova oportunidade • Ctrl+F: buscar • Esc: cancelar
+                    </p>
+                  </div>
+                </div>
+                <div className="text-indigo-700 text-sm">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Kanban Board estilo Trello */}
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="flex gap-4" style={{ minHeight: 600 }}>
+            {funnelStages.map((stage) => {
+              const stageOpportunities = filteredOpportunities.filter(opp => opp.stage === stage.id);
+              console.log(`🏛️ Coluna ${stage.name} (${stage.id}):`, stageOpportunities.length, 'oportunidades');
+              if (stageOpportunities.length > 0) {
+                console.log(`📋 Oportunidades em ${stage.name}:`, stageOpportunities.map(o => ({ id: o.id, client: o.client, stage: o.stage })));
+              }
+              
+              return (
+                <div
+                  key={stage.id}
+                  className={cn(
+                    "flex flex-col bg-white rounded-xl border-2 shadow-md w-[320px] min-w-[320px] max-w-[340px] h-full",
+                    dragOverStage === stage.id ? "ring-4 ring-blue-300 ring-opacity-50 scale-105" : ""
+                  )}
                   onDragOver={(e) => handleDragOver(e, stage.id)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, stage.id)}
                 >
-                  {stage.opportunities.map((opportunity) => (
-                    <Card
-                      key={opportunity.id}
-                      className={cn(
-                        "cursor-move hover:shadow-lg transition-all duration-200 bg-white",
-                        draggedOpportunity?.id === opportunity.id && "opacity-50 scale-95",
-                        "border-l-4",
-                        opportunity.priority === 'urgente' ? 'border-l-red-500' :
-                        opportunity.priority === 'alta' ? 'border-l-orange-500' :
-                        opportunity.priority === 'normal' ? 'border-l-blue-500' : 'border-l-green-500',
-                        "select-none"
-                      )}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, opportunity)}
-                      onDragEnd={handleDragEnd}
-                      style={{ 
-                        cursor: isDragging ? 'grabbing' : 'grab'
-                      }}
-                    >
-                    <CardContent className="p-4">
-                      {/* Header do Card */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-gray-900 truncate">{opportunity.client}</h4>
-                          <p className="text-sm text-gray-600 truncate">{opportunity.company}</p>
-                            {opportunity.address && (
-                              <div className="flex items-center space-x-1 mt-1">
-                                <MapPin className="w-3 h-3 text-gray-400" />
-                                <span className="text-xs text-gray-500">{opportunity.address}</span>
-                        </div>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Badge className={cn("text-xs flex items-center space-x-1", getPriorityColor(opportunity.priority))}>
-                              {getPriorityIcon(opportunity.priority)}
-                              <span>{opportunity.priority}</span>
-                            </Badge>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-6 w-6 p-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Menu de ações
-                              }}
-                            >
-                          <MoreVertical className="w-3 h-3" />
-                        </Button>
-                          </div>
+                  {/* Cabeçalho da coluna */}
+                  <div className={cn("p-4 border-b flex items-center justify-between sticky top-0 z-10 bg-white rounded-t-xl", stage.bgColor)}>
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-2 rounded-lg bg-gradient-to-r", stage.color)}>
+                        <stage.icon className="w-5 h-5 text-white" />
                       </div>
-
-                      {/* Valor e Probabilidade */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-lg font-bold text-green-600">
-                          {formatCurrency(opportunity.value)}
-                        </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div 
-                                className={cn(
-                                  "h-full transition-all duration-300",
-                                  opportunity.probability >= 80 ? "bg-green-500" :
-                                  opportunity.probability >= 60 ? "bg-blue-500" :
-                                  opportunity.probability >= 40 ? "bg-yellow-500" : "bg-red-500"
-                                )}
-                              style={{ width: `${opportunity.probability}%` }}
-                            />
-                          </div>
-                            <span className="text-xs text-gray-600 font-medium">{opportunity.probability}%</span>
-                        </div>
+                      <div>
+                        <h3 className={cn("font-bold text-base", stage.textColor)}>{stage.name}</h3>
+                        <p className="text-xs text-gray-500">{stage.description}</p>
                       </div>
-
-                        {/* Tags */}
-                        {opportunity.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-3">
-                            {opportunity.tags.slice(0, 3).map((tag, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                                <Tag className="w-2 h-2 mr-1" />
-                              {tag}
-                            </Badge>
-                          ))}
-                            {opportunity.tags.length > 3 && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="text-xs">
-                                    +{opportunity.tags.length - 3}
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{opportunity.tags.slice(3).join(', ')}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                        </div>
-                        )}
-
-                        {/* Descrição */}
-                        <p className="text-xs text-gray-600 mb-3 line-clamp-2">
-                          {opportunity.description}
-                        </p>
-
-                      <Separator className="my-3" />
-
-                        {/* Responsável e Data */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-2">
-                          <Avatar className="w-6 h-6">
-                            <AvatarFallback className="text-xs bg-blue-100 text-blue-600">
-                              {opportunity.responsible.split(' ').map(n => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs text-gray-600">{opportunity.responsible}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Clock className="w-3 h-3 text-gray-400" />
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-xs text-gray-500 cursor-help">
-                                  {formatRelativeDate(opportunity.updatedAt)}
-                          </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Última atualização: {formatDate(opportunity.updatedAt)}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                        </div>
-                      </div>
-
-                        {/* Data esperada de fechamento */}
-                        {opportunity.expectedCloseDate && (
-                          <div className="flex items-center space-x-2 mb-3">
-                            <CalendarIcon className="w-3 h-3 text-gray-400" />
-                            <span className="text-xs text-gray-600">
-                              Previsão: {formatDate(opportunity.expectedCloseDate)}
-                            </span>
-                            {opportunity.expectedCloseDate < new Date() && (
-                              <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200">
-                                Atrasado
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-
-                      {/* Próxima Ação */}
-                        <div className="bg-gray-50 rounded-md p-2 mb-3">
-                          <div className="flex items-center space-x-1 mb-1">
-                            <AlertCircle className="w-3 h-3 text-blue-500" />
-                            <span className="text-xs font-medium text-gray-700">Próxima ação:</span>
-                          </div>
-                          <p className="text-xs text-gray-600">{opportunity.nextAction}</p>
-                      </div>
-
-                      {/* Ações do Card */}
-                        <div className="flex items-center justify-between pt-2 border-t">
-                          <div className="flex items-center space-x-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    handleCall(opportunity.contact.phone);
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                >
-                                  <Phone className="w-3 h-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Ligar para {opportunity.contact.phone}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    handleWhatsApp(opportunity);
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                >
-                                  <MessageSquare className="w-3 h-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>WhatsApp</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    handleEmail(opportunity.contact.email, `Proposta para ${opportunity.company}`);
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                >
-                                  <Mail className="w-3 h-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Email para {opportunity.contact.email}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            
-                            {opportunity.website && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-6 w-6 p-0"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      e.preventDefault();
-                                      window.open(opportunity.website?.startsWith('http') ? opportunity.website : `https://${opportunity.website}`, '_blank');
-                                    }}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                  >
-                                    <ExternalLink className="w-3 h-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Visitar website</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center space-x-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    openModal(opportunity);
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                >
-                                  <Edit className="w-3 h-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Editar oportunidade</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0 text-red-500 hover:bg-red-50"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    handleDeleteOpportunity(opportunity.id);
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Deletar oportunidade</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {/* Botão para adicionar nova oportunidade */}
-                <Button
-                  variant="ghost"
-                    className="w-full h-12 border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-colors"
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, stage: stage.id }));
-                      openModal();
-                    }}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                    Adicionar em {stage.name}
-                </Button>
-
-                {/* Área de drop visual quando arrastando */}
-                {isDragging && dragOverStage === stage.id && (
-                  <div className="w-full h-20 border-2 border-dashed border-blue-400 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 font-medium animate-pulse">
-                    <div className="flex items-center space-x-2">
-                      <ArrowDown className="w-5 h-5" />
-                      <span>Solte aqui para mover para {stage.name}</span>
                     </div>
+                    <span className="bg-gray-100 text-gray-700 text-xs font-semibold px-2 py-1 rounded-full ml-2">{stageOpportunities.length}</span>
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
+
+                  {/* Cards da coluna */}
+                  <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                    {stageOpportunities.length === 0 && !searchQuery && (
+                      <div className="text-center py-8 text-gray-400 select-none">
+                        <stage.icon className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">Nenhuma oportunidade em <b>{stage.name}</b></p>
+                      </div>
+                    )}
+                    {stageOpportunities.map((opportunity) => (
+                      <div
+                        key={opportunity.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, opportunity)}
+                        onDragEnd={handleDragEnd}
+                        className={cn(
+                          "bg-white border border-gray-200 rounded-lg shadow-sm p-3 cursor-move hover:shadow-lg transition-all duration-150 group relative",
+                          draggedOpportunity?.id === opportunity.id ? "opacity-50 scale-95" : "",
+                          selectedOpportunities.has(opportunity.id) ? "ring-2 ring-blue-400 border-blue-400" : ""
+                        )}
+                        onClick={(e) => {
+                          if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            toggleOpportunitySelection(opportunity.id);
+                          }
+                        }}
+                      >
+                        <div className="font-bold text-gray-900 text-sm truncate group-hover:text-blue-600">{opportunity.client}</div>
+                        <div className="text-xs text-gray-500 truncate mb-1">{opportunity.company}</div>
+                        <div className="text-xs text-gray-400 mb-2 line-clamp-2">{opportunity.description}</div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-green-600 font-semibold text-sm">{formatCurrency(opportunity.value)}</span>
+                          <span className="text-xs text-gray-500">{opportunity.probability}%</span>
+                        </div>
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); openModal(opportunity); }}><Edit className="w-4 h-4 text-blue-600" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); handleDelete(opportunity.id); }}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Rodapé da coluna */}
+                  <div className="p-3 border-t bg-gray-50 rounded-b-xl">
+                    <Button
+                      variant="ghost"
+                      className="w-full text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                      onClick={() => handleAddCard(stage.id)}
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Adicionar card
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      )}
 
-      {/* Vista em Lista */}
-      {viewMode === 'list' && (
-        <Card>
-          <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>Lista de Oportunidades</span>
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-normal text-gray-600">
-                    {filteredOpportunities.length} oportunidades
-                  </span>
-                  <Button variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar
-                  </Button>
-                </div>
-              </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {filteredOpportunities.map((opportunity) => (
-                <div
-                  key={opportunity.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => openModal(opportunity)}
-                >
-                  <div className="flex items-center space-x-4 flex-1">
-                      <Avatar className="w-12 h-12">
-                        <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
-                        {opportunity.client.split(' ').map(n => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                    
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2 mb-1">
-                        <h4 className="font-medium text-gray-900">{opportunity.client}</h4>
-                          <Badge className={cn("text-xs flex items-center space-x-1", getPriorityColor(opportunity.priority))}>
-                            {getPriorityIcon(opportunity.priority)}
-                            <span>{opportunity.priority}</span>
-                        </Badge>
-                    <Badge 
-                      variant="outline" 
-                      className={cn(
-                              "text-xs",
-                        funnelStages.find(s => s.id === opportunity.stage)?.textColor
-                      )}
-                    >
-                      {funnelStages.find(s => s.id === opportunity.stage)?.name}
-                    </Badge>
-                    </div>
-                        <p className="text-sm text-gray-600 mb-1">{opportunity.company}</p>
-                        <p className="text-xs text-gray-500 mb-2 line-clamp-1">{opportunity.description}</p>
-                        
-                        <div className="flex items-center space-x-4 text-xs text-gray-500">
-                          <div className="flex items-center space-x-1">
-                            <User className="w-3 h-3" />
-                            <span>{opportunity.responsible}</span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Clock className="w-3 h-3" />
-                            <span>{formatRelativeDate(opportunity.updatedAt)}</span>
-                          </div>
-                          {opportunity.expectedCloseDate && (
-                            <div className="flex items-center space-x-1">
-                              <CalendarIcon className="w-3 h-3" />
-                              <span>Previsão: {formatDate(opportunity.expectedCloseDate)}</span>
-                            </div>
-                          )}
-                  </div>
-
-                        {opportunity.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {opportunity.tags.slice(0, 3).map((tag, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-right mr-4">
-                      <div className="text-xl font-bold text-green-600 mb-1">
-                        {formatCurrency(opportunity.value)}
-                      </div>
-                      <div className="flex items-center space-x-2 mb-1">
-                        <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className={cn(
-                              "h-full transition-all",
-                              opportunity.probability >= 80 ? "bg-green-500" :
-                              opportunity.probability >= 60 ? "bg-blue-500" :
-                              opportunity.probability >= 40 ? "bg-yellow-500" : "bg-red-500"
-                            )}
-                            style={{ width: `${opportunity.probability}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-600 font-medium">
-                          {opportunity.probability}%
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleCall(opportunity.contact.phone)}
-                          >
-                            <Phone className="w-4 h-4" />
-                    </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Ligar para {opportunity.contact.phone}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleWhatsApp(opportunity)}
-                          >
-                            <MessageSquare className="w-4 h-4" />
-                    </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>WhatsApp</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleEmail(opportunity.contact.email, `Proposta para ${opportunity.company}`)}
-                          >
-                            <Mail className="w-4 h-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Email para {opportunity.contact.email}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      
-                    <Button variant="outline" size="sm">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-                
-                {filteredOpportunities.length === 0 && (
-                  <div className="text-center py-12">
-                    <Target className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      Nenhuma oportunidade encontrada
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      Tente ajustar seus filtros ou crie uma nova oportunidade.
-                    </p>
-                    <Button onClick={() => openModal()}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Nova Oportunidade
-                    </Button>
-                  </div>
-                )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-        {/* Modal de Edição/Criação */}
+        {/* Modal melhorado */}
         <Dialog open={isModalOpen} onOpenChange={closeModal}>
-          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center space-x-2">
-                {editingOpportunity ? (
-                  <>
-                    <Edit className="w-5 h-5" />
-                    <span>Editar Oportunidade</span>
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-5 h-5" />
-                    <span>Nova Oportunidade</span>
-                  </>
-                )}
+              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                {editingOpportunity ? '✏️ Editar Oportunidade' : '🎯 Nova Oportunidade'}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-              {/* Coluna Esquerda - Informações Básicas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-6">
+              {/* Coluna 1 */}
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Informações do Cliente</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="client" className="text-xs text-gray-600">Nome do Cliente *</Label>
-                      <Input
-                        id="client"
-                        placeholder="João Silva"
-                        value={formData.client}
-                        onChange={(e) => setFormData(prev => ({ ...prev, client: e.target.value }))}
-                        className="mt-1"
-                      />
-    </div>
-                    <div>
-                      <Label htmlFor="company" className="text-xs text-gray-600">Empresa *</Label>
-                      <Input
-                        id="company"
-                        placeholder="TechCorp Ltda"
-                        value={formData.company}
-                        onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Contato</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="phone" className="text-xs text-gray-600">Telefone *</Label>
-                      <Input
-                        id="phone"
-                        placeholder="(11) 99999-9999"
-                        value={formData.phone}
-                        onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email" className="text-xs text-gray-600">Email *</Label>
-                      <Input
-                        id="email"
-                        placeholder="cliente@empresa.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="address" className="text-xs text-gray-600">Endereço</Label>
-                    <Input
-                      id="address"
-                      placeholder="São Paulo, SP"
-                      value={formData.address}
-                      onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="website" className="text-xs text-gray-600">Website</Label>
-                    <Input
-                      id="website"
-                      placeholder="www.empresa.com"
-                      value={formData.website}
-                      onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-
                 <div>
-                  <Label htmlFor="description" className="text-xs text-gray-600">Descrição *</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Descreva a oportunidade e necessidades do cliente..."
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    className="mt-1 min-h-[80px]"
+                  <Label htmlFor="client" className="text-sm font-medium text-gray-700">Cliente *</Label>
+                  <Input
+                    id="client"
+                    value={formData.client}
+                    onChange={(e) => setFormData(prev => ({ ...prev, client: e.target.value }))}
+                    placeholder="Nome do cliente"
+                    className="mt-1"
                   />
                 </div>
+                
+                <div>
+                  <Label htmlFor="company" className="text-sm font-medium text-gray-700">Empresa *</Label>
+                  <Input
+                    id="company"
+                    value={formData.company}
+                    onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
+                    placeholder="Nome da empresa"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="value" className="text-sm font-medium text-gray-700">Valor (R$) *</Label>
+                  <Input
+                    id="value"
+                    type="number"
+                    value={formData.value}
+                    onChange={(e) => setFormData(prev => ({ ...prev, value: Number(e.target.value) }))}
+                    placeholder="0"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="probability" className="text-sm font-medium text-gray-700">Probabilidade (%)</Label>
+                  <div className="mt-1 space-y-2">
+                    <Input
+                      id="probability"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={formData.probability}
+                      onChange={(e) => setFormData(prev => ({ ...prev, probability: Number(e.target.value) }))}
+                    />
+                    <Progress value={formData.probability} className="h-2" />
+                  </div>
+                </div>
 
                 <div>
-                  <Label htmlFor="notes" className="text-xs text-gray-600">Notas Internas</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Anotações internas sobre o cliente/oportunidade..."
-                    value={formData.notes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    className="mt-1 min-h-[60px]"
+                  <Label htmlFor="expectedCloseDate" className="text-sm font-medium text-gray-700">Data Esperada</Label>
+                  <Input
+                    id="expectedCloseDate"
+                    type="date"
+                    value={formData.expectedCloseDate}
+                    onChange={(e) => setFormData(prev => ({ ...prev, expectedCloseDate: e.target.value }))}
+                    className="mt-1"
                   />
                 </div>
               </div>
 
-              {/* Coluna Direita - Detalhes da Oportunidade */}
+              {/* Coluna 2 */}
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Detalhes da Oportunidade</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="value" className="text-xs text-gray-600">Valor (R$) *</Label>
-                      <Input
-                        id="value"
-                        type="number"
-                        placeholder="15000"
-                        value={formData.value}
-                        onChange={(e) => setFormData(prev => ({ ...prev, value: Number(e.target.value) }))}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="probability" className="text-xs text-gray-600">Probabilidade (%)</Label>
-                      <div className="mt-1 space-y-2">
-                        <Input
-                          id="probability"
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={formData.probability}
-                          onChange={(e) => setFormData(prev => ({ ...prev, probability: Number(e.target.value) }))}
-                        />
-                        <Progress value={formData.probability} className="h-2" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs text-gray-600 mb-1 block">Etapa *</Label>
-                    <Select
-                      value={formData.stage}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, stage: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma etapa" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {funnelStages.map((stage) => (
-                          <SelectItem key={stage.id} value={stage.id}>
-                            <div className="flex items-center space-x-2">
-                              <stage.icon className="w-4 h-4" />
-                              <span>{stage.name}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-gray-600 mb-1 block">Prioridade *</Label>
-                    <Select
-                      value={formData.priority}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value as 'baixa' | 'normal' | 'alta' | 'urgente' }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma prioridade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="baixa">
-                          <div className="flex items-center space-x-2">
-                            <ArrowDown className="w-4 h-4 text-green-500" />
-                            <span>Baixa</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="normal">
-                          <div className="flex items-center space-x-2">
-                            <ArrowRight className="w-4 h-4 text-blue-500" />
-                            <span>Normal</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="alta">
-                          <div className="flex items-center space-x-2">
-                            <ArrowUp className="w-4 h-4 text-orange-500" />
-                            <span>Alta</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="urgente">
-                          <div className="flex items-center space-x-2">
-                            <AlertTriangle className="w-4 h-4 text-red-500" />
-                            <span>Urgente</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="responsible" className="text-xs text-gray-600">Responsável</Label>
-                    <Select
-                      value={formData.responsible}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, responsible: value }))}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Selecione o responsável" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Ana Costa">
-                          <div className="flex items-center space-x-2">
-                            <Avatar className="w-4 h-4">
-                              <AvatarFallback className="text-xs">AC</AvatarFallback>
-                            </Avatar>
-                            <span>Ana Costa</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="Carlos Silva">
-                          <div className="flex items-center space-x-2">
-                            <Avatar className="w-4 h-4">
-                              <AvatarFallback className="text-xs">CS</AvatarFallback>
-                            </Avatar>
-                            <span>Carlos Silva</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="Roberto Lima">
-                          <div className="flex items-center space-x-2">
-                            <Avatar className="w-4 h-4">
-                              <AvatarFallback className="text-xs">RL</AvatarFallback>
-                            </Avatar>
-                            <span>Roberto Lima</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="Fernanda Souza">
-                          <div className="flex items-center space-x-2">
-                            <Avatar className="w-4 h-4">
-                              <AvatarFallback className="text-xs">FS</AvatarFallback>
-                            </Avatar>
-                            <span>Fernanda Souza</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="source" className="text-xs text-gray-600">Origem</Label>
-                    <Select
-                      value={formData.source}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, source: value }))}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Como conheceu?" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Website">Website</SelectItem>
-                        <SelectItem value="LinkedIn">LinkedIn</SelectItem>
-                        <SelectItem value="Indicação">Indicação</SelectItem>
-                        <SelectItem value="Cold Email">Cold Email</SelectItem>
-                        <SelectItem value="Google Ads">Google Ads</SelectItem>
-                        <SelectItem value="Facebook">Facebook</SelectItem>
-                        <SelectItem value="Evento">Evento</SelectItem>
-                        <SelectItem value="Telefone">Telefone</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
                 <div>
-                  <Label htmlFor="expectedCloseDate" className="text-xs text-gray-600">Data Prevista de Fechamento</Label>
-                  <Input
-                    id="expectedCloseDate"
-                    type="date"
-                    value={formData.expectedCloseDate ? formData.expectedCloseDate.toISOString().split('T')[0] : ''}
-                    onChange={(e) => setFormData(prev => ({ 
-                      ...prev, 
-                      expectedCloseDate: e.target.value ? new Date(e.target.value) : undefined 
-                    }))}
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="tags" className="text-xs text-gray-600">Tags</Label>
-                  <Input
-                    id="tags"
-                    placeholder="enterprise, startup, saas (separado por vírgula)"
-                    value={formData.tags.join(', ')}
-                    onChange={(e) => setFormData(prev => ({ 
-                      ...prev, 
-                      tags: e.target.value.split(',').map(t => t.trim()).filter(t => t.length > 0)
-                    }))}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Separe as tags por vírgula</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="nextAction" className="text-xs text-gray-600">Próxima Ação *</Label>
-                  <Input
-                    id="nextAction"
-                    placeholder="Agendar demo do produto"
-                    value={formData.nextAction}
-                    onChange={(e) => setFormData(prev => ({ ...prev, nextAction: e.target.value }))}
-                    className="mt-1"
-                  />
-                </div>
-
-                {/* Preview das Tags */}
-                {formData.tags.length > 0 && (
-                  <div>
-                    <Label className="text-xs text-gray-600">Preview das Tags</Label>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {formData.tags.map((tag, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          <Tag className="w-2 h-2 mr-1" />
-                          {tag}
-                        </Badge>
+                  <Label htmlFor="stage" className="text-sm font-medium text-gray-700">Etapa</Label>
+                  <Select value={formData.stage} onValueChange={(value) => setFormData(prev => ({ ...prev, stage: value }))}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {funnelStages.map((stage) => (
+                        <SelectItem key={stage.id} value={stage.id}>
+                          <div className="flex items-center space-x-2">
+                            <stage.icon className="w-4 h-4" />
+                            <span>{stage.name}</span>
+                          </div>
+                        </SelectItem>
                       ))}
-                    </div>
-                  </div>
-                )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="priority" className="text-sm font-medium text-gray-700">Prioridade</Label>
+                  <Select value={formData.priority} onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value as any }))}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="baixa">
+                        <div className="flex items-center space-x-2">
+                          <ArrowDown className="w-4 h-4 text-green-500" />
+                          <span>Baixa</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="normal">
+                        <div className="flex items-center space-x-2">
+                          <ArrowRight className="w-4 h-4 text-blue-500" />
+                          <span>Normal</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="alta">
+                        <div className="flex items-center space-x-2">
+                          <ArrowUp className="w-4 h-4 text-orange-500" />
+                          <span>Alta</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="urgente">
+                        <div className="flex items-center space-x-2">
+                          <AlertTriangle className="w-4 h-4 text-red-500" />
+                          <span>Urgente</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="responsible" className="text-sm font-medium text-gray-700">Responsável</Label>
+                  <Select value={formData.responsible} onValueChange={(value) => setFormData(prev => ({ ...prev, responsible: value }))}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Selecione o responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Ana Costa">Ana Costa</SelectItem>
+                      <SelectItem value="Carlos Silva">Carlos Silva</SelectItem>
+                      <SelectItem value="Roberto Lima">Roberto Lima</SelectItem>
+                      <SelectItem value="Fernanda Souza">Fernanda Souza</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="phone" className="text-sm font-medium text-gray-700">Telefone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="(11) 99999-9999"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="email" className="text-sm font-medium text-gray-700">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="cliente@empresa.com"
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="source" className="text-sm font-medium text-gray-700">Fonte</Label>
+                  <Select value={formData.source} onValueChange={(value) => setFormData(prev => ({ ...prev, source: value }))}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Website">Website</SelectItem>
+                      <SelectItem value="Indicação">Indicação</SelectItem>
+                      <SelectItem value="LinkedIn">LinkedIn</SelectItem>
+                      <SelectItem value="Event">Evento</SelectItem>
+                      <SelectItem value="Cold Call">Cold Call</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="col-span-1 md:col-span-2">
+                <Label htmlFor="description" className="text-sm font-medium text-gray-700">Descrição</Label>
+                <Input
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Descrição detalhada da oportunidade..."
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="col-span-1 md:col-span-2">
+                <Label htmlFor="tags" className="text-sm font-medium text-gray-700">Tags</Label>
+                <Input
+                  id="tags"
+                  value={formData.tags}
+                  onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
+                  placeholder="Enterprise, Hot Lead, SMB (separadas por vírgula)"
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">Separe as tags com vírgulas</p>
               </div>
             </div>
 
             <DialogFooter className="flex items-center justify-between pt-6 border-t">
-              <div className="text-xs text-gray-500">
-                * Campos obrigatórios
-              </div>
-              <div className="flex items-center space-x-3">
-                <Button variant="outline" onClick={closeModal} disabled={isLoading}>
+              <p className="text-xs text-gray-500">* Campos obrigatórios</p>
+              <div className="flex space-x-3">
+                <Button variant="outline" onClick={closeModal} className="border-gray-300">
                   <X className="w-4 h-4 mr-2" />
                   Cancelar
                 </Button>
                 <Button 
-                  onClick={handleSaveOpportunity} 
-                  disabled={isLoading || !formData.client || !formData.company || !formData.phone || !formData.email || !formData.description || !formData.nextAction}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => {
+                    console.log('🖱️ Botão Criar clicado!');
+                    console.log('📝 FormData atual:', formData);
+                    console.log('✅ Botão habilitado:', !(!formData.client || !formData.company));
+                    handleSave();
+                  }}
+                  disabled={!formData.client || !formData.company}
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg"
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      {editingOpportunity ? 'Atualizar' : 'Criar'} Oportunidade
-                    </>
-                  )}
+                  <Save className="w-4 h-4 mr-2" />
+                  {editingOpportunity ? 'Atualizar' : 'Criar'}
                 </Button>
               </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Chat WhatsApp */}
-        {isChatOpen && selectedOpportunityForChat && (
-          <TicketChat 
-            ticket={selectedOpportunityForChat}
-            onClose={handleCloseChatWhatsApp}
-          />
-        )}
+        {/* Modal de Atividades */}
+        <Dialog open={activityModal.isOpen} onOpenChange={(open) => setActivityModal({ isOpen: open, opportunityId: null })}>
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-purple-600">
+                📋 Atividades da Oportunidade
+              </DialogTitle>
+            </DialogHeader>
+
+            {activityModal.opportunityId && (() => {
+              const opportunity = opportunities.find(o => o.id === activityModal.opportunityId);
+              if (!opportunity) return null;
+
+              return (
+                <div className="space-y-4 flex-1 overflow-hidden">
+                  {/* Header com info da oportunidade */}
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                    <h3 className="font-bold text-purple-800">{opportunity.client}</h3>
+                    <p className="text-purple-600 text-sm">{opportunity.company} • {formatCurrency(opportunity.value)}</p>
+                  </div>
+
+                  {/* Lista de atividades */}
+                  <div className="flex-1 overflow-y-auto max-h-96 space-y-3">
+                    {opportunity.activities.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <MessageSquare className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                        <p>Nenhuma atividade registrada</p>
+                      </div>
+                    ) : (
+                      opportunity.activities
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        .map((activity) => (
+                          <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex-shrink-0 mt-1">
+                              {getActivityIcon(activity.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-gray-900 capitalize">
+                                  {activity.type === 'note' ? 'Nota' :
+                                   activity.type === 'call' ? 'Ligação' :
+                                   activity.type === 'email' ? 'Email' :
+                                   activity.type === 'meeting' ? 'Reunião' :
+                                   activity.type === 'stage_change' ? 'Mudança de Etapa' :
+                                   'Criação'}
+                                </p>
+                                <span className="text-xs text-gray-500">
+                                  {formatDate(activity.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700 mt-1">{activity.description}</p>
+                              <p className="text-xs text-gray-500 mt-1">por {activity.createdBy}</p>
+                            </div>
+                          </div>
+                        ))
+                    )}
+                  </div>
+
+                  {/* Formulário para nova atividade */}
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium text-gray-900 mb-3">Adicionar Nova Atividade</h4>
+                    <div className="grid grid-cols-4 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const description = prompt("Descrição da nota:");
+                          if (description) addActivity(opportunity.id, 'note', description);
+                        }}
+                        className="flex items-center space-x-1"
+                      >
+                        <FileText className="w-3 h-3" />
+                        <span>Nota</span>
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const description = prompt("Descrição da ligação:");
+                          if (description) addActivity(opportunity.id, 'call', description);
+                        }}
+                        className="flex items-center space-x-1"
+                      >
+                        <Phone className="w-3 h-3" />
+                        <span>Ligação</span>
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const description = prompt("Descrição do email:");
+                          if (description) addActivity(opportunity.id, 'email', description);
+                        }}
+                        className="flex items-center space-x-1"
+                      >
+                        <Mail className="w-3 h-3" />
+                        <span>Email</span>
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const description = prompt("Descrição da reunião:");
+                          if (description) addActivity(opportunity.id, 'meeting', description);
+                        }}
+                        className="flex items-center space-x-1"
+                      >
+                        <Calendar className="w-3 h-3" />
+                        <span>Reunião</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setActivityModal({ isOpen: false, opportunityId: null })}
+              >
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );

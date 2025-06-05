@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { TicketManagement } from './TicketManagement';
 import { CustomerManagement } from './customers/CustomerManagement';
-import { Loader2, MessageSquare, Filter, Users } from 'lucide-react';
+import { SalesFunnel } from './SalesFunnel';
+import { Loader2, MessageSquare, Filter, Users, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MainContentProps {
@@ -45,21 +46,7 @@ export const MainContent = ({
           />
         );
       case 'funil':
-        return (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8">
-              <div className="bg-gradient-to-br from-yellow-100 to-amber-100 rounded-2xl p-8 mb-6 inline-block">
-                <Filter className="w-12 h-12 text-amber-600 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Funil de Vendas
-                </h3>
-                <p className="text-gray-600">
-                  Em desenvolvimento...
-                </p>
-              </div>
-            </div>
-          </div>
-        );
+        return <SalesFunnel sector={selectedSector} />;
       case 'clientes':
         return <CustomerManagement />;
       case 'dashboard':
