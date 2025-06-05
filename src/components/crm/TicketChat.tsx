@@ -21,7 +21,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { 
   X, 
   Send, 
@@ -45,7 +57,37 @@ import {
   Plus,
   Eye,
   UserCheck,
-  Settings
+  Settings,
+  Search,
+  Star,
+  StarOff,
+  Copy,
+  Forward,
+  Reply,
+  Download,
+  FileText,
+  Image,
+  Video,
+  Mic,
+  VideoIcon,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Zap,
+  Sparkles,
+  MessageCircle,
+  Languages,
+  Bot,
+  Headphones,
+  ScreenShare,
+  Moon,
+  Sun,
+  Maximize,
+  Archive,
+  Flag,
+  Heart,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -65,12 +107,21 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [lastSentMessage, setLastSentMessage] = useState<number | null>(null);
   const [isFinishingTicket, setIsFinishingTicket] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   
   // Estados para os modais das ações rápidas
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   
   // Estados para os dados do ticket (que podem ser alterados)
   const [currentTicket, setCurrentTicket] = useState(ticket);
@@ -78,27 +129,72 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const [newStatus, setNewStatus] = useState('');
   const [newTag, setNewTag] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [favoriteMessages, setFavoriteMessages] = useState<Set<number>>(new Set());
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Templates de resposta rápida
+  const quickTemplates = [
+    {
+      id: 1,
+      title: "Saudação",
+      content: "Olá! Obrigado por entrar em contato. Como posso ajudá-lo hoje?",
+      category: "saudacao"
+    },
+    {
+      id: 2,
+      title: "Aguardando informações",
+      content: "Obrigado pela informação. Vou analisar e retorno em breve com uma solução.",
+      category: "processo"
+    },
+    {
+      id: 3,
+      title: "Problema resolvido",
+      content: "Ótimo! O problema foi resolvido. Há mais alguma coisa em que posso ajudar?",
+      category: "resolucao"
+    },
+    {
+      id: 4,
+      title: "Solicitar mais detalhes",
+      content: "Para melhor atendê-lo, poderia fornecer mais detalhes sobre o problema?",
+      category: "informacao"
+    },
+    {
+      id: 5,
+      title: "Encaminhar para especialista",
+      content: "Vou encaminhar seu caso para nosso especialista. Você receberá retorno em até 24h.",
+      category: "escalonamento"
+    },
+    {
+      id: 6,
+      title: "Agradecimento",
+      content: "Muito obrigado por escolher nossos serviços! Sua opinião é muito importante para nós.",
+      category: "finalizacao"
+    }
+  ];
+
+  // Emojis populares
+  const popularEmojis = ['😊', '👍', '👎', '❤️', '😢', '😮', '😄', '🎉', '🔥', '💯', '✅', '❌', '⚠️', '🚀', '💡', '📞', '📧', '📋', '⏰', '🔧'];
 
   // Mock data para responsáveis disponíveis
   const availableAgents = [
-    { id: '1', name: 'João Silva', email: 'joao@empresa.com', department: 'Suporte Técnico' },
-    { id: '2', name: 'Maria Santos', email: 'maria@empresa.com', department: 'Vendas' },
-    { id: '3', name: 'Pedro Costa', email: 'pedro@empresa.com', department: 'Suporte Técnico' },
-    { id: '4', name: 'Ana Oliveira', email: 'ana@empresa.com', department: 'Atendimento' },
-    { id: '5', name: 'Carlos Lima', email: 'carlos@empresa.com', department: 'Técnico' },
+    { id: '1', name: 'João Silva', email: 'joao@empresa.com', department: 'Suporte Técnico', online: true },
+    { id: '2', name: 'Maria Santos', email: 'maria@empresa.com', department: 'Vendas', online: true },
+    { id: '3', name: 'Pedro Costa', email: 'pedro@empresa.com', department: 'Suporte Técnico', online: false },
+    { id: '4', name: 'Ana Oliveira', email: 'ana@empresa.com', department: 'Atendimento', online: true },
+    { id: '5', name: 'Carlos Lima', email: 'carlos@empresa.com', department: 'Técnico', online: false },
   ];
 
   // Status disponíveis
   const availableStatuses = [
-    { value: 'pendente', label: 'Pendente', color: 'amber' },
-    { value: 'atendimento', label: 'Em Atendimento', color: 'blue' },
-    { value: 'aguardando', label: 'Aguardando Cliente', color: 'orange' },
-    { value: 'resolvido', label: 'Resolvido', color: 'green' },
-    { value: 'finalizado', label: 'Finalizado', color: 'emerald' },
-    { value: 'cancelado', label: 'Cancelado', color: 'red' },
+    { value: 'pendente', label: 'Pendente', color: 'amber', icon: Clock },
+    { value: 'atendimento', label: 'Em Atendimento', color: 'blue', icon: MessageCircle },
+    { value: 'aguardando', label: 'Aguardando Cliente', color: 'orange', icon: User },
+    { value: 'resolvido', label: 'Resolvido', color: 'green', icon: CheckCircle2 },
+    { value: 'finalizado', label: 'Finalizado', color: 'emerald', icon: Check },
+    { value: 'cancelado', label: 'Cancelado', color: 'red', icon: X },
   ];
 
   // Tags disponíveis
@@ -113,37 +209,53 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       content: 'Olá, estou com problema no sistema. Não consigo acessar minha conta.',
       sender: 'client',
       senderName: currentTicket.client,
-      timestamp: new Date(Date.now() - 25 * 60 * 1000), // 25 min atrás
+      timestamp: new Date(Date.now() - 25 * 60 * 1000),
       type: 'text',
-      status: 'read'
+      status: 'read',
+      attachments: []
     },
     {
       id: 2,
       content: 'Olá! Vou verificar sua conta agora. Pode me informar seu e-mail de cadastro?',
       sender: 'agent',
       senderName: 'João Silva',
-      timestamp: new Date(Date.now() - 23 * 60 * 1000), // 23 min atrás
+      timestamp: new Date(Date.now() - 23 * 60 * 1000),
       type: 'text',
-      status: 'read'
+      status: 'read',
+      attachments: []
     },
     {
       id: 3,
       content: 'Meu e-mail é cliente@exemplo.com',
       sender: 'client',
       senderName: currentTicket.client,
-      timestamp: new Date(Date.now() - 22 * 60 * 1000), // 22 min atrás
+      timestamp: new Date(Date.now() - 22 * 60 * 1000),
       type: 'text',
-      status: 'read'
+      status: 'read',
+      attachments: []
     },
     {
       id: 4,
       content: 'Cliente verificado. Identificado problema na conta. Realizando correção.',
       sender: 'agent',
       senderName: 'João Silva',
-      timestamp: new Date(Date.now() - 20 * 60 * 1000), // 20 min atrás
+      timestamp: new Date(Date.now() - 20 * 60 * 1000),
       type: 'internal',
       isInternal: true,
-      status: 'read'
+      status: 'read',
+      attachments: []
+    },
+    {
+      id: 5,
+      content: 'Anexo o print do erro que está aparecendo',
+      sender: 'client',
+      senderName: currentTicket.client,
+      timestamp: new Date(Date.now() - 18 * 60 * 1000),
+      type: 'text',
+      status: 'read',
+      attachments: [
+        { id: 1, name: 'erro-sistema.png', type: 'image', size: '245 KB', url: '/placeholder-error.png' }
+      ]
     }
   ];
 
@@ -153,14 +265,12 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
 
   useEffect(() => {
     scrollToBottom();
-    // Auto-focus no textarea quando o chat abre
-    if (textareaRef.current) {
+    if (textareaRef.current && !isMinimized) {
       textareaRef.current.focus();
     }
-  }, []);
+  }, [isMinimized]);
 
   useEffect(() => {
-    // Simular digitação do cliente
     const typingTimer = Math.random() > 0.7 ? setTimeout(() => {
       setIsTyping(true);
       setTimeout(() => setIsTyping(false), 3000);
@@ -177,7 +287,6 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     setIsSending(true);
     
     try {
-      // Simular envio da mensagem
       await new Promise(resolve => setTimeout(resolve, 800));
       
       console.log('Enviando mensagem:', {
@@ -189,11 +298,20 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       setLastSentMessage(Date.now());
       setMessage('');
       
-      // Simular confirmação de entrega
       setTimeout(() => setLastSentMessage(null), 2000);
+      
+      toast({
+        title: "✅ Mensagem enviada",
+        description: isInternal ? "Nota interna adicionada" : "Mensagem enviada para o cliente",
+      });
       
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      toast({
+        title: "❌ Erro ao enviar",
+        description: "Não foi possível enviar a mensagem. Tente novamente.",
+        variant: "destructive"
+      });
     } finally {
       setIsSending(false);
       if (textareaRef.current) {
@@ -202,39 +320,114 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     }
   };
 
-  const handleFinishTicket = async () => {
-    if (!confirm('Tem certeza que deseja finalizar este ticket?')) return;
+  const handleTemplateSelect = (template: any) => {
+    setMessage(template.content);
+    setShowTemplatesModal(false);
+    textareaRef.current?.focus();
     
-    setIsFinishingTicket(true);
+    toast({
+      title: "📝 Template aplicado",
+      description: `Template "${template.title}" foi adicionado à mensagem`,
+    });
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
+    textareaRef.current?.focus();
+  };
+
+  const handleFileUpload = async (files: FileList) => {
+    if (!files.length) return;
+    
+    setIsUploading(true);
+    setUploadProgress(0);
     
     try {
-      // Simular API call para finalizar ticket
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('Finalizando ticket:', currentTicket.id);
-      
-      // Atualizar o status do ticket localmente
-      setCurrentTicket({
-        ...currentTicket,
-        status: 'finalizado'
-      });
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        console.log('Fazendo upload do arquivo:', file.name);
+        
+        // Simular progresso de upload
+        for (let progress = 0; progress <= 100; progress += 10) {
+          setUploadProgress(progress);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
       
       toast({
-        title: 'Ticket finalizado',
-        description: 'Ticket finalizado com sucesso!',
+        title: "📎 Arquivo enviado",
+        description: `${files.length} arquivo(s) enviado(s) com sucesso`,
       });
-      onClose(); // Fechar o chat após finalizar
       
     } catch (error) {
-      console.error('Erro ao finalizar ticket:', error);
       toast({
-        title: 'Erro ao finalizar ticket',
-        description: 'Erro ao finalizar ticket. Tente novamente mais tarde.',
-        variant: 'destructive',
+        title: "❌ Erro no upload",
+        description: "Não foi possível enviar o arquivo. Tente novamente.",
+        variant: "destructive"
       });
     } finally {
-      setIsFinishingTicket(false);
+      setIsUploading(false);
+      setUploadProgress(0);
     }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handleFileUpload(files);
+    }
+  };
+
+  const handleVoiceRecording = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      toast({
+        title: "🎤 Gravação finalizada",
+        description: "Áudio gravado com sucesso",
+      });
+    } else {
+      setIsRecording(true);
+      toast({
+        title: "🎤 Gravando áudio...",
+        description: "Clique novamente para parar",
+      });
+    }
+  };
+
+  const toggleFavoriteMessage = (messageId: number) => {
+    setFavoriteMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+        toast({ title: "⭐ Removido dos favoritos" });
+      } else {
+        newSet.add(messageId);
+        toast({ title: "⭐ Adicionado aos favoritos" });
+      }
+      return newSet;
+    });
+  };
+
+  const copyMessage = (content: string) => {
+    navigator.clipboard.writeText(content);
+    toast({
+      title: "📋 Copiado",
+      description: "Mensagem copiada para a área de transferência",
+    });
   };
 
   const formatRelativeTime = (date: Date) => {
@@ -266,9 +459,45 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     return colors[priority] || 'text-gray-600 bg-gray-50 border-gray-200';
   };
 
+  const handleFinishTicket = async () => {
+    if (!confirm('Tem certeza que deseja finalizar este ticket?')) return;
+    
+    setIsFinishingTicket(true);
+    
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setCurrentTicket({ ...currentTicket, status: 'finalizado' });
+      
+      toast({
+        title: '🎉 Ticket finalizado',
+        description: 'Ticket finalizado com sucesso!',
+      });
+      onClose();
+      
+    } catch (error) {
+      toast({
+        title: 'Erro ao finalizar ticket',
+        description: 'Erro ao finalizar ticket. Tente novamente mais tarde.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFinishingTicket(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       onClose();
+    }
+    // Ctrl/Cmd + Enter para enviar
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      handleSendMessage();
+    }
+    // Ctrl/Cmd + F para buscar
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      setShowSearch(!showSearch);
     }
   };
 
@@ -286,18 +515,10 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     setIsUpdating(true);
     
     try {
-      // Simular API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const selectedAgent = availableAgents.find(agent => agent.id === newAssignee);
       
-      console.log('Alterando responsável do ticket:', {
-        ticketId: currentTicket.id,
-        newAssignee: selectedAgent?.name,
-        agentId: newAssignee
-      });
-
-      // Atualizar o ticket localmente
       setCurrentTicket({
         ...currentTicket,
         assignedTo: selectedAgent?.name || 'Não atribuído'
@@ -312,7 +533,6 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       setNewAssignee('');
       
     } catch (error) {
-      console.error('Erro ao alterar responsável:', error);
       toast({
         title: 'Erro',
         description: 'Erro ao alterar responsável. Tente novamente.',
@@ -337,18 +557,10 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     setIsUpdating(true);
     
     try {
-      // Simular API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const selectedStatus = availableStatuses.find(status => status.value === newStatus);
       
-      console.log('Alterando status do ticket:', {
-        ticketId: currentTicket.id,
-        oldStatus: currentTicket.status,
-        newStatus: newStatus
-      });
-
-      // Atualizar o ticket localmente
       setCurrentTicket({
         ...currentTicket,
         status: newStatus
@@ -363,7 +575,6 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       setNewStatus('');
       
     } catch (error) {
-      console.error('Erro ao alterar status:', error);
       toast({
         title: 'Erro',
         description: 'Erro ao alterar status. Tente novamente.',
@@ -388,15 +599,8 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     setIsUpdating(true);
     
     try {
-      // Simular API call
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      console.log('Adicionando etiqueta ao ticket:', {
-        ticketId: currentTicket.id,
-        tag: newTag
-      });
-
-      // Atualizar o ticket localmente (assumindo que existe um array de tags)
       const currentTags = currentTicket.tags || [];
       if (!currentTags.includes(newTag)) {
         setCurrentTicket({
@@ -414,7 +618,6 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       setNewTag('');
       
     } catch (error) {
-      console.error('Erro ao adicionar etiqueta:', error);
       toast({
         title: 'Erro',
         description: 'Erro ao adicionar etiqueta. Tente novamente.',
@@ -427,10 +630,6 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
 
   // Função para ver detalhes do cliente
   const handleViewClient = () => {
-    console.log('Visualizando cliente:', currentTicket.client);
-    
-    // Aqui você pode implementar navegação para uma página de detalhes do cliente
-    // ou abrir um modal com as informações completas
     toast({
       title: 'Abrindo perfil do cliente',
       description: `Carregando informações de ${currentTicket.client}`,
@@ -495,14 +694,19 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
         padding: '1rem'
       }}
     >
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex overflow-hidden border-0 animate-in fade-in-0 zoom-in-95 duration-300 relative z-10">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex overflow-hidden border-0 animate-in fade-in-0 zoom-in-95 duration-300 relative z-10 mt-8">
         {/* Chat Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Chat Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 flex items-center justify-between rounded-tl-xl">
+          <div className={cn(
+            "px-6 py-5 flex items-center justify-between rounded-tl-xl transition-colors duration-200",
+            isDarkMode 
+              ? "bg-gradient-to-r from-gray-800 to-gray-900 text-white" 
+              : "bg-gradient-to-r from-blue-600 to-blue-700 text-white"
+          )}>
             <div className="flex items-center space-x-4 min-w-0 flex-1">
               <div className="flex items-center space-x-3">
-                <div className="bg-white/20 p-2 rounded-lg">
+                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
                   <MessageSquare className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
@@ -511,43 +715,214 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <Badge className={cn("text-xs font-medium px-3 py-1", getStatusColor(currentTicket.status))}>
+                <Badge className={cn("text-xs font-medium px-3 py-1 backdrop-blur-sm", getStatusColor(currentTicket.status))}>
                   {currentTicket.status}
                 </Badge>
-                <Badge className={cn("text-xs font-medium px-3 py-1 border", getPriorityColor(currentTicket.priority))}>
+                <Badge className={cn("text-xs font-medium px-3 py-1 border backdrop-blur-sm", getPriorityColor(currentTicket.priority))}>
                   {currentTicket.priority}
                 </Badge>
               </div>
             </div>
+            
             <div className="flex items-center space-x-2">
-              <Button variant="secondary" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
-                <Phone className="w-4 h-4 mr-2" />
-                Ligar
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setIsMinimized(true)} className="text-white hover:bg-white/20">
-                <Minimize2 className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={onClose} className="text-white hover:bg-white/20">
-                <X className="w-4 h-4" />
-              </Button>
+              {/* Indicador de status do cliente */}
+              <div className="flex items-center space-x-2 bg-white/10 px-3 py-1 rounded-full">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-xs text-white/90">Cliente online</span>
+              </div>
+
+              {/* Actions */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    >
+                      <Phone className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Iniciar chamada</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    >
+                      <Video className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Videochamada</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    >
+                      <ScreenShare className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Compartilhar tela</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    >
+                      <Bot className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>IA Assistant</TooltipContent>
+                </Tooltip>
+
+                <div className="w-px h-6 bg-white/20 mx-1"></div>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setIsMinimized(true)} 
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    >
+                      <Minimize2 className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Minimizar</TooltipContent>
+                </Tooltip>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-2">
+                    <div className="space-y-1">
+                      <Button variant="ghost" size="sm" className="w-full justify-start">
+                        <Archive className="w-4 h-4 mr-2" />
+                        Arquivar
+                      </Button>
+                      <Button variant="ghost" size="sm" className="w-full justify-start">
+                        <Flag className="w-4 h-4 mr-2" />
+                        Marcar importante
+                      </Button>
+                      <Button variant="ghost" size="sm" className="w-full justify-start">
+                        <Forward className="w-4 h-4 mr-2" />
+                        Encaminhar
+                      </Button>
+                      <Separator />
+                      <Button variant="ghost" size="sm" className="w-full justify-start text-red-600">
+                        <X className="w-4 h-4 mr-2" />
+                        Fechar ticket
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={onClose} 
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Fechar chat</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-50 to-white">
+          <div 
+            className={cn(
+              "flex-1 overflow-y-auto p-6 space-y-4 relative",
+              isDarkMode 
+                ? "bg-gradient-to-b from-gray-900 to-gray-800" 
+                : "bg-gradient-to-b from-gray-50 to-white",
+              dragOver && "bg-blue-50 border-2 border-dashed border-blue-300"
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* Search Bar */}
+            {showSearch && (
+              <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm p-3 rounded-lg border border-gray-200 shadow-sm mb-4 animate-in slide-in-from-top-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar nas mensagens..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-10"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowSearch(false)}
+                    className="absolute right-1 top-1 h-8 w-8 p-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Drag & Drop Overlay */}
+            {dragOver && (
+              <div className="absolute inset-0 flex items-center justify-center bg-blue-50/90 backdrop-blur-sm z-20 border-2 border-dashed border-blue-400 rounded-lg">
+                <div className="text-center">
+                  <Paperclip className="w-12 h-12 mx-auto text-blue-500 mb-3" />
+                  <p className="text-lg font-semibold text-blue-700">Solte os arquivos aqui</p>
+                  <p className="text-sm text-blue-600">Suporte para imagens, documentos e vídeos</p>
+                </div>
+              </div>
+            )}
+
+            {/* Upload Progress */}
+            {isUploading && (
+              <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm p-3 rounded-lg border border-gray-200 shadow-sm mb-4">
+                <div className="flex items-center space-x-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Enviando arquivo...</p>
+                    <Progress value={uploadProgress} className="h-2 mt-1" />
+                  </div>
+                  <span className="text-sm text-gray-500">{uploadProgress}%</span>
+                </div>
+              </div>
+            )}
+
             {mockMessages.map((msg, index) => (
               <div
                 key={msg.id}
                 className={cn(
-                  "flex animate-in slide-in-from-bottom-2 duration-300",
-                  msg.sender === 'client' ? 'justify-start' : 'justify-end'
+                  "flex animate-in slide-in-from-bottom-2 duration-300 group",
+                  msg.sender === 'client' ? 'justify-start' : 'justify-end',
+                  searchQuery && !msg.content.toLowerCase().includes(searchQuery.toLowerCase()) && "opacity-30"
                 )}
                 style={{ animationDelay: `${index * 100}ms` }}
               >
-                <div className="flex items-end space-x-2 max-w-[70%]">
+                <div className="flex items-end space-x-2 max-w-[75%] relative">
                   {msg.sender === 'client' && (
                     <Avatar className="w-8 h-8 ring-2 ring-white shadow-sm">
                       <AvatarFallback className="bg-gradient-to-br from-blue-400 to-blue-600 text-white text-xs">
@@ -556,34 +931,125 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                     </Avatar>
                   )}
                   
-                  <div
-                    className={cn(
-                      "px-4 py-3 rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md",
-                      msg.sender === 'client'
-                        ? 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
-                        : msg.isInternal
-                        ? 'bg-amber-50 border border-amber-200 text-amber-900 rounded-br-sm'
-                        : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-br-sm',
-                      "relative group"
-                    )}
-                  >
-                    {msg.isInternal && (
-                      <div className="text-xs font-medium mb-2 flex items-center text-amber-700">
-                        <Tag className="w-3 h-3 mr-1" />
-                        Nota Interna
-                      </div>
-                    )}
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  <div className="relative">
+                    {/* Message Actions - aparecem no hover */}
                     <div className={cn(
-                      "flex items-center justify-between mt-2 text-xs",
-                      msg.sender === 'client' ? 'text-gray-500' : msg.isInternal ? 'text-amber-600' : 'text-blue-100'
+                      "absolute -top-8 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10",
+                      msg.sender === 'client' ? "left-0" : "right-0"
                     )}>
-                      <span className="font-medium">{msg.senderName}</span>
-                      <div className="flex items-center space-x-1">
-                        <span>{formatRelativeTime(msg.timestamp)}</span>
-                        {msg.sender === 'agent' && !msg.isInternal && (
-                          <CheckCheck className="w-3 h-3" />
-                        )}
+                      <TooltipProvider>
+                        <div className="flex items-center bg-white rounded-lg shadow-lg border border-gray-200 p-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => toggleFavoriteMessage(msg.id)}
+                              >
+                                {favoriteMessages.has(msg.id) ? (
+                                  <Star className="w-3 h-3 text-amber-500 fill-current" />
+                                ) : (
+                                  <StarOff className="w-3 h-3 text-gray-400" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Favoritar</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => copyMessage(msg.content)}
+                              >
+                                <Copy className="w-3 h-3 text-gray-400" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Copiar</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => setMessage(`> ${msg.content}\n\n`)}
+                              >
+                                <Reply className="w-3 h-3 text-gray-400" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Responder</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "px-4 py-3 rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md relative",
+                        msg.sender === 'client'
+                          ? 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
+                          : msg.isInternal
+                          ? 'bg-amber-50 border border-amber-200 text-amber-900 rounded-br-sm'
+                          : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-br-sm',
+                        favoriteMessages.has(msg.id) && "ring-2 ring-amber-300"
+                      )}
+                    >
+                      {/* Favorite indicator */}
+                      {favoriteMessages.has(msg.id) && (
+                        <Star className="absolute -top-1 -right-1 w-3 h-3 text-amber-500 fill-current" />
+                      )}
+
+                      {msg.isInternal && (
+                        <div className="text-xs font-medium mb-2 flex items-center text-amber-700">
+                          <Tag className="w-3 h-3 mr-1" />
+                          Nota Interna
+                        </div>
+                      )}
+                      
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                      
+                      {/* Attachments */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {msg.attachments.map((attachment: any) => (
+                            <div key={attachment.id} className="flex items-center space-x-2 p-2 bg-black/5 rounded-lg">
+                              <div className="flex-shrink-0">
+                                {attachment.type === 'image' ? (
+                                  <Image className="w-4 h-4 text-blue-600" />
+                                ) : attachment.type === 'video' ? (
+                                  <Video className="w-4 h-4 text-purple-600" />
+                                ) : (
+                                  <FileText className="w-4 h-4 text-gray-600" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{attachment.name}</p>
+                                <p className="text-xs opacity-75">{attachment.size}</p>
+                              </div>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                <Download className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className={cn(
+                        "flex items-center justify-between mt-2 text-xs",
+                        msg.sender === 'client' ? 'text-gray-500' : msg.isInternal ? 'text-amber-600' : 'text-blue-100'
+                      )}>
+                        <span className="font-medium">{msg.senderName}</span>
+                        <div className="flex items-center space-x-1">
+                          <span>{formatRelativeTime(msg.timestamp)}</span>
+                          {msg.sender === 'agent' && !msg.isInternal && (
+                            <CheckCheck className="w-3 h-3" />
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -628,63 +1094,295 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 </div>
               </div>
             )}
+
+            {/* Painel de Feedback - aparece quando ticket está resolvido */}
+            {currentTicket.status === 'resolvido' && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6 mx-4 animate-in slide-in-from-bottom-4 duration-500">
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-green-800 mb-2">Problema resolvido!</h3>
+                  <p className="text-sm text-green-700 mb-4">
+                    Esperamos ter ajudado com sua solicitação. Que tal avaliar nosso atendimento?
+                  </p>
+                  
+                  {/* Rating */}
+                  <div className="flex items-center justify-center space-x-2 mb-4">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Button
+                        key={star}
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-green-100"
+                        onClick={() => {
+                          toast({
+                            title: "⭐ Obrigado pela avaliação!",
+                            description: `Você avaliou nosso atendimento com ${star} estrela${star > 1 ? 's' : ''}`,
+                          });
+                        }}
+                      >
+                        <Star className="w-5 h-5 text-amber-400 hover:fill-current transition-colors" />
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="flex items-center justify-center space-x-3">
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                      <ThumbsUp className="w-4 h-4 mr-2" />
+                      Excelente
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <Heart className="w-4 h-4 mr-2" />
+                      Deixar comentário
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             
             <div ref={messagesEndRef} />
           </div>
 
           {/* Message Input */}
-          <div className="bg-white border-t border-gray-200 p-4">
-            <div className="flex items-center space-x-3 mb-3">
-              <label className="flex items-center space-x-2 cursor-pointer group">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={isInternal}
-                    onChange={(e) => setIsInternal(e.target.checked)}
-                    className="sr-only"
-                  />
-                  <div className={cn(
-                    "w-4 h-4 rounded border-2 transition-all duration-200",
-                    isInternal 
-                      ? "bg-amber-500 border-amber-500" 
-                      : "border-gray-300 group-hover:border-amber-400"
-                  )}>
-                    {isInternal && <Check className="w-3 h-3 text-white absolute top-0.5 left-0.5" />}
+          <div className={cn(
+            "border-t p-4 transition-colors duration-200",
+            isDarkMode ? "bg-gray-800 border-gray-600" : "bg-white border-gray-200"
+          )}>
+            {/* Top Bar com controles */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <label className="flex items-center space-x-2 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={isInternal}
+                      onChange={(e) => setIsInternal(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div className={cn(
+                      "w-4 h-4 rounded border-2 transition-all duration-200",
+                      isInternal 
+                        ? "bg-amber-500 border-amber-500" 
+                        : "border-gray-300 group-hover:border-amber-400"
+                    )}>
+                      {isInternal && <Check className="w-3 h-3 text-white absolute top-0.5 left-0.5" />}
+                    </div>
                   </div>
-                </div>
-                <span className="text-sm text-gray-600 group-hover:text-amber-600 transition-colors">
-                  Nota interna
-                </span>
-              </label>
-              
-              {isInternal && (
-                <div className="flex items-center text-xs text-amber-600">
-                  <AlertCircle className="w-3 h-3 mr-1" />
-                  Visível apenas para agentes
-                </div>
-              )}
+                  <span className="text-sm text-gray-600 group-hover:text-amber-600 transition-colors">
+                    Nota interna
+                  </span>
+                </label>
+                
+                {isInternal && (
+                  <div className="flex items-center text-xs text-amber-600">
+                    <AlertCircle className="w-3 h-3 mr-1" />
+                    Visível apenas para agentes
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex items-center space-x-1">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowSearch(!showSearch)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Search className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Buscar mensagens (Ctrl+F)</TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsDarkMode(!isDarkMode)}
+                        className="h-8 w-8 p-0"
+                      >
+                        {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Alternar tema</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </div>
 
+            {/* Main Input Area */}
             <div className="flex space-x-3">
-              <Button variant="outline" size="sm" className="hover:bg-gray-50">
-                <Paperclip className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="sm" className="hover:bg-gray-50">
-                <Smile className="w-4 h-4" />
-              </Button>
+              {/* File Upload */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+                accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+              />
               
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="hover:bg-gray-50">
+                    <Paperclip className="w-4 h-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-2">
+                  <div className="space-y-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Arquivo
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                        fileInputRef.current?.setAttribute('accept', 'image/*');
+                      }}
+                    >
+                      <Image className="w-4 h-4 mr-2" />
+                      Imagem
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                        fileInputRef.current?.setAttribute('accept', 'video/*');
+                      }}
+                    >
+                      <Video className="w-4 h-4 mr-2" />
+                      Vídeo
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Emoji Picker */}
+              <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="hover:bg-gray-50">
+                    <Smile className="w-4 h-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-3">
+                  <div>
+                    <h3 className="font-medium mb-3">Emojis Populares</h3>
+                    <div className="grid grid-cols-10 gap-1">
+                      {popularEmojis.map((emoji, index) => (
+                        <Button
+                          key={index}
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-gray-100"
+                          onClick={() => handleEmojiSelect(emoji)}
+                        >
+                          {emoji}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Templates */}
+              <Popover open={showTemplatesModal} onOpenChange={setShowTemplatesModal}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="hover:bg-gray-50">
+                    <Zap className="w-4 h-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-96 p-4">
+                  <div>
+                    <h3 className="font-medium mb-3 flex items-center">
+                      <Sparkles className="w-4 h-4 mr-2 text-blue-600" />
+                      Templates de Resposta
+                    </h3>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {quickTemplates.map((template) => (
+                        <div
+                          key={template.id}
+                          className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => handleTemplateSelect(template)}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <h4 className="font-medium text-sm">{template.title}</h4>
+                            <Badge variant="outline" className="text-xs">
+                              {template.category}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-gray-600 line-clamp-2">
+                            {template.content}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Voice Recording */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "hover:bg-gray-50 transition-colors",
+                        isRecording && "bg-red-50 border-red-300 text-red-600"
+                      )}
+                      onClick={handleVoiceRecording}
+                    >
+                      {isRecording ? (
+                        <MicOff className="w-4 h-4" />
+                      ) : (
+                        <Mic className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isRecording ? "Parar gravação" : "Gravar áudio"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              {/* Text Area */}
               <div className="flex-1 relative">
                 <Textarea
                   ref={textareaRef}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder={isInternal ? "Digite uma nota interna..." : "Digite sua mensagem..."}
+                  placeholder={isInternal ? "Digite uma nota interna..." : "Digite sua mensagem... (Ctrl+Enter para enviar)"}
                   className={cn(
-                    "min-h-[48px] max-h-[120px] resize-none border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-colors",
-                    isInternal && "border-amber-300 focus:border-amber-500 focus:ring-amber-500"
+                    "min-h-[48px] max-h-[120px] resize-none transition-colors",
+                    isInternal 
+                      ? "border-amber-300 focus:border-amber-500 focus:ring-amber-500" 
+                      : "border-gray-300 focus:border-blue-500 focus:ring-blue-500",
+                    isDarkMode && "bg-gray-700 border-gray-600 text-white"
                   )}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                       e.preventDefault();
                       handleSendMessage();
                     }
@@ -696,13 +1394,19 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                     <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
                   </div>
                 )}
+                
+                {/* Character counter */}
+                <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+                  {message.length}/1000
+                </div>
               </div>
               
+              {/* Send Button */}
               <Button 
                 onClick={handleSendMessage} 
-                disabled={!message.trim() || isSending}
+                disabled={!message.trim() || isSending || message.length > 1000}
                 className={cn(
-                  "transition-all duration-200",
+                  "transition-all duration-200 relative overflow-hidden",
                   isInternal 
                     ? "bg-amber-600 hover:bg-amber-700 focus:ring-amber-500" 
                     : "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500"
@@ -716,9 +1420,22 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
               </Button>
             </div>
             
-            <div className="mt-2 text-xs text-gray-500 flex items-center justify-between">
-              <span>Enter para enviar, Shift+Enter para nova linha</span>
-              <span>Esc para fechar</span>
+            {/* Bottom hints */}
+            <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center space-x-4">
+                <span>Ctrl+Enter: enviar</span>
+                <span>Shift+Enter: nova linha</span>
+                <span>Ctrl+F: buscar</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                {isRecording && (
+                  <div className="flex items-center space-x-1 text-red-600">
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+                    <span>Gravando...</span>
+                  </div>
+                )}
+                <span>Esc: fechar</span>
+              </div>
             </div>
           </div>
         </div>
@@ -823,7 +1540,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                   variant="outline" 
                   size="sm" 
                   className="w-full justify-start hover:bg-purple-50 hover:border-purple-300 transition-colors"
-                  onClick={handleViewClient}
+                  onClick={() => setShowClientModal(true)}
                 >
                   <Eye className="w-4 h-4 mr-2" />
                   Ver Cliente
