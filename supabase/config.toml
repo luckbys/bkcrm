@@ -1,0 +1,41 @@
+# Este é o arquivo de configuração do projeto Supabase
+# https://supabase.com/docs/guides/hosting/overview#project-configuration
+
+[auth]
+# Configurações de autenticação
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+# Configurações de autenticação por email
+enable_signup = true
+enable_confirmations = false
+double_confirm_changes = true
+
+[api]
+# Configurações da API
+port = 54321
+schemas = ["public", "storage", "auth"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+# Configurações do banco de dados
+port = 54322
+major_version = 15
+
+[studio]
+# Configurações do Studio
+port = 54323
+
+[inbucket]
+# Configurações do servidor de email para desenvolvimento
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+# Configurações de armazenamento
+file_size_limit = "50MiB" 

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { useRabbitMQ, type TicketMessage as RabbitMQMessage, type TicketEvent, type TypingIndicator } from '@/hooks/useRabbitMQ';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -114,6 +115,21 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const [dragOver, setDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [realTimeMessages, setRealTimeMessages] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+  // RabbitMQ Integration
+  const {
+    isConnected: mqConnected,
+    connectionError: mqError,
+    publishMessage,
+    publishEvent,
+    publishTyping,
+    onMessage,
+    onEvent,
+    onTyping,
+    typingUsers
+  } = useRabbitMQ(ticket.id);
   
   // Estados para os modais das ações rápidas
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -203,61 +219,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     'Recorrente', 'Treinamento', 'Configuração', 'Integração', 'Performance'
   ];
 
-  const mockMessages = [
-    {
-      id: 1,
-      content: 'Olá, estou com problema no sistema. Não consigo acessar minha conta.',
-      sender: 'client',
-      senderName: currentTicket.client,
-      timestamp: new Date(Date.now() - 25 * 60 * 1000),
-      type: 'text',
-      status: 'read',
-      attachments: []
-    },
-    {
-      id: 2,
-      content: 'Olá! Vou verificar sua conta agora. Pode me informar seu e-mail de cadastro?',
-      sender: 'agent',
-      senderName: 'João Silva',
-      timestamp: new Date(Date.now() - 23 * 60 * 1000),
-      type: 'text',
-      status: 'read',
-      attachments: []
-    },
-    {
-      id: 3,
-      content: 'Meu e-mail é cliente@exemplo.com',
-      sender: 'client',
-      senderName: currentTicket.client,
-      timestamp: new Date(Date.now() - 22 * 60 * 1000),
-      type: 'text',
-      status: 'read',
-      attachments: []
-    },
-    {
-      id: 4,
-      content: 'Cliente verificado. Identificado problema na conta. Realizando correção.',
-      sender: 'agent',
-      senderName: 'João Silva',
-      timestamp: new Date(Date.now() - 20 * 60 * 1000),
-      type: 'internal',
-      isInternal: true,
-      status: 'read',
-      attachments: []
-    },
-    {
-      id: 5,
-      content: 'Anexo o print do erro que está aparecendo',
-      sender: 'client',
-      senderName: currentTicket.client,
-      timestamp: new Date(Date.now() - 18 * 60 * 1000),
-      type: 'text',
-      status: 'read',
-      attachments: [
-        { id: 1, name: 'erro-sistema.png', type: 'image', size: '245 KB', url: '/placeholder-error.png' }
-      ]
-    }
-  ];
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -268,18 +230,202 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     if (textareaRef.current && !isMinimized) {
       textareaRef.current.focus();
     }
-  }, [isMinimized]);
+  }, [isMinimized, realTimeMessages]);
 
+  // Função helper para gerar ID único e válido
+  const generateUniqueId = (messageId: string): number => {
+    // Extrair número do messageId ou gerar um baseado no timestamp
+    const numericPart = messageId.match(/\d+/);
+    if (numericPart) {
+      const id = parseInt(numericPart[0]);
+      if (!isNaN(id)) {
+        return id;
+      }
+    }
+    
+    // Se não encontrar número válido, usar timestamp + hash simples
+    let hash = 0;
+    for (let i = 0; i < messageId.length; i++) {
+      const char = messageId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    const result = Math.abs(hash);
+    
+    // Debug para verificar se ainda há problemas
+    if (isNaN(result)) {
+      console.warn('🚨 ID inválido gerado:', { messageId, result });
+      return Date.now(); // Fallback para timestamp atual
+    }
+    
+    return result;
+  };
+
+  // Carregar mensagens iniciais via RabbitMQ
   useEffect(() => {
-    const typingTimer = Math.random() > 0.7 ? setTimeout(() => {
-      setIsTyping(true);
-      setTimeout(() => setIsTyping(false), 3000);
-    }, 2000) : null;
+    // Simular carregamento de mensagens iniciais do histórico
+    const loadInitialMessages = async () => {
+      const baseTime = Date.now();
+      const initialMessages: RabbitMQMessage[] = [
+        {
+          ticketId: currentTicket.id,
+          messageId: `initial_${baseTime - 25 * 60 * 1000}`,
+          content: 'Olá, estou com problema no sistema. Não consigo acessar minha conta.',
+          sender: 'client',
+          senderName: currentTicket.client,
+          timestamp: new Date(baseTime - 25 * 60 * 1000),
+          type: 'text',
+          attachments: []
+        },
+        {
+          ticketId: currentTicket.id,
+          messageId: `initial_${baseTime - 23 * 60 * 1000}`,
+          content: 'Olá! Vou verificar sua conta agora. Pode me informar seu e-mail de cadastro?',
+          sender: 'agent',
+          senderName: 'João Silva',
+          timestamp: new Date(baseTime - 23 * 60 * 1000),
+          type: 'text',
+          attachments: []
+        },
+        {
+          ticketId: currentTicket.id,
+          messageId: `initial_${baseTime - 22 * 60 * 1000}`,
+          content: 'Meu e-mail é cliente@exemplo.com',
+          sender: 'client',
+          senderName: currentTicket.client,
+          timestamp: new Date(baseTime - 22 * 60 * 1000),
+          type: 'text',
+          attachments: []
+        },
+        {
+          ticketId: currentTicket.id,
+          messageId: `initial_${baseTime - 20 * 60 * 1000}`,
+          content: 'Cliente verificado. Identificado problema na conta. Realizando correção.',
+          sender: 'agent',
+          senderName: 'João Silva',
+          timestamp: new Date(baseTime - 20 * 60 * 1000),
+          type: 'text',
+          isInternal: true,
+          attachments: []
+        }
+      ];
+
+      // Carregar mensagens iniciais com delay para simular carregamento
+      setTimeout(() => {
+        initialMessages.forEach((msg, index) => {
+          setTimeout(() => {
+            const newMessage = {
+              id: generateUniqueId(msg.messageId),
+              content: msg.content,
+              sender: msg.sender,
+              senderName: msg.senderName,
+              timestamp: new Date(msg.timestamp),
+              type: msg.type,
+              status: 'read',
+              isInternal: msg.isInternal,
+              attachments: msg.attachments || []
+            };
+
+            setRealTimeMessages(prev => {
+              // Garantir ID único para mensagens iniciais
+              let uniqueId = newMessage.id;
+              while (prev.find(m => m.id === uniqueId)) {
+                uniqueId = uniqueId + 1;
+              }
+              
+              const messageWithUniqueId = { ...newMessage, id: uniqueId };
+              return [...prev, messageWithUniqueId];
+            });
+
+            // Marcar como carregado quando a última mensagem for adicionada
+            if (index === initialMessages.length - 1) {
+              setTimeout(() => setIsLoadingHistory(false), 200);
+            }
+          }, index * 300);
+        });
+      }, 500);
+    };
+
+    loadInitialMessages();
+  }, [currentTicket.id]);
+
+  // RabbitMQ Message Listeners
+  useEffect(() => {
+    const unsubscribeMessage = onMessage((rabbitMessage: RabbitMQMessage) => {
+      // Converter mensagem do RabbitMQ para formato local
+      const newMessage = {
+        id: generateUniqueId(rabbitMessage.messageId),
+        content: rabbitMessage.content,
+        sender: rabbitMessage.sender,
+        senderName: rabbitMessage.senderName,
+        timestamp: new Date(rabbitMessage.timestamp),
+        type: rabbitMessage.type,
+        status: 'read',
+        isInternal: rabbitMessage.isInternal,
+        attachments: rabbitMessage.attachments || []
+      };
+
+      setRealTimeMessages(prev => {
+        // Evitar duplicatas e garantir ID único
+        let uniqueId = newMessage.id;
+        while (prev.find(msg => msg.id === uniqueId)) {
+          uniqueId = uniqueId + 1;
+        }
+        
+        const messageWithUniqueId = { ...newMessage, id: uniqueId };
+        return [...prev, messageWithUniqueId];
+      });
+
+      // Toast para novas mensagens (apenas se não for do usuário atual)
+      if (rabbitMessage.sender === 'client' && !rabbitMessage.isInternal) {
+        toast({
+          title: "💬 Nova mensagem",
+          description: `${rabbitMessage.senderName}: ${rabbitMessage.content.substring(0, 50)}${rabbitMessage.content.length > 50 ? '...' : ''}`,
+        });
+      }
+    });
+
+    const unsubscribeEvent = onEvent((event: TicketEvent) => {
+      console.log('📨 Evento recebido:', event);
+      
+      // Toast para eventos importantes
+      if (event.eventType === 'status_change') {
+        toast({
+          title: "📋 Status alterado",
+          description: `Ticket alterado para: ${event.data.newStatus}`,
+        });
+      } else if (event.eventType === 'assignment') {
+        toast({
+          title: "👤 Responsável alterado",
+          description: `Ticket atribuído para: ${event.data.assignedTo}`,
+        });
+      }
+    });
+
+    const unsubscribeTyping = onTyping((typing: TypingIndicator) => {
+      // Atualizar indicador de digitação
+      if (typing.ticketId === ticket.id && typing.userType === 'client') {
+        setIsTyping(typing.isTyping);
+      }
+    });
 
     return () => {
-      if (typingTimer) clearTimeout(typingTimer);
+      unsubscribeMessage();
+      unsubscribeEvent();
+      unsubscribeTyping();
     };
-  }, []);
+  }, [onMessage, onEvent, onTyping, ticket.id, toast]);
+
+  // Indicador de status do RabbitMQ
+  useEffect(() => {
+    if (mqError) {
+      toast({
+        title: "⚠️ Erro de Conexão",
+        description: "Problema na comunicação em tempo real. Tentando reconectar...",
+        variant: "destructive"
+      });
+    }
+  }, [mqError, toast]);
 
   const handleSendMessage = async () => {
     if (!message.trim() || isSending) return;
@@ -287,12 +433,34 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     setIsSending(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      console.log('Enviando mensagem:', {
+      // Criar mensagem para RabbitMQ
+      const rabbitMessage: RabbitMQMessage = {
+        ticketId: currentTicket.id,
+        messageId: `msg_${Date.now()}`,
         content: message,
+        sender: 'agent',
+        senderName: 'João Silva', // TODO: pegar do contexto do usuário
+        timestamp: new Date(),
+        type: 'text',
         isInternal,
-        ticketId: currentTicket.id
+        attachments: []
+      };
+
+      // Enviar via RabbitMQ
+      await publishMessage(rabbitMessage);
+
+      // Publicar evento de nova mensagem
+      await publishEvent({
+        ticketId: currentTicket.id,
+        eventType: 'message',
+        timestamp: new Date(),
+        data: {
+          messageId: rabbitMessage.messageId,
+          isInternal,
+          messageType: 'text'
+        },
+        userId: 'agent_1', // TODO: pegar do contexto
+        userType: 'agent'
       });
 
       setLastSentMessage(Date.now());
@@ -731,6 +899,24 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 <span className="text-xs text-white/90">Cliente online</span>
               </div>
 
+              {/* Indicador de status do RabbitMQ */}
+              <div className={cn(
+                "flex items-center space-x-2 px-3 py-1 rounded-full",
+                mqConnected 
+                  ? "bg-green-500/20 text-green-100" 
+                  : "bg-red-500/20 text-red-100"
+              )}>
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  mqConnected 
+                    ? "bg-green-400 animate-pulse" 
+                    : "bg-red-400"
+                )}></div>
+                <span className="text-xs">
+                  {mqConnected ? "Tempo real ativo" : "Reconectando..."}
+                </span>
+              </div>
+
               {/* Actions */}
               <TooltipProvider>
                 <Tooltip>
@@ -912,7 +1098,30 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
               </div>
             )}
 
-            {mockMessages.map((msg, index) => (
+            {/* Indicador de carregamento das mensagens */}
+            {isLoadingHistory && (
+              <div className="flex justify-center py-8">
+                <div className="flex items-center space-x-3 text-gray-500">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Carregando histórico de mensagens via RabbitMQ...</span>
+                </div>
+              </div>
+            )}
+
+            {/* Mensagens em tempo real via RabbitMQ */}
+            {!isLoadingHistory && realTimeMessages.length === 0 && (
+              <div className="flex justify-center py-12">
+                <div className="text-center text-gray-500">
+                  <MessageCircle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm">Nenhuma mensagem ainda</p>
+                  <p className="text-xs mt-1">Todas as mensagens aparecerão aqui via RabbitMQ</p>
+                </div>
+              </div>
+            )}
+            
+            {realTimeMessages
+              .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+              .map((msg, index) => (
               <div
                 key={msg.id}
                 className={cn(
@@ -1065,8 +1274,8 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
               </div>
             ))}
 
-            {/* Typing Indicator */}
-            {isTyping && (
+            {/* Typing Indicator - RabbitMQ Real-time */}
+            {(isTyping || typingUsers.size > 0) && (
               <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
                 <div className="flex items-end space-x-2">
                   <Avatar className="w-8 h-8 ring-2 ring-white shadow-sm">
@@ -1075,10 +1284,15 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                     </AvatarFallback>
                   </Avatar>
                   <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                      {mqConnected && (
+                        <span className="text-xs text-gray-500 ml-2">digitando...</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1368,7 +1582,20 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 <Textarea
                   ref={textareaRef}
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                    
+                    // Publicar indicador de digitação
+                    if (e.target.value.length > 0) {
+                      publishTyping({
+                        ticketId: currentTicket.id,
+                        userId: 'agent_1',
+                        userType: 'agent',
+                        isTyping: true,
+                        timestamp: new Date()
+                      });
+                    }
+                  }}
                   placeholder={isInternal ? "Digite uma nota interna..." : "Digite sua mensagem... (Ctrl+Enter para enviar)"}
                   className={cn(
                     "min-h-[48px] max-h-[120px] resize-none transition-colors",

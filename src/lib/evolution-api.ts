@@ -136,8 +136,8 @@ export class EvolutionAPIService {
     // Criar nova instância conforme documentação oficial
     const createRequest = {
       instanceName: GLOBAL_INSTANCE_NAME,
-      integration: 'WHATSAPP-BAILEYS',
       qrcode: true,
+      integration: 'WHATSAPP-BAILEYS',
       webhook: GLOBAL_WEBHOOK_URL,
       webhook_by_events: true,
       events: [
@@ -158,13 +158,13 @@ export class EvolutionAPIService {
         'CONTACTS_UPSERT',
         'CONTACTS_UPDATE'
       ],
-      // Settings incluídos diretamente no create (conforme documentação)
       reject_call: false,
       msg_call: 'Desculpe, não podemos atender chamadas no momento. Por favor, envie uma mensagem.',
       groups_ignore: false,
       always_online: true,
       read_messages: true,
-      read_status: true
+      read_status: true,
+      websocket_enabled: false
     };
 
     console.log('🌐 Criando instância global única:', GLOBAL_INSTANCE_NAME);
@@ -250,17 +250,44 @@ export class EvolutionAPIService {
 
   // Enviar mensagem através da instância global
   async sendMessage(to: string, message: string, sectorId?: string): Promise<any> {
-    const messageData = {
-      number: to,
-      text: sectorId ? `[Setor ${sectorId}] ${message}` : message,
+    // Enviar diretamente para o webhook
+    const webhookData = {
+      instanceName: GLOBAL_INSTANCE_NAME,
+      messageType: 'text',
+      event: 'SEND_MESSAGE',
+      timestamp: new Date().toISOString(),
+      data: {
+        to: to,
+        message: sectorId ? `[Setor ${sectorId}] ${message}` : message,
+        type: 'text',
+        status: 'pending'
+      }
     };
 
-    console.log(`📤 Enviando mensagem via instância global para: ${to}`);
+    console.log(`📤 Enviando mensagem via webhook para: ${to}`);
+    console.log('📋 Dados do webhook:', JSON.stringify(webhookData, null, 2));
     
-    return this.request(`/message/sendText/${encodeURIComponent(GLOBAL_INSTANCE_NAME)}`, {
-      method: 'POST',
-      body: JSON.stringify(messageData),
-    });
+    try {
+      const response = await fetch(GLOBAL_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.globalApiKey
+        },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook Error: ${response.status} - ${await response.text()}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Mensagem enviada via webhook:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Erro ao enviar mensagem via webhook:', error);
+      throw error;
+    }
   }
 
   // Configurar settings da instância global

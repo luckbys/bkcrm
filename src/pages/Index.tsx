@@ -4,13 +4,15 @@ import { Sidebar } from '@/components/crm/Sidebar';
 import { MainContent } from '@/components/crm/MainContent';
 import { ImagePasteModal } from '@/components/crm/ImagePasteModal';
 import { AddTicketModal } from '@/components/crm/AddTicketModal';
-import { sectors as initialSectors } from '@/data/sectors';
+import { useDepartments, Department } from '@/hooks/useDepartments';
 import { toast } from '@/hooks/use-toast';
 
 const Index = () => {
-  // Estado para os setores (agora gerenciado localmente)
-  const [sectors, setSectors] = useState(initialSectors);
-  const [selectedSector, setSelectedSector] = useState(initialSectors[0]);
+  // Usar hook de departamentos do banco de dados
+  const { departments, loading: departmentsLoading, error: departmentsError, refreshDepartments } = useDepartments();
+  
+  // Estado local para setor selecionado
+  const [selectedSector, setSelectedSector] = useState<Department | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return sessionStorage.getItem('sidebarCollapsed') === 'true';
   });
@@ -28,38 +30,41 @@ const Index = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // Função para atualizar os setores
-  const handleSectorUpdate = (updatedSectors: typeof sectors) => {
-    setSectors(updatedSectors);
-    
-    // Se o setor selecionado ainda existe, manter; senão, selecionar o primeiro
-    const currentSectorExists = updatedSectors.find(s => s.id === selectedSector.id);
-    if (!currentSectorExists && updatedSectors.length > 0) {
-      setSelectedSector(updatedSectors[0]);
-    }
-    
-    // Salvar no localStorage para persistir entre sessões
-    localStorage.setItem('customSectors', JSON.stringify(updatedSectors));
-  };
-
-  // Carregar setores personalizados do localStorage na inicialização
+  // Sincronizar setor selecionado quando os departamentos carregarem
   useEffect(() => {
-    const savedSectors = localStorage.getItem('customSectors');
-    if (savedSectors) {
-      try {
-        const parsedSectors = JSON.parse(savedSectors);
-        setSectors(parsedSectors);
-        
-        // Verificar se o setor selecionado ainda existe
-        const currentSectorExists = parsedSectors.find((s: any) => s.id === selectedSector.id);
-        if (!currentSectorExists && parsedSectors.length > 0) {
-          setSelectedSector(parsedSectors[0]);
-        }
-      } catch (error) {
-        console.error('Erro ao carregar setores personalizados:', error);
+    if (departments.length > 0 && !selectedSector) {
+      // Tentar recuperar o último setor selecionado do sessionStorage
+      const savedSectorId = sessionStorage.getItem('selectedSectorId');
+      const savedSector = savedSectorId ? departments.find(d => d.id === savedSectorId) : null;
+      
+      // Se encontrou o setor salvo e está ativo, usar ele; senão, usar o primeiro ativo
+      const activeDepartments = departments.filter(d => d.isActive);
+      const sectorToSelect = (savedSector && savedSector.isActive) ? savedSector : activeDepartments[0];
+      
+      if (sectorToSelect) {
+        setSelectedSector(sectorToSelect);
+        sessionStorage.setItem('selectedSectorId', sectorToSelect.id);
       }
     }
-  }, []);
+  }, [departments, selectedSector]);
+
+  // Salvar setor selecionado no sessionStorage quando mudar
+  useEffect(() => {
+    if (selectedSector) {
+      sessionStorage.setItem('selectedSectorId', selectedSector.id);
+    }
+  }, [selectedSector]);
+
+  // Mostrar erro se houver problemas ao carregar departamentos
+  useEffect(() => {
+    if (departmentsError) {
+      toast({
+        title: "Erro ao carregar departamentos",
+        description: departmentsError.message,
+        variant: "destructive",
+      });
+    }
+  }, [departmentsError]);
 
   // Handle image paste globally
   useEffect(() => {
@@ -117,7 +122,7 @@ const Index = () => {
     sessionStorage.setItem('soundEnabled', soundEnabled.toString());
   }, [soundEnabled]);
 
-  const handleSectorChange = (sector: typeof sectors[0]) => {
+  const handleSectorChange = (sector: Department) => {
     setIsLoading(true);
     setSelectedSector(sector);
     setCurrentView('conversas'); // Reset to default view
@@ -162,6 +167,40 @@ const Index = () => {
     }
   };
 
+  // Função para atualizar departamentos após modificações
+  const handleDepartmentUpdate = async () => {
+    await refreshDepartments();
+  };
+
+  // Se não há setor selecionado e não está carregando, mostrar loading
+  if (departmentsLoading || (!selectedSector && departments.length > 0)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando departamentos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se não há departamentos ativos, mostrar mensagem
+  if (!departmentsLoading && departments.filter(d => d.isActive).length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">Nenhum departamento ativo encontrado.</p>
+          <button 
+            onClick={() => refreshDepartments()}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Recarregar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen bg-gray-50 transition-all duration-300 ${isFullScreen ? 'fixed inset-0 z-50' : ''}`}>
       <div className="flex h-screen overflow-hidden">
@@ -178,12 +217,12 @@ const Index = () => {
         
         <div className="flex flex-1 pt-16">
           <Sidebar
-            sectors={sectors}
+            sectors={departments.filter(d => d.isActive)}
             selectedSector={selectedSector}
             onSectorChange={handleSectorChange}
             collapsed={sidebarCollapsed}
             onToggle={toggleSidebar}
-            onSectorUpdate={handleSectorUpdate}
+            onSectorUpdate={handleDepartmentUpdate}
           />
           
           <MainContent
@@ -198,36 +237,20 @@ const Index = () => {
 
         {showImageModal && (
           <ImagePasteModal
-            image={pastedImage}
+            isOpen={showImageModal}
             onClose={() => {
               setShowImageModal(false);
               setPastedImage(null);
             }}
-            onSend={(comment, isInternal) => {
-              console.log('Sending image:', { comment, isInternal });
-              toast({
-                title: "Imagem enviada",
-                description: isInternal ? "Anotação interna criada" : "Imagem enviada ao cliente",
-              });
-              setShowImageModal(false);
-              setPastedImage(null);
-            }}
+            imageData={pastedImage}
           />
         )}
 
         {showAddTicketModal && (
           <AddTicketModal
-            sector={selectedSector}
+            isOpen={showAddTicketModal}
             onClose={() => setShowAddTicketModal(false)}
-            onSave={(ticketData) => {
-              console.log('Creating ticket:', ticketData);
-              toast({
-                title: "Ticket criado",
-                description: "Novo ticket foi criado com sucesso",
-              });
-              setShowAddTicketModal(false);
-              handleNotificationSound();
-            }}
+            selectedSector={selectedSector}
           />
         )}
       </div>

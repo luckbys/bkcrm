@@ -1,205 +1,130 @@
-# Sistema de CRM com WhatsApp - Evolution API
+# BKCRM - Sistema de Gerenciamento de Tickets
 
-Sistema completo de CRM integrado com Evolution API para comunicação via WhatsApp por setor.
+Sistema de gerenciamento de tickets com integração WhatsApp usando Supabase como backend.
 
-## 🚀 Versão de Produção - Evolution API
+## Requisitos
 
-### **Configurações Implementadas:**
+- Node.js 18+
+- Docker (para Supabase local)
+- Supabase CLI
 
-- **Servidor Evolution API:** `https://press-evolution-api.jhkbgs.easypanel.host/`
-- **API Key:** `429683C4C977415CAAFCCE10F7D57E11`
-- **Integração Real:** Chamadas HTTP diretas para Evolution API
-- **Gestão de Instâncias:** Sistema completo de criação e gerenciamento por setor
+## Configuração do Ambiente
 
-### **Funcionalidades Principais:**
+1. Instale as dependências:
+```bash
+npm install
+```
 
-#### 🔗 **Integração WhatsApp por Setor**
-- Acesso via: **Setor → ⋮ → Editar Setor → Aba "WhatsApp"**
-- Configuração individual para cada setor
-- Instâncias independentes por departamento
-- Status visual: conectado/desconectado
-- QR Code para pareamento
+2. Instale a CLI do Supabase:
+```bash
+npm install -g supabase
+```
 
-#### 📱 **Indicadores Visuais**
-- **Ícone 📱:** Aparece quando WhatsApp está conectado
-- **Badge "WA":** Exibido ao lado do nome do setor
-- **Círculo Verde:** Status de conexão ativo
-- **Status em Tempo Real:** Sincronização automática a cada 30 segundos
+3. Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
+```env
+VITE_SUPABASE_URL=sua_url_do_supabase
+VITE_SUPABASE_ANON_KEY=sua_chave_anon
+VITE_SUPABASE_SERVICE_ROLE_KEY=sua_chave_service_role
+```
 
-#### ⚙️ **Configurações Avançadas**
-- **Sempre Online:** Manter WhatsApp sempre online
-- **Auto-read:** Marcar mensagens como lidas automaticamente
-- **Rejeitar Chamadas:** Com mensagem personalizada
-- **Ignorar Grupos:** Não processar mensagens de grupos
-- **Webhook:** URL para receber callbacks
+4. Inicie o Supabase localmente:
+```bash
+npm run supabase:start
+```
 
-### **Interface de Usuário:**
+5. Aplique as migrações do banco de dados:
+```bash
+npm run supabase:db:push
+```
 
-#### 🎛️ **Sistema de Abas**
-1. **Configurações Gerais:** Nome, ícone, cor, prioridade
-2. **WhatsApp:** Todas as configurações Evolution API
+6. Gere os tipos TypeScript do Supabase:
+```bash
+npm run supabase:types
+```
 
-#### 🔘 **Botões de Ação**
-- **Conectar/Reconectar:** Estabelece conexão com Evolution API
-- **QR Code:** Gera código para pareamento (quando conectado)
-- **Desconectar:** Remove conexão WhatsApp (botão vermelho)
+7. Inicie o servidor de desenvolvimento:
+```bash
+npm run dev
+```
 
-### **Arquitetura Técnica:**
+## Estrutura do Projeto
 
-#### 📁 **Arquivos Principais**
 ```
 src/
-├── lib/
-│   ├── evolution-api.ts        # Classes de serviço Evolution API
-│   └── evolution-config.ts     # Configurações e instâncias globais
-├── components/crm/
-│   └── Sidebar.tsx            # Interface principal integrada
-└── types/
-    └── evolution-api.ts       # Tipos TypeScript
+  ├── components/     # Componentes React
+  │   ├── crm/       # Componentes específicos do CRM
+  │   └── ui/        # Componentes de UI reutilizáveis
+  ├── hooks/         # Hooks personalizados
+  ├── lib/           # Bibliotecas e configurações
+  ├── pages/         # Páginas da aplicação
+  ├── services/      # Serviços e integrações
+  ├── types/         # Definições de tipos
+  └── utils/         # Utilitários
+
+supabase/
+  ├── config.toml    # Configuração do Supabase
+  └── migrations/    # Migrações do banco de dados
 ```
 
-#### 🔧 **Classes de Serviço**
+## Funcionalidades
 
-**`EvolutionAPIService`**
-- Comunicação HTTP com Evolution API
-- Métodos: getInfo(), createInstance(), connectInstance(), etc.
-- Tratamento de erros e autenticação
+- Autenticação de usuários
+- Gerenciamento de tickets
+- Chat em tempo real
+- Upload de arquivos
+- Notificações em tempo real
+- Integração com WhatsApp
+- Diferentes níveis de acesso (admin, agente, cliente)
 
-**`DepartmentInstanceManager`**
-- Gerenciamento de instâncias por departamento
-- Persistência no localStorage
-- Sincronização de status
+## Desenvolvimento
 
-#### 💾 **Persistência de Dados**
-- **localStorage:** Configurações por setor
-- **Chaves:** `whatsapp_config_{sectorId}` e `department_instances`
-- **Sincronização:** Automática entre interface e Evolution API
+### Scripts Disponíveis
 
-### **Fluxo de Funcionamento:**
+- `npm run dev` - Inicia o servidor de desenvolvimento
+- `npm run build` - Compila o projeto para produção
+- `npm run preview` - Visualiza a build de produção localmente
+- `npm run lint` - Executa o linter
+- `npm run supabase:start` - Inicia o Supabase localmente
+- `npm run supabase:stop` - Para o Supabase local
+- `npm run supabase:status` - Verifica o status do Supabase
+- `npm run supabase:db:reset` - Reseta o banco de dados
+- `npm run supabase:db:push` - Aplica as migrações
+- `npm run supabase:types` - Gera os tipos TypeScript
 
-#### 1️⃣ **Configuração Inicial**
-```javascript
-// Credenciais carregadas automaticamente
-serverUrl: 'https://press-evolution-api.jhkbgs.easypanel.host/'
-apiKey: '429683C4C977415CAAFCCE10F7D57E11'
+### Banco de Dados
+
+O esquema do banco de dados inclui as seguintes tabelas:
+
+- `profiles` - Perfis de usuários
+- `tickets` - Tickets de suporte
+- `messages` - Mensagens dos tickets
+- `notifications` - Notificações do sistema
+
+### Segurança
+
+- Row Level Security (RLS) implementado em todas as tabelas
+- Políticas de acesso baseadas em função do usuário
+- Autenticação via Supabase Auth
+- Uploads de arquivos seguros via Supabase Storage
+
+## Produção
+
+1. Configure as variáveis de ambiente no seu servidor
+2. Execute a build do projeto:
+```bash
+npm run build
 ```
 
-#### 2️⃣ **Criação de Instância**
-```javascript
-// Quando conectar WhatsApp pela primeira vez
-await departmentInstanceManager.createDepartmentInstance(
-  sectorId.toString(),
-  sectorName,
-  { phoneNumber, webhookUrl, settings }
-);
-```
+3. Sirva os arquivos da pasta `dist`
 
-#### 3️⃣ **Conexão e QR Code**
-```javascript
-// Conectar e obter QR Code
-await departmentInstanceManager.connectDepartmentInstance(sectorId);
-const qrCode = await departmentInstanceManager.getDepartmentQRCode(sectorId);
-```
+## Contribuição
 
-#### 4️⃣ **Sincronização Contínua**
-```javascript
-// A cada 30 segundos
-await departmentInstanceManager.syncAllInstances();
-```
+1. Faça um fork do projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
+3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
+4. Push para a branch (`git push origin feature/nova-feature`)
+5. Crie um Pull Request
 
-### **Melhorias na Interface:**
+## Licença
 
-#### 🎨 **UX/UI Aprimorada**
-- **Auto-refresh inteligente:** Pausa quando modais estão abertos
-- **Feedback visual:** Toasts informativos para todas as ações
-- **Estados de loading:** Spinners durante operações assíncronas
-- **Controle de abas:** Mantém posição selecionada
-
-#### 🔄 **Sistema de Estados**
-- `configurationMode`: Controla quando modais estão ativos
-- `isTestingConnection`: Estado de loading para conexões
-- `activeTab`: Controle de abas independente
-
-### **Tratamento de Erros:**
-
-#### ⚠️ **Validações**
-- Verificação de campos obrigatórios
-- Teste de conectividade antes de operações
-- Validação de formato de dados
-
-#### 🚨 **Mensagens de Erro**
-- Toasts específicos para cada tipo de erro
-- Logs detalhados no console para debug
-- Fallbacks para operações que falham
-
-### **Diferenças da Versão Mock:**
-
-| Aspecto | Versão Mock | Versão Produção |
-|---------|-------------|-----------------|
-| **Conexão** | `setTimeout(2000)` | `evolutionAPIService.getInfo()` |
-| **QR Code** | Base64 fixo | `getDepartmentQRCode()` real |
-| **Instâncias** | localStorage apenas | Evolution API + localStorage |
-| **Status** | Simulado | Sincronização real via API |
-| **Erros** | Fictícios | Reais da Evolution API |
-
-### **Como Usar:**
-
-#### 🚀 **Primeiro Uso**
-1. Abrir setor → ⋮ → Editar Setor
-2. Ir para aba "WhatsApp"
-3. Configurar número e webhook (opcional)
-4. Clicar em "Conectar"
-5. Aguardar conexão estabelecida
-6. Clicar em "QR Code" e escanear com WhatsApp
-7. Salvar configurações
-
-#### 🔧 **Configurações Avançadas**
-1. Após conectar, configurar switches:
-   - Sempre online
-   - Auto-read de mensagens
-   - Rejeitar chamadas (com mensagem customizada)
-   - Ignorar grupos
-2. Salvar alterações
-
-#### 📱 **Verificação de Status**
-- **Ícone 📱:** Aparece automaticamente quando conectado
-- **Badge "WA":** Visível na lista de setores
-- **Sincronização:** Automática a cada 30 segundos
-
-### **Requisitos Técnicos:**
-
-#### 🌐 **Conectividade**
-- Acesso à internet para Evolution API
-- URL do servidor Evolution API acessível
-- API Key válida
-
-#### 💻 **Dependências**
-```json
-{
-  "@/lib/evolution-api": "Classes de serviço",
-  "@/types/evolution-api": "Tipos TypeScript",
-  "react": "Interface reativa",
-  "localStorage": "Persistência local"
-}
-```
-
-### **Próximos Passos:**
-
-#### 🔄 **Melhorias Futuras**
-- [ ] Dashboard de mensagens por setor
-- [ ] Histórico de conversas
-- [ ] Templates de mensagens
-- [ ] Relatórios de uso
-- [ ] Backup/restore de configurações
-
-#### 🧪 **Testes Recomendados**
-- [ ] Teste de conectividade com diferentes redes
-- [ ] Validação de QR Code em diferentes dispositivos
-- [ ] Teste de sincronização com múltiplos setores
-- [ ] Verificação de persistência após refresh
-
----
-
-**Status:** ✅ **Versão de Produção Implementada e Funcional**
-
-A integração Evolution API está completamente implementada com chamadas reais e gerenciamento profissional de instâncias por setor.
+Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.

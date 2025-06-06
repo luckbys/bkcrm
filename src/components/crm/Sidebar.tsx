@@ -63,15 +63,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { useDepartments, Department } from '@/hooks/useDepartments';
 import { globalWhatsAppManager, evolutionAPIService, EVOLUTION_CONFIG } from '@/lib/evolution-config';
 
 interface SidebarProps {
-  sectors: any[];
-  selectedSector: any;
-  onSectorChange: (sector: any) => void;
+  sectors: Department[];
+  selectedSector: Department | null;
+  onSectorChange: (sector: Department) => void;
   collapsed: boolean;
   onToggle: () => void;
-  onSectorUpdate?: (sectors: any[]) => void;
+  onSectorUpdate?: () => void;
 }
 
 interface SectorFormData {
@@ -84,13 +85,14 @@ interface SectorFormData {
 
 export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, onToggle, onSectorUpdate }: SidebarProps) => {
   const { toast } = useToast();
+  const { addDepartment, updateDepartment, deleteDepartment, loading: departmentLoading } = useDepartments();
   
   // Estados principais
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [editingSector, setEditingSector] = useState<any>(null);
-  const [deletingSector, setDeletingSector] = useState<any>(null);
+  const [editingSector, setEditingSector] = useState<Department | null>(null);
+  const [deletingSector, setDeletingSector] = useState<Department | null>(null);
   const [adminPassword, setAdminPassword] = useState('');
   
   // Estados WhatsApp Global (simplificado)
@@ -104,12 +106,12 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
   const [configurationMode, setConfigurationMode] = useState(false);
   const [activeTab, setActiveTab] = useState('geral');
 
-  const [ticketCounts, setTicketCounts] = useState<Record<number, { nonVisualized: number; total: number }>>({});
+  const [ticketCounts, setTicketCounts] = useState<Record<string, { nonVisualized: number; total: number }>>({});
   
   const [sectorForm, setSectorForm] = useState<SectorFormData>({
     name: '',
-    icon: 'headset',
-    color: 'bg-blue-500',
+    icon: 'Headphones',
+    color: 'blue',
     description: '',
     priority: 'normal'
   });
@@ -221,7 +223,7 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
     return availableIcons[iconName as keyof typeof availableIcons] || ClipboardCheck;
   };
 
-  const getSectorCounts = (sector: any) => {
+  const getSectorCounts = (sector: Department) => {
     return {
       nonVisualized: sector.nonVisualized || 0,
       total: sector.total || 0
@@ -351,15 +353,15 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
   const handleAddSector = () => {
     setSectorForm({
       name: '',
-      icon: 'headset',
-      color: 'bg-blue-500',
+      icon: 'Headphones',
+      color: 'blue',
       description: '',
       priority: 'normal'
     });
     setShowAddModal(true);
   };
 
-  const handleEditSector = (sector: any) => {
+  const handleEditSector = (sector: Department) => {
     console.log('Abrindo edição do setor:', sector.name);
     setConfigurationMode(true);
     setEditingSector(sector);
@@ -378,7 +380,7 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
     setShowEditModal(true);
   };
 
-  const handleDeleteSector = (sector: any) => {
+  const handleDeleteSector = (sector: Department) => {
     setDeletingSector(sector);
     setAdminPassword('');
     setShowDeleteDialog(true);
@@ -398,27 +400,40 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
     }
   };
 
-  const confirmDeleteSector = () => {
-    if (!validateAdminPassword()) return;
+  const confirmDeleteSector = async () => {
+    if (!validateAdminPassword() || !deletingSector) return;
 
-    const updatedSectors = sectors.filter(s => s.id !== deletingSector.id);
-    onSectorUpdate?.(updatedSectors);
-    
-    toast({
-      title: "Setor removido",
-      description: `O setor "${deletingSector.name}" foi removido com sucesso.`,
-    });
+    try {
+      await deleteDepartment(deletingSector.id);
+      
+      toast({
+        title: "Setor removido",
+        description: `O setor "${deletingSector.name}" foi removido com sucesso.`,
+      });
 
-    setShowDeleteDialog(false);
-    setDeletingSector(null);
-    setAdminPassword('');
-
-    if (selectedSector.id === deletingSector.id && updatedSectors.length > 0) {
-      onSectorChange(updatedSectors[0]);
+      onSectorUpdate?.();
+      
+      // Se o setor deletado era o selecionado, selecionar outro
+      if (selectedSector?.id === deletingSector.id && sectors.length > 1) {
+        const remainingSectors = sectors.filter(s => s.id !== deletingSector.id && s.isActive);
+        if (remainingSectors.length > 0) {
+          onSectorChange(remainingSectors[0]);
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Erro ao remover setor",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setShowDeleteDialog(false);
+      setDeletingSector(null);
+      setAdminPassword('');
     }
   };
 
-  const saveSector = () => {
+  const saveSector = async () => {
     if (!sectorForm.name.trim()) {
       toast({
         title: "Nome obrigatório",
@@ -430,42 +445,58 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
 
     console.log('Salvando setor...');
 
-    if (editingSector) {
-      const updatedSectors = sectors.map(s => 
-        s.id === editingSector.id 
-          ? { ...s, ...sectorForm }
-          : s
-      );
-      onSectorUpdate?.(updatedSectors);
-      
-      toast({
-        title: "Setor atualizado",
-        description: `O setor "${sectorForm.name}" foi atualizado com sucesso.`,
-      });
-      
-      setShowEditModal(false);
-      setConfigurationMode(false);
-    } else {
-      const newSector = {
-        id: Math.max(...sectors.map(s => s.id)) + 1,
-        ...sectorForm,
-        nonVisualized: 0,
-        total: 0
-      };
-      
-      const updatedSectors = [...sectors, newSector];
-      onSectorUpdate?.(updatedSectors);
-      
-      toast({
-        title: "Setor adicionado",
-        description: `O setor "${sectorForm.name}" foi adicionado com sucesso.`,
-      });
-      
-      setShowAddModal(false);
-      setConfigurationMode(false);
-    }
+    try {
+      if (editingSector) {
+        await updateDepartment(editingSector.id, {
+          name: sectorForm.name,
+          description: sectorForm.description,
+          color: sectorForm.color,
+          icon: sectorForm.icon,
+          isActive: true
+        });
+        
+        toast({
+          title: "Setor atualizado",
+          description: `O setor "${sectorForm.name}" foi atualizado com sucesso.`,
+        });
+        
+        setShowEditModal(false);
+        setConfigurationMode(false);
+      } else {
+        await addDepartment({
+          name: sectorForm.name,
+          description: sectorForm.description,
+          color: sectorForm.color,
+          icon: sectorForm.icon,
+          isActive: true
+        });
+        
+        toast({
+          title: "Setor adicionado",
+          description: `O setor "${sectorForm.name}" foi adicionado com sucesso.`,
+        });
+        
+        setShowAddModal(false);
+        setConfigurationMode(false);
+      }
 
-    setEditingSector(null);
+      onSectorUpdate?.();
+    } catch (error) {
+      toast({
+        title: editingSector ? "Erro ao atualizar setor" : "Erro ao adicionar setor",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setEditingSector(null);
+      setSectorForm({
+        name: '',
+        icon: 'Headphones',
+        color: 'blue',
+        description: '',
+        priority: 'normal'
+      });
+    }
   };
 
   const handleCloseEditModal = () => {
@@ -841,7 +872,7 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
           {sectors.map((sector) => {
             const IconComponent = getIconComponent(sector.icon);
             const counts = getSectorCounts(sector);
-            const isSelected = selectedSector.id === sector.id;
+            const isSelected = selectedSector?.id === sector.id;
 
             return (
               <div key={sector.id} className="relative group">

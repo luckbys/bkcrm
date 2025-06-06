@@ -34,6 +34,7 @@ import { TicketHeader } from './ticket-management/TicketHeader';
 import { TicketFilters } from './ticket-management/TicketFilters';
 import { TicketsList } from './ticket-management/TicketsList';
 import { cn } from '@/lib/utils';
+import { useTicketsDB } from '@/hooks/useTicketsDB';
 
 interface TicketManagementProps {
   sector: any;
@@ -57,6 +58,14 @@ interface Ticket {
 }
 
 export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementProps) => {
+  // Hook do banco de dados
+  const { 
+    compatibilityTickets, 
+    loading: dbLoading, 
+    error: dbError, 
+    refreshTickets 
+  } = useTicketsDB();
+
   // Estados principais
   const [filters, setFilters] = useState({
     responsible: 'todos',
@@ -169,9 +178,12 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
     }
   ];
 
+  // Usar dados do banco de dados ou fallback para mock durante migração
+  const currentTickets = compatibilityTickets.length > 0 ? compatibilityTickets : mockTickets;
+
   // Computed values
   const filteredAndSortedTickets = useMemo(() => {
-    let filtered = mockTickets;
+    let filtered = currentTickets;
 
     // Filtro por busca
     if (searchQuery) {
@@ -231,7 +243,7 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
     });
 
     return filtered;
-  }, [mockTickets, searchQuery, activeTab, filters, sortBy, sortOrder]);
+  }, [currentTickets, searchQuery, activeTab, filters, sortBy, sortOrder]);
 
   // Paginação
   const paginatedTickets = useMemo(() => {
@@ -244,26 +256,26 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
   // Estatísticas por status
   const statusCounts = useMemo(() => {
     return {
-      todos: mockTickets.length,
-      pendente: mockTickets.filter(t => t.status === 'pendente').length,
-      atendimento: mockTickets.filter(t => t.status === 'atendimento').length,
-      finalizado: mockTickets.filter(t => t.status === 'finalizado').length,
-      cancelado: mockTickets.filter(t => t.status === 'cancelado').length,
+      todos: currentTickets.length,
+      pendente: currentTickets.filter(t => t.status === 'pendente').length,
+      atendimento: currentTickets.filter(t => t.status === 'atendimento').length,
+      finalizado: currentTickets.filter(t => t.status === 'finalizado').length,
+      cancelado: currentTickets.filter(t => t.status === 'cancelado').length,
     };
-  }, [mockTickets]);
+  }, [currentTickets]);
 
   // Auto-refresh
   useEffect(() => {
     if (!isAutoRefresh) return;
 
     const interval = setInterval(() => {
+      refreshTickets();
       setLastUpdate(new Date());
-      // Aqui você faria a chamada real para atualizar os dados
       console.log('Auto-refresh triggered');
     }, 30000); // 30 segundos
 
     return () => clearInterval(interval);
-  }, [isAutoRefresh]);
+  }, [isAutoRefresh, refreshTickets]);
 
   // Handlers
   const handleFilterChange = useCallback((key: string, value: any) => {
@@ -325,13 +337,12 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
   const handleRefresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Simular carregamento de dados
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await refreshTickets();
       setLastUpdate(new Date());
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [refreshTickets]);
 
   const handleExport = useCallback(() => {
     console.log('Exportando tickets:', filteredAndSortedTickets);
@@ -340,6 +351,40 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
 
   return (
     <div className="space-y-6">
+      {/* Erro do banco de dados */}
+      {dbError && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2 text-amber-700">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-sm font-medium">Migração de Tickets Necessária</span>
+            </div>
+            <p className="text-amber-600 text-xs mt-1">{dbError}</p>
+            <div className="mt-3 p-3 bg-amber-100 rounded border border-amber-200">
+              <p className="text-amber-800 text-xs font-medium mb-2">📋 Para resolver este problema:</p>
+              <ol className="text-amber-700 text-xs space-y-1 list-decimal list-inside">
+                <li>Acesse o painel do Supabase (SQL Editor)</li>
+                <li>Execute primeiro a migração de departments (se ainda não fez)</li>
+                <li>Execute a migração de tickets disponível em: <code className="bg-amber-200 px-1 rounded">supabase/migrations/20240321000001_create_tickets_table.sql</code></li>
+                <li>Clique em "Tentar novamente" após executar as migrações</li>
+              </ol>
+            </div>
+            <div className="flex items-center space-x-2 mt-3">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={refreshTickets} 
+                className="border-amber-300 text-amber-700 hover:bg-amber-100"
+              >
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Tentar novamente
+              </Button>
+              <span className="text-amber-600 text-xs">Usando dados de demonstração enquanto isso</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header aprimorado */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <TicketHeader 
@@ -414,8 +459,8 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
                 </Button>
               </div>
 
-              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
-                <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading || dbLoading}>
+                <RefreshCw className={cn("w-4 h-4", (isLoading || dbLoading) && "animate-spin")} />
               </Button>
 
               <Button variant="outline" size="sm" onClick={handleExport}>

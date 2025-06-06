@@ -66,12 +66,31 @@ import {
   Users,
   CreditCard,
   UserCheck,
-  Megaphone
+  Megaphone,
+  MoreVertical,
+  XCircle,
+  PhoneCall,
+  MessageCircle,
+  Webhook,
+  Key,
+  Database,
+  Sync,
+  Activity,
+  AlertTriangle,
+  CheckCircle,
+  Power,
+  PowerOff,
+  Link,
+  Unlink,
+  Download,
+  Upload,
+  Save,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EvolutionAPIService, DepartmentInstanceManager } from '@/lib/evolution-api';
 import { DepartmentInstance, EvolutionAPISettings, Department } from '@/types/evolution-api';
-import { departments } from '@/data/departments';
+import { useDepartments } from '@/hooks/useDepartments';
 
 interface EvolutionInstanceManagerProps {
   serverUrl: string;
@@ -92,6 +111,7 @@ export const EvolutionInstanceManager = ({
   globalApiKey 
 }: EvolutionInstanceManagerProps) => {
   const { toast } = useToast();
+  const { departments, loading: departmentsLoading } = useDepartments();
   
   // Estados principais
   const [manager, setManager] = useState<DepartmentInstanceManager | null>(null);

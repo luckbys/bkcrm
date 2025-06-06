@@ -1,24 +1,30 @@
+export type DocumentType = 'cpf' | 'cnpj' | 'passport' | 'other';
+export type CustomerStatus = 'prospect' | 'active' | 'inactive' | 'blocked';
+export type CustomerCategory = 'bronze' | 'silver' | 'gold' | 'platinum';
+
+export interface CustomerAddress {
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
 export interface Customer {
   id: string;
   name: string;
   email: string;
   phone: string;
-  document: string; // CPF/CNPJ
-  documentType: 'cpf' | 'cnpj';
-  company?: string;
-  position?: string;
-  address: {
-    street: string;
-    number: string;
-    complement?: string;
-    neighborhood: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  status: 'ativo' | 'inativo' | 'suspenso' | 'prospect';
-  category: 'bronze' | 'prata' | 'ouro' | 'diamante';
-  channel: 'whatsapp' | 'email' | 'telefone' | 'site' | 'indicacao' | 'marketplace';
+  document: string;
+  documentType: DocumentType;
+  company: string;
+  position: string;
+  address: CustomerAddress;
+  status: CustomerStatus;
+  category: CustomerCategory;
+  channel: string;
   tags: string[];
   notes: string;
   customerSince: string;
@@ -29,6 +35,33 @@ export interface Customer {
   responsibleAgent: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CustomerFromDB {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  document: string | null;
+  document_type: DocumentType;
+  company: string | null;
+  position: string | null;
+  address: CustomerAddress;
+  status: CustomerStatus;
+  category: CustomerCategory;
+  channel: string;
+  tags: string[];
+  notes: string | null;
+  last_interaction: string | null;
+  total_orders: number;
+  total_value: number;
+  average_ticket: number;
+  responsible_agent_id: string | null;
+  created_at: string;
+  updated_at: string;
+  responsible_agent: {
+    name: string;
+  } | null;
 }
 
 export interface CustomerFilters {
