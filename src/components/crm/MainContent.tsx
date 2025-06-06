@@ -3,6 +3,7 @@ import { TicketManagement } from './TicketManagement';
 import { CustomerManagement } from './customers/CustomerManagement';
 import { SalesFunnel } from './SalesFunnel';
 import { DepartmentDiagnostic } from './admin/DepartmentDiagnostic';
+import { Dashboard } from './Dashboard';
 import { Loader2, MessageSquare, Filter, Users, Plus, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,21 +52,7 @@ export const MainContent = ({
       case 'clientes':
         return <CustomerManagement />;
       case 'dashboard':
-        return (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8">
-              <div className="bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl p-8 mb-6 inline-block">
-                <MessageSquare className="w-12 h-12 text-blue-600 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Dashboard
-                </h3>
-                <p className="text-gray-600">
-                  Em desenvolvimento...
-                </p>
-              </div>
-            </div>
-          </div>
-        );
+        return <Dashboard onViewChange={onViewChange} onOpenAddTicket={onOpenAddTicket} />;
       case 'produtos':
         return (
           <div className="flex items-center justify-center h-full">

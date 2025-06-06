@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useAuth } from '@/hooks/useAuth';
@@ -115,13 +115,16 @@ interface LocalMessage {
 export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { fetchMessages, sendMessage, updateTicket } = useTicketsDB();
+  const { fetchMessages, sendMessage, updateTicket, createTicket } = useTicketsDB();
   
   const [message, setMessage] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(() => {
+    return localStorage.getItem(`chat-minimized-${ticket.id}`) === 'true';
+  });
+  const [unreadCount, setUnreadCount] = useState(0);
   const [lastSentMessage, setLastSentMessage] = useState<number | null>(null);
   const [isFinishingTicket, setIsFinishingTicket] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -279,6 +282,74 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Função para minimizar/maximizar chat
+  const toggleMinimize = () => {
+    const newMinimizedState = !isMinimized;
+    setIsMinimized(newMinimizedState);
+    
+    // Salvar estado no localStorage
+    localStorage.setItem(`chat-minimized-${ticket.id}`, newMinimizedState.toString());
+    
+    if (newMinimizedState) {
+      // Quando minimizar, marcar como lido
+      setUnreadCount(0);
+      toast({
+        title: "💬 Chat minimizado",
+        description: "A conversa continua ativa na aba lateral",
+      });
+    } else {
+      // Quando maximizar, limpar não lidas e focar no input
+      setUnreadCount(0);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
+      toast({
+        title: "🔄 Chat restaurado",
+        description: "Conversa expandida novamente",
+      });
+    }
+  };
+
+  // Função para obter o ticket ID real (UUID do banco de dados)
+  const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
+    try {
+      // Se já é uma string UUID, usar diretamente
+      if (typeof ticketCompatibilityId === 'string' && ticketCompatibilityId.includes('-')) {
+        return ticketCompatibilityId;
+      }
+
+      // Buscar por tickets existentes para encontrar correspondência
+      const { data: existingTickets, error } = await supabase
+        .from('tickets')
+        .select('id, title, subject, metadata')
+        .limit(100);
+
+      if (error) {
+        console.error('Erro ao buscar tickets:', error);
+        return null;
+      }
+
+      // Tentar encontrar correspondência baseada no subject/title
+      const matchingTicket = existingTickets?.find(t => 
+        t.title === currentTicket.subject || 
+        t.subject === currentTicket.subject ||
+        t.metadata?.client_name === currentTicket.client
+      );
+
+      if (matchingTicket) {
+        console.log('🎯 Ticket encontrado no banco:', matchingTicket.id);
+        return matchingTicket.id;
+      }
+
+      // Se não encontrou, pode ser um ticket mock - retornar null para criar
+      console.log('⚠️ Ticket não encontrado no banco (dados mock)');
+      return null;
+    } catch (error) {
+      console.error('Erro ao obter ticket ID real:', error);
+      return null;
+    }
+  }, [currentTicket]);
+
   // Carregar mensagens reais do banco de dados
   useEffect(() => {
     const loadTicketMessages = async () => {
@@ -286,13 +357,21 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
 
       try {
         setIsLoadingHistory(true);
-        console.log('🔄 Carregando mensagens do ticket:', ticket.id);
+        console.log('🔄 Carregando mensagens do ticket:', ticket.id, 'Subject:', ticket.subject);
 
-        // Determinar o ticket ID correto (pode ser string UUID ou number)
-        const ticketId = typeof ticket.id === 'string' ? ticket.id : ticket.id.toString();
+        // Obter o ticket ID real do banco
+        const realTicketId = await getRealTicketId(ticket.id);
         
-        const messages = await fetchMessages(ticketId);
-        console.log('📨 Mensagens carregadas:', messages);
+        if (!realTicketId) {
+          console.log('⚠️ Ticket não existe no banco (dados mock). Criando histórico vazio.');
+          setRealTimeMessages([]);
+          setIsLoadingHistory(false);
+          return;
+        }
+        
+        console.log('📋 Buscando mensagens para ticket ID:', realTicketId);
+        const messages = await fetchMessages(realTicketId);
+        console.log('📨 Mensagens carregadas:', messages.length, 'mensagens');
 
         // Converter mensagens do banco para formato do componente
         const convertedMessages: LocalMessage[] = messages.map((msg) => ({
@@ -317,19 +396,26 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
 
         setRealTimeMessages(convertedMessages);
         setIsLoadingHistory(false);
+        
+        toast({
+          title: "💬 Conversa carregada",
+          description: `${convertedMessages.length} mensagem(s) encontrada(s)`,
+        });
+
       } catch (error) {
         console.error('❌ Erro ao carregar mensagens:', error);
         setIsLoadingHistory(false);
+        setRealTimeMessages([]); // Definir array vazio em caso de erro
         toast({
-          title: "Erro ao carregar mensagens",
-          description: "Não foi possível carregar o histórico de mensagens.",
+          title: "⚠️ Erro ao carregar conversa",
+          description: "Não foi possível carregar o histórico. Iniciando nova conversa.",
           variant: "destructive"
         });
       }
     };
 
     loadTicketMessages();
-  }, [ticket?.id, fetchMessages, currentTicket, toast]);
+  }, [ticket?.id, fetchMessages, currentTicket, toast, getRealTicketId]);
 
   // Auto scroll quando novas mensagens chegam
   useEffect(() => {
@@ -349,76 +435,68 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
         senderId: user.id 
       });
 
-      // Determinar o ticket ID correto
-      const ticketId = typeof ticket.id === 'string' ? ticket.id : ticket.id.toString();
+      // Obter o ticket ID real do banco
+      let realTicketId = await getRealTicketId(ticket.id);
       
-      // Verificar se é um UUID válido
-      const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ticketId);
-      
-      if (!isValidUUID) {
-        console.warn('⚠️ ID do ticket não é um UUID válido:', ticketId, '- Usando dados mock');
+      // Se não encontrou ticket no banco, criar um novo
+      if (!realTicketId) {
+        console.log('🆕 Criando novo ticket no banco para persistir conversa...');
         
-        // Enviar para webhook mesmo com dados mock
-        console.log('🔄 [CHAT-MOCK] Preparando envio para webhook...');
-        const webhookData = webhookService.createMessageData(
-          ticketId,
-          `mock_msg_${Date.now()}`,
-          message,
-          'agent',
-          currentUserProfile?.name || user.email?.split('@')[0] || 'Usuário',
-          {
-            senderId: user.id,
-            senderEmail: user.email,
-            isInternal,
-            messageType: 'text',
-            ticketInfo: {
-              id: ticketId,
-              subject: currentTicket.subject,
-              client: currentTicket.client,
-              client_phone: "(11) 99999-9999", // Número do cliente (dados mock)
-              status: currentTicket.status,
-              priority: currentTicket.priority,
-              channel: currentTicket.channel
-            }
-          }
-        );
-        
-        console.log('📤 [CHAT-MOCK] Chamando webhook service...');
-        const webhookResult = await webhookService.sendMessage(webhookData);
-        console.log('📋 [CHAT-MOCK] Resultado do webhook:', webhookResult ? 'SUCESSO' : 'FALHA');
-        
-        // Para dados mock, apenas simular envio local
-        const localMessage: LocalMessage = {
-          id: Date.now(),
-          content: message,
-          sender: 'agent' as const,
-          senderName: currentUserProfile?.name || user.email?.split('@')[0] || 'Agente',
-          timestamp: new Date(),
-          type: 'text' as const,
-          status: 'sent' as const,
-          isInternal,
-          attachments: []
-        };
+        try {
+          const newTicketData = {
+            title: currentTicket.subject,
+            subject: currentTicket.subject,
+            description: `Ticket migrado de dados mock para o banco`,
+            status: currentTicket.status as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
+            priority: (currentTicket.priority === 'alta' ? 'urgent' : 
+                      currentTicket.priority === 'baixa' ? 'low' : 'normal') as 'baixa' | 'normal' | 'alta' | 'urgente',
+            channel: currentTicket.channel as 'whatsapp' | 'email' | 'telefone' | 'chat' | 'site' | 'indicacao',
+            metadata: {
+              client_name: currentTicket.client,
+              original_id: ticket.id,
+              migrated_from_mock: true
+            },
+            unread: currentTicket.unread,
+            tags: currentTicket.tags || []
+          };
 
-        setRealTimeMessages(prev => [...prev, localMessage]);
-        setMessage('');
-        
-        toast({
-          title: "✅ Mensagem simulada",
-          description: "Mensagem enviada em modo de demonstração (dados mock) + webhook",
-        });
-        return;
+          const createdTicket = await createTicket(newTicketData);
+          if (createdTicket?.id) {
+            realTicketId = createdTicket.id;
+          } else {
+            throw new Error('Ticket criado mas ID não retornado');
+          }
+          console.log('✅ Novo ticket criado:', realTicketId);
+          
+          toast({
+            title: "💾 Ticket salvo",
+            description: "Ticket migrado para o banco de dados",
+          });
+        } catch (createError) {
+          console.error('❌ Erro ao criar ticket:', createError);
+          throw new Error('Não foi possível criar ticket no banco de dados');
+        }
+      }
+      
+      // Verificar se realTicketId é válido
+      if (!realTicketId) {
+        throw new Error('Não foi possível obter ID válido do ticket');
       }
       
       // Criar mensagem no banco de dados
       const messageData = {
-        ticket_id: ticketId,
+        ticket_id: realTicketId,
         sender_id: user.id,
-        content: message,
+        content: replyToMessage ? `↩️ Respondendo: "${replyToMessage.content}"\n\n${message}` : message,
         type: 'text' as const,
         is_internal: isInternal,
         sender_name: currentUserProfile?.name || user.email?.split('@')[0] || 'Usuário',
-        sender_email: user.email
+        sender_email: user.email,
+        metadata: replyToMessage ? {
+          reply_to: replyToMessage.id,
+          reply_to_content: replyToMessage.content,
+          reply_to_sender: replyToMessage.senderName
+        } : {}
       };
 
       const newMessage = await sendMessage(messageData);
@@ -427,7 +505,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       // Enviar mensagem para webhook do n8n
       console.log('🔄 [CHAT] Preparando envio para webhook...');
       const webhookData = webhookService.createMessageData(
-        ticketId,
+        realTicketId,
         newMessage.id,
         message,
         'agent',
@@ -438,10 +516,10 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
           isInternal,
           messageType: 'text',
           ticketInfo: {
-            id: ticketId,
+            id: realTicketId,
             subject: currentTicket.subject,
             client: currentTicket.client,
-            client_phone: "(11) 99999-9999", // Número do cliente (dados reais)
+            client_phone: "(11) 99999-9999",
             status: currentTicket.status,
             priority: currentTicket.priority,
             channel: currentTicket.channel
@@ -469,19 +547,20 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       setRealTimeMessages(prev => [...prev, localMessage]);
       setLastSentMessage(Date.now());
       setMessage('');
+      setReplyToMessage(null); // Limpar resposta
       
       setTimeout(() => setLastSentMessage(null), 2000);
       
       toast({
-        title: "✅ Mensagem enviada",
-        description: isInternal ? "Nota interna adicionada" : "Mensagem enviada para o cliente",
+        title: "✅ Mensagem persistida",
+        description: isInternal ? "Nota interna salva no banco" : "Mensagem salva no histórico do ticket",
       });
       
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
       toast({
-        title: "❌ Erro ao enviar",
-        description: "Não foi possível enviar a mensagem. Tente novamente.",
+        title: "❌ Erro ao persistir",
+        description: "Não foi possível salvar a mensagem. Tente novamente.",
         variant: "destructive"
       });
     } finally {
@@ -614,31 +693,44 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   // Atalhos de teclado
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + Enter para enviar
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      // Ctrl/Cmd + M para minimizar/maximizar
+      if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
         e.preventDefault();
-        handleSendMessage();
+        toggleMinimize();
       }
       
-      // Esc para cancelar seleção
-      if (e.key === 'Escape') {
-        setIsSelectionMode(false);
-        setSelectedMessages(new Set());
-        setReplyToMessage(null);
-        setShowEmojiPicker(false);
-      }
-      
-      // Ctrl/Cmd + A em modo seleção
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && isSelectionMode) {
-        e.preventDefault();
-        const allIds = new Set(realTimeMessages.map(msg => msg.id));
-        setSelectedMessages(allIds);
+      // Apenas executar outras ações se não estiver minimizado
+      if (!isMinimized) {
+        // Ctrl/Cmd + Enter para enviar
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          handleSendMessage();
+        }
+        
+        // Esc para cancelar seleção ou minimizar
+        if (e.key === 'Escape') {
+          if (isSelectionMode || replyToMessage || showEmojiPicker) {
+            setIsSelectionMode(false);
+            setSelectedMessages(new Set());
+            setReplyToMessage(null);
+            setShowEmojiPicker(false);
+          } else {
+            toggleMinimize();
+          }
+        }
+        
+        // Ctrl/Cmd + A em modo seleção
+        if ((e.ctrlKey || e.metaKey) && e.key === 'a' && isSelectionMode) {
+          e.preventDefault();
+          const allIds = new Set(realTimeMessages.map(msg => msg.id));
+          setSelectedMessages(allIds);
+        }
       }
     };
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [isSelectionMode, realTimeMessages]);
+  }, [isSelectionMode, realTimeMessages, isMinimized, toggleMinimize, replyToMessage, showEmojiPicker]);
 
   // Detecção de digitação em tempo real
   useEffect(() => {
@@ -686,6 +778,177 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     }
   };
 
+  // Controlar mensagens não lidas quando minimizado
+  useEffect(() => {
+    if (isMinimized && realTimeMessages.length > 0) {
+      // Incrementar contador quando novas mensagens chegam e chat está minimizado
+      const lastMessage = realTimeMessages[realTimeMessages.length - 1];
+      if (lastMessage.sender === 'client') {
+        setUnreadCount(prev => prev + 1);
+        
+        // Notificação visual quando minimizado
+        toast({
+          title: `💬 Nova mensagem de ${currentTicket.client}`,
+          description: lastMessage.content.substring(0, 80) + (lastMessage.content.length > 80 ? '...' : ''),
+          action: (
+            <Button 
+              size="sm" 
+              onClick={toggleMinimize}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Abrir Chat
+            </Button>
+          ),
+        });
+        
+        // Efeito visual na página (piscar título)
+        if (document.title) {
+          const originalTitle = document.title;
+          let blinkCount = 0;
+          const blinkInterval = setInterval(() => {
+            document.title = blinkCount % 2 === 0 ? '💬 Nova Mensagem!' : originalTitle;
+            blinkCount++;
+            if (blinkCount >= 6) {
+              clearInterval(blinkInterval);
+              document.title = originalTitle;
+            }
+          }, 500);
+        }
+      }
+    }
+  }, [realTimeMessages, isMinimized, currentTicket.client, toast, toggleMinimize]);
+
+  // Se está minimizado, renderizar apenas a aba flutuante
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="group relative">
+          {/* Preview das últimas mensagens - aparece no hover */}
+          <div className="absolute bottom-full right-0 mb-2 w-80 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 pointer-events-none group-hover:pointer-events-auto">
+            <div className="p-3 border-b border-gray-100">
+              <h4 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-blue-600" />
+                Últimas mensagens
+              </h4>
+            </div>
+            <div className="max-h-40 overflow-y-auto">
+              {realTimeMessages.slice(-3).map((msg, index) => (
+                <div key={msg.id} className="p-3 border-b border-gray-50 last:border-0">
+                  <div className="flex items-start gap-2">
+                    <div className={cn(
+                      "w-2 h-2 rounded-full mt-2 flex-shrink-0",
+                      msg.sender === 'client' ? "bg-green-500" : "bg-blue-500"
+                    )}></div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-medium text-gray-600">
+                          {msg.sender === 'client' ? '👤 Cliente' : '🧑‍💼 Agente'}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {formatRelativeTime(msg.timestamp)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-900 line-clamp-2">{msg.content}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {realTimeMessages.length === 0 && (
+                <div className="p-4 text-center text-gray-500 text-sm">
+                  Nenhuma mensagem ainda
+                </div>
+              )}
+            </div>
+            <div className="p-3 bg-gray-50 rounded-b-lg flex gap-2">
+              <Button 
+                size="sm" 
+                onClick={toggleMinimize}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Abrir Chat
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="px-3"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Aba principal minimizada */}
+          <div 
+            className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-xl border border-blue-200 cursor-pointer hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1"
+            onClick={toggleMinimize}
+          >
+            <div className="flex items-center gap-3 p-4 pr-6 text-white">
+              <div className="relative">
+                <Avatar className="w-12 h-12 ring-2 ring-white/30">
+                  <AvatarFallback className="bg-white/20 text-white font-bold text-lg">
+                    {currentTicket.client.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                {unreadCount > 0 && (
+                  <div className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold animate-pulse ring-2 ring-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </div>
+                )}
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full animate-pulse"></div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-white truncate">{currentTicket.client}</h3>
+                <p className="text-xs text-blue-100 truncate max-w-[200px]">
+                  {realTimeMessages.length > 0 
+                    ? `${realTimeMessages[realTimeMessages.length - 1].sender === 'client' ? '👤' : '🧑‍💼'} ${realTimeMessages[realTimeMessages.length - 1].content}`
+                    : '💬 Clique para abrir conversa'
+                  }
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge className="text-xs px-2 py-0.5 bg-white/20 text-white border-white/30 hover:bg-white/30">
+                    {currentTicket.status}
+                  </Badge>
+                  <span className="text-xs text-blue-100">
+                    {realTimeMessages.length} mensagem(s)
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xs text-blue-100 font-medium">Chat</span>
+              </div>
+            </div>
+            
+            {/* Indicadores de estado */}
+            {isTyping && (
+              <div className="absolute -top-2 left-3 bg-green-500 text-white text-xs px-3 py-1 rounded-full animate-bounce">
+                ✍️ Digitando...
+              </div>
+            )}
+            
+            {isSending && (
+              <div className="absolute -top-2 right-3 bg-orange-500 text-white text-xs px-3 py-1 rounded-full animate-pulse">
+                📤 Enviando...
+              </div>
+            )}
+          </div>
+          
+          {/* Tooltip informativo */}
+          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+            Clique para restaurar • Passe o mouse para preview
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       {/* Success notification */}
@@ -725,19 +988,36 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
+                            <div className="flex items-center space-x-3">
                 <div className="flex space-x-2">
                   <Badge className={cn("text-xs px-3 py-1.5 font-bold border shadow-sm", getStatusColor(currentTicket.status))}>
                     <div className="w-2 h-2 rounded-full bg-current mr-2 animate-pulse"></div>
-                    {currentTicket.status}
-                  </Badge>
+                  {currentTicket.status}
+                </Badge>
                   <Badge className={cn("text-xs px-3 py-1.5 font-bold border shadow-sm", getPriorityColor(currentTicket.priority))}>
-                    {currentTicket.priority}
-                  </Badge>
+                  {currentTicket.priority}
+                </Badge>
+              </div>
+                <div className="flex items-center space-x-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={toggleMinimize}
+                          className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                        >
+                          <Minimize2 className="w-5 h-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Minimizar chat</p></TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Button variant="ghost" size="icon" onClick={onClose} className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
+                    <X className="w-5 h-5" />
+                  </Button>
                 </div>
-                <Button variant="ghost" size="icon" onClick={onClose} className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
-                  <X className="w-5 h-5" />
-                </Button>
               </div>
             </div>
           </div>
@@ -1265,21 +1545,28 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
               }}
             />
 
-            {/* Enhanced Keyboard shortcut hints */}
+                        {/* Enhanced Keyboard shortcut hints */}
             <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
               <div className="flex flex-wrap gap-3">
                 <span>
                   <kbd className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">Enter</kbd> enviar
-                </span>
+              </span>
                 <span>
                   <kbd className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">Shift+Enter</kbd> nova linha
                 </span>
                 <span>
                   <kbd className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">Ctrl+Enter</kbd> enviar rápido
                 </span>
-                {isSelectionMode && (
+                <span>
+                  <kbd className="bg-blue-100 px-2 py-1 rounded text-xs font-mono">Ctrl+M</kbd> minimizar
+                </span>
+                {isSelectionMode ? (
                   <span>
                     <kbd className="bg-purple-100 px-2 py-1 rounded text-xs font-mono">Esc</kbd> cancelar seleção
+                  </span>
+                ) : (
+                  <span>
+                    <kbd className="bg-blue-100 px-2 py-1 rounded text-xs font-mono">Esc</kbd> minimizar
                   </span>
                 )}
               </div>

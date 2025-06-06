@@ -25,7 +25,7 @@ const Index = () => {
     return sessionStorage.getItem('fullScreen') === 'true';
   });
   const [currentView, setCurrentView] = useState(() => {
-    return sessionStorage.getItem('currentView') || 'conversas';
+    return sessionStorage.getItem('currentView') || 'dashboard';
   });
   const [showImageModal, setShowImageModal] = useState(false);
   const [showAddTicketModal, setShowAddTicketModal] = useState(false);
@@ -246,7 +246,16 @@ const Index = () => {
               setShowImageModal(false);
               setPastedImage(null);
             }}
-            imageData={pastedImage}
+            image={pastedImage}
+            onSend={(comment: string, isInternal: boolean) => {
+              console.log('Enviando imagem:', { comment, isInternal });
+              toast({
+                title: "🖼️ Imagem enviada",
+                description: isInternal ? "Imagem salva como nota interna" : "Imagem enviada para o cliente",
+              });
+              setShowImageModal(false);
+              setPastedImage(null);
+            }}
           />
         )}
 
