@@ -19,8 +19,8 @@ export const mockCustomers: Customer[] = [
       state: 'SP',
       zipCode: '01234-567'
     },
-    status: 'ativo',
-    category: 'ouro',
+    status: 'active',
+    category: 'gold',
     channel: 'whatsapp',
     tags: ['VIP', 'Recorrente'],
     notes: 'Cliente muito satisfeito com o atendimento. Sempre pontual nos pagamentos.',
@@ -50,8 +50,8 @@ export const mockCustomers: Customer[] = [
       state: 'SP',
       zipCode: '01310-100'
     },
-    status: 'ativo',
-    category: 'diamante',
+    status: 'active',
+    category: 'platinum',
     channel: 'email',
     tags: ['Corporativo', 'Volume Alto'],
     notes: 'Empresa com grande potencial. Interessada em soluções enterprise.',
@@ -112,8 +112,8 @@ export const mockCustomers: Customer[] = [
       state: 'SC',
       zipCode: '89010-100'
     },
-    status: 'ativo',
-    category: 'prata',
+    status: 'active',
+    category: 'silver',
     channel: 'telefone',
     tags: ['Loja Física', 'Pequeno Negócio'],
     notes: 'Proprietária de loja local. Busca soluções para gestão de estoque.',
@@ -144,8 +144,8 @@ export const mockCustomers: Customer[] = [
       state: 'SP',
       zipCode: '04794-000'
     },
-    status: 'inativo',
-    category: 'ouro',
+    status: 'inactive',
+    category: 'gold',
     channel: 'indicacao',
     tags: ['Corporativo', 'Inativo'],
     notes: 'Cliente inativo desde dezembro. Motivo: mudança de fornecedor.',
@@ -173,16 +173,16 @@ export const customerStats: CustomerStats = {
 export const customerCategories = [
   { value: 'todos', label: 'Todas as Categorias' },
   { value: 'bronze', label: 'Bronze', color: 'orange' },
-  { value: 'prata', label: 'Prata', color: 'gray' },
-  { value: 'ouro', label: 'Ouro', color: 'yellow' },
-  { value: 'diamante', label: 'Diamante', color: 'blue' }
+  { value: 'silver', label: 'Prata', color: 'gray' },
+  { value: 'gold', label: 'Ouro', color: 'yellow' },
+  { value: 'platinum', label: 'Platinum', color: 'blue' }
 ];
 
 export const customerStatuses = [
   { value: 'todos', label: 'Todos os Status' },
-  { value: 'ativo', label: 'Ativo', color: 'green' },
-  { value: 'inativo', label: 'Inativo', color: 'red' },
-  { value: 'suspenso', label: 'Suspenso', color: 'orange' },
+  { value: 'active', label: 'Ativo', color: 'green' },
+  { value: 'inactive', label: 'Inativo', color: 'red' },
+  { value: 'blocked', label: 'Bloqueado', color: 'orange' },
   { value: 'prospect', label: 'Prospect', color: 'blue' }
 ];
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { whatsAppBridge } from '@/services/whatsapp-bridge';
+import { webhookService } from '@/services/webhook-service';
 
 export interface TicketMessage {
   ticketId: string;
@@ -118,6 +119,22 @@ class RealRabbitMQService {
       type: message.type,
       cluster: RABBITMQ_CONFIG.cluster
     });
+    
+    // Enviar mensagem para webhook do n8n
+    const webhookData = webhookService.createMessageData(
+      message.ticketId,
+      message.messageId,
+      message.content,
+      message.sender,
+      message.senderName,
+      {
+        senderEmail: message.senderEmail,
+        isInternal: message.isInternal || false,
+        messageType: message.type
+      }
+    );
+    
+    await webhookService.sendMessage(webhookData);
     
     // Processar via WhatsApp Bridge se for mensagem de agente
     if (message.sender === 'agent' && !message.isInternal) {
@@ -256,6 +273,22 @@ class MockRabbitMQService {
 
     console.log(`📤 [MOCK] Mensagem enviada: Ticket ${message.ticketId}`, message);
     
+    // Enviar mensagem para webhook do n8n
+    const webhookData = webhookService.createMessageData(
+      message.ticketId,
+      message.messageId,
+      message.content,
+      message.sender,
+      message.senderName,
+      {
+        senderEmail: message.senderEmail,
+        isInternal: message.isInternal || false,
+        messageType: message.type
+      }
+    );
+    
+    await webhookService.sendMessage(webhookData);
+    
     // Processar via WhatsApp Bridge se for mensagem de agente
     if (message.sender === 'agent' && !message.isInternal) {
       console.log(`📱 [MOCK] Encaminhando para WhatsApp Bridge: ${message.messageId}`);
@@ -302,8 +335,6 @@ class MockRabbitMQService {
   // Simular indicador de digitação
   async publishTypingIndicator(typing: TypingIndicator): Promise<void> {
     if (!this.connected) return;
-
-    console.log(`⌨️ [MOCK] Digitação: ${typing.isTyping ? 'iniciada' : 'parada'} - Ticket ${typing.ticketId}`);
     
     this.notifyListeners('typing.indicators', typing);
     

@@ -44,6 +44,7 @@ export const MainMenu = ({ onNavigate }: MainMenuProps) => {
         '/processos': 'processos',
         '/kanban': 'kanban',
         '/estatisticas': 'estatisticas',
+        '/admin': 'admin',
         '/setup': 'setup'
       };
       

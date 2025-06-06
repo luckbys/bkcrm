@@ -35,6 +35,7 @@ import { TicketFilters } from './ticket-management/TicketFilters';
 import { TicketsList } from './ticket-management/TicketsList';
 import { cn } from '@/lib/utils';
 import { useTicketsDB } from '@/hooks/useTicketsDB';
+import { useUserDepartment } from '@/hooks/useUserDepartment';
 
 interface TicketManagementProps {
   sector: any;
@@ -58,13 +59,18 @@ interface Ticket {
 }
 
 export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementProps) => {
-  // Hook do banco de dados
+  // Hooks do banco de dados
   const { 
     compatibilityTickets, 
     loading: dbLoading, 
     error: dbError, 
     refreshTickets 
   } = useTicketsDB();
+  
+  const { 
+    userInfo, 
+    canViewAllTickets 
+  } = useUserDepartment();
 
   // Estados principais
   const [filters, setFilters] = useState({
@@ -387,11 +393,38 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
 
       {/* Header aprimorado */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <TicketHeader 
-          sector={sector}
-          ticketCounts={ticketCounts}
-          onOpenAddTicket={onOpenAddTicket}
-        />
+        <div className="flex flex-col space-y-2">
+          <TicketHeader 
+            sector={sector}
+            ticketCounts={ticketCounts}
+            onOpenAddTicket={onOpenAddTicket}
+          />
+          
+          {/* Indicador de filtro por departamento */}
+          {userInfo && (
+            <div className="flex items-center space-x-2 text-xs">
+              {canViewAllTickets() ? (
+                <Badge variant="outline" className="text-blue-600 border-blue-200">
+                  <Users className="w-3 h-3 mr-1" />
+                  Visualizando todos os departamentos (Admin)
+                </Badge>
+              ) : userInfo.department ? (
+                <Badge variant="outline" className="text-green-600 border-green-200">
+                  <div 
+                    className="w-2 h-2 rounded-full mr-1" 
+                    style={{ backgroundColor: userInfo.department.color }}
+                  />
+                  Departamento: {userInfo.department.name}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-amber-600 border-amber-200">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Sem departamento atribuído
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
         
         <div className="flex items-center space-x-2">
           <div className="flex items-center text-xs text-gray-500">

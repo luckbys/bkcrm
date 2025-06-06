@@ -5,11 +5,16 @@ import { MainContent } from '@/components/crm/MainContent';
 import { ImagePasteModal } from '@/components/crm/ImagePasteModal';
 import { AddTicketModal } from '@/components/crm/AddTicketModal';
 import { useDepartments, Department } from '@/hooks/useDepartments';
+import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { toast } from '@/hooks/use-toast';
+import '@/utils/consoleDiagnostic';
 
 const Index = () => {
   // Usar hook de departamentos do banco de dados
   const { departments, loading: departmentsLoading, error: departmentsError, refreshDepartments } = useDepartments();
+  
+  // Hook para gerenciamento de tickets
+  const { createTicket } = useTicketsDB();
   
   // Estado local para setor selecionado
   const [selectedSector, setSelectedSector] = useState<Department | null>(null);
@@ -237,7 +242,6 @@ const Index = () => {
 
         {showImageModal && (
           <ImagePasteModal
-            isOpen={showImageModal}
             onClose={() => {
               setShowImageModal(false);
               setPastedImage(null);
@@ -248,9 +252,43 @@ const Index = () => {
 
         {showAddTicketModal && (
           <AddTicketModal
-            isOpen={showAddTicketModal}
+            sector={selectedSector}
             onClose={() => setShowAddTicketModal(false)}
-            selectedSector={selectedSector}
+            onSave={async (ticketData) => {
+              try {
+                const newTicketData = {
+                  title: ticketData.subject,
+                  description: ticketData.description,
+                  subject: ticketData.subject, // Para compatibilidade
+                  status: ticketData.status,
+                  priority: ticketData.priority,
+                  channel: ticketData.channel,
+                  department_id: selectedSector?.id,
+                  metadata: {
+                    client_name: ticketData.client,
+                    anonymous_contact: ticketData.email,
+                    phone: ticketData.phone,
+                    assignee: ticketData.assignee
+                  }
+                };
+
+                await createTicket(newTicketData);
+                
+                toast({
+                  title: "Ticket criado com sucesso!",
+                  description: `Ticket "${ticketData.subject}" foi criado para o cliente ${ticketData.client}`,
+                });
+                
+                setShowAddTicketModal(false);
+              } catch (error) {
+                console.error('Erro ao criar ticket:', error);
+                toast({
+                  title: "Erro ao criar ticket",
+                  description: "Ocorreu um erro ao criar o ticket. Tente novamente.",
+                  variant: "destructive",
+                });
+              }
+            }}
           />
         )}
       </div>

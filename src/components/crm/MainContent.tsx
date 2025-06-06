@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { TicketManagement } from './TicketManagement';
 import { CustomerManagement } from './customers/CustomerManagement';
 import { SalesFunnel } from './SalesFunnel';
-import { Loader2, MessageSquare, Filter, Users, Plus } from 'lucide-react';
+import { DepartmentDiagnostic } from './admin/DepartmentDiagnostic';
+import { Loader2, MessageSquare, Filter, Users, Plus, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MainContentProps {
@@ -97,6 +98,8 @@ export const MainContent = ({
             </div>
           </div>
         );
+      case 'admin':
+        return <DepartmentDiagnostic />;
       default:
         return (
           <div className="flex items-center justify-center h-full">

@@ -81,6 +81,7 @@ export const menuItems = [
   { name: 'Processos', icon: 'clipboard-check', url: '/processos', conditional: true },
   { name: 'Kanban', icon: 'clipboard-check', url: '/kanban', conditional: true },
   { name: 'Estatísticas', icon: 'chart-bar', url: '/estatisticas' },
+  { name: 'Administração', icon: 'cogs', url: '/admin' },
   { name: 'Setup', icon: 'cogs', url: '/setup' }
 ];
 
