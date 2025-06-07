@@ -21,7 +21,7 @@ export const mockCustomers: Customer[] = [
     },
     status: 'active',
     category: 'gold',
-    channel: 'whatsapp',
+    channel: 'chat',
     tags: ['VIP', 'Recorrente'],
     notes: 'Cliente muito satisfeito com o atendimento. Sempre pontual nos pagamentos.',
     customerSince: '2022-03-15',
@@ -188,7 +188,7 @@ export const customerStatuses = [
 
 export const customerChannels = [
   { value: 'todos', label: 'Todos os Canais' },
-  { value: 'whatsapp', label: 'WhatsApp' },
+  
   { value: 'email', label: 'E-mail' },
   { value: 'telefone', label: 'Telefone' },
   { value: 'site', label: 'Site' },

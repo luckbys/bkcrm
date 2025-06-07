@@ -94,7 +94,7 @@ export const statusOptions = [
 ];
 
 export const channelOptions = [
-  { value: 'whatsapp', label: 'WhatsApp' },
+  
   { value: 'email', label: 'Email' },
   { value: 'telefone', label: 'Telefone' },
   { value: 'chat', label: 'Chat do Site' },

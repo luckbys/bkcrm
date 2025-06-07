@@ -14,7 +14,7 @@ export interface DatabaseTicket {
   subject?: string;
   status: 'pendente' | 'atendimento' | 'finalizado' | 'cancelado' | 'open' | 'in_progress' | 'resolved' | 'closed';
   priority: 'baixa' | 'normal' | 'alta' | 'urgente' | 'low' | 'medium' | 'high' | 'urgent';
-  channel: 'whatsapp' | 'email' | 'telefone' | 'chat' | 'site' | 'indicacao';
+  channel: 'email' | 'telefone' | 'chat' | 'site' | 'indicacao';
   tags: string[];
   metadata: any;
   unread: boolean;

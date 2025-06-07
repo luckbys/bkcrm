@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { useTicketsDB } from '@/hooks/useTicketsDB';
+import { useTicketsDB, DatabaseTicket } from '@/hooks/useTicketsDB';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Dialog,
@@ -36,7 +35,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
-import { Progress } from '@/components/ui/progress';
 import { 
   X, 
   Send, 
@@ -48,46 +46,36 @@ import {
   User,
   Building,
   Tag,
-  MoreVertical,
   Smile,
   Loader2,
   Check,
   CheckCheck,
-  AlertCircle,
   Minimize2,
-  Maximize2,
   CheckCircle2,
-  Plus,
   Eye,
   UserCheck,
   Settings,
-  Search,
   Star,
   StarOff,
   Copy,
   Forward,
   Reply,
-  Download,
   FileText,
-  Image,
-  Video,
-  Mic,
-  MicOff,
   Zap,
-  Sparkles,
   MessageCircle,
   Bot,
-  ScreenShare,
   Moon,
   Sun,
-  Archive,
-  Flag,
-  Heart,
-  ThumbsUp
+  Smartphone,
+  Wifi,
+  WifiOff,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { webhookService } from '@/services/webhook-service';
+import { evolutionApiService } from '@/services/evolutionApiService';
+import { useWebhookResponses } from '@/hooks/useWebhookResponses';
+
 
 interface TicketChatProps {
   ticket: any;
@@ -115,7 +103,8 @@ interface LocalMessage {
 export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { fetchMessages, sendMessage, updateTicket, createTicket } = useTicketsDB();
+  const { fetchMessages, sendMessage, createTicket } = useTicketsDB();
+  const { evolutionMessages } = useWebhookResponses(ticket?.id?.toString());
   
   const [message, setMessage] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -126,11 +115,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   });
   const [unreadCount, setUnreadCount] = useState(0);
   const [lastSentMessage, setLastSentMessage] = useState<number | null>(null);
-  const [isFinishingTicket, setIsFinishingTicket] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -146,7 +131,6 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   // Estados para os modais das ações rápidas
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [showClientModal, setShowClientModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   
   // Estados para os dados do ticket (que podem ser alterados)
@@ -154,8 +138,14 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const [newAssignee, setNewAssignee] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [newTag, setNewTag] = useState('');
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdating] = useState(false);
   const [favoriteMessages, setFavoriteMessages] = useState<Set<number>>(new Set());
+  const [isWaitingResponse, setIsWaitingResponse] = useState(false);
+  
+  // Estados para integração WhatsApp
+  const [whatsappStatus, setWhatsappStatus] = useState<'connected' | 'disconnected' | 'unknown'>('unknown');
+  const [whatsappInstance, setWhatsappInstance] = useState<string | null>(null);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -200,6 +190,49 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Função para obter o ticket ID real (UUID do banco de dados)
+  const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
+    try {
+      // Se já é uma string UUID, usar diretamente
+      if (typeof ticketCompatibilityId === 'string' && ticketCompatibilityId.includes('-')) {
+        return ticketCompatibilityId;
+      }
+
+      // Buscar por tickets existentes para encontrar correspondência
+      const { data: existingTickets, error } = await supabase
+        .from('tickets')
+        .select('id, title, subject, metadata')
+        .limit(100);
+
+      if (error) {
+        console.error('Erro ao buscar tickets:', error);
+        return null;
+      }
+
+      // Tentar encontrar correspondência baseada no subject/title
+      const matchingTicket = existingTickets?.find(t => 
+        t.title === currentTicket.subject || 
+        t.subject === currentTicket.subject ||
+        t.metadata?.client_name === currentTicket.client
+      );
+
+      if (matchingTicket) {
+        console.log('🎯 Ticket encontrado no banco:', matchingTicket.id);
+        return matchingTicket.id;
+      }
+
+      // Se não encontrou, pode ser um ticket mock - retornar null para criar
+      console.log('⚠️ Ticket não encontrado no banco (dados mock)');
+      return null;
+    } catch (error) {
+      console.error('Erro ao obter ticket ID real:', error);
+      return null;
+    }
+  }, [currentTicket]);
+
+
+
+
   // Carregar dados iniciais
   useEffect(() => {
     const loadInitialData = async () => {
@@ -236,13 +269,31 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
         } else {
           setAvailableAgents(agents || []);
         }
+
+        // Verificar instância WhatsApp do ticket
+        if (currentTicket?.metadata?.evolution_instance_name) {
+          setWhatsappInstance(currentTicket.metadata.evolution_instance_name);
+          await checkWhatsAppStatus(currentTicket.metadata.evolution_instance_name);
+        }
       } catch (error) {
         console.error('Erro ao carregar dados iniciais:', error);
       }
     };
 
     loadInitialData();
-  }, [user]);
+  }, [user, currentTicket]);
+
+  // Verificar status da instância WhatsApp
+  const checkWhatsAppStatus = async (instanceName: string) => {
+    try {
+      const status = await evolutionApiService.getInstanceStatus(instanceName);
+      setWhatsappStatus(status.instance.status === 'open' ? 'connected' : 'disconnected');
+      console.log('📱 Status WhatsApp:', status.instance.status);
+    } catch (error) {
+      console.error('❌ Erro ao verificar status WhatsApp:', error);
+      setWhatsappStatus('disconnected');
+    }
+  };
 
   // Função helper para gerar ID único e válido
   const generateUniqueId = (messageId: string): number => {
@@ -309,46 +360,6 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       });
     }
   };
-
-  // Função para obter o ticket ID real (UUID do banco de dados)
-  const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
-    try {
-      // Se já é uma string UUID, usar diretamente
-      if (typeof ticketCompatibilityId === 'string' && ticketCompatibilityId.includes('-')) {
-        return ticketCompatibilityId;
-      }
-
-      // Buscar por tickets existentes para encontrar correspondência
-      const { data: existingTickets, error } = await supabase
-        .from('tickets')
-        .select('id, title, subject, metadata')
-        .limit(100);
-
-      if (error) {
-        console.error('Erro ao buscar tickets:', error);
-        return null;
-      }
-
-      // Tentar encontrar correspondência baseada no subject/title
-      const matchingTicket = existingTickets?.find(t => 
-        t.title === currentTicket.subject || 
-        t.subject === currentTicket.subject ||
-        t.metadata?.client_name === currentTicket.client
-      );
-
-      if (matchingTicket) {
-        console.log('🎯 Ticket encontrado no banco:', matchingTicket.id);
-        return matchingTicket.id;
-      }
-
-      // Se não encontrou, pode ser um ticket mock - retornar null para criar
-      console.log('⚠️ Ticket não encontrado no banco (dados mock)');
-      return null;
-    } catch (error) {
-      console.error('Erro ao obter ticket ID real:', error);
-      return null;
-    }
-  }, [currentTicket]);
 
   // Carregar mensagens reais do banco de dados
   useEffect(() => {
@@ -438,43 +449,73 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       // Obter o ticket ID real do banco
       let realTicketId = await getRealTicketId(ticket.id);
       
-      // Se não encontrou ticket no banco, criar um novo
+            // Se não encontrou ticket no banco, criar um novo
       if (!realTicketId) {
         console.log('🆕 Criando novo ticket no banco para persistir conversa...');
+        console.log('📋 Dados do ticket mock:', currentTicket);
         
         try {
-          const newTicketData = {
-            title: currentTicket.subject,
+          // Preparar dados do ticket conforme schema do banco
+          const newTicketData: Partial<DatabaseTicket> = {
+            title: currentTicket.subject || `Conversa ${currentTicket.client}`,
             subject: currentTicket.subject,
-            description: `Ticket migrado de dados mock para o banco`,
-            status: currentTicket.status as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
-            priority: (currentTicket.priority === 'alta' ? 'urgent' : 
-                      currentTicket.priority === 'baixa' ? 'low' : 'normal') as 'baixa' | 'normal' | 'alta' | 'urgente',
-            channel: currentTicket.channel as 'whatsapp' | 'email' | 'telefone' | 'chat' | 'site' | 'indicacao',
+            description: `Ticket migrado de dados mock para o banco - Cliente: ${currentTicket.client}`,
+            // Normalizar status para valores aceitos pelo constraint
+            status: (['pendente', 'atendimento', 'finalizado', 'cancelado'].includes(currentTicket.status) 
+              ? currentTicket.status 
+              : 'pendente') as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
+            // Normalizar prioridade para valores aceitos pelo constraint  
+            priority: (currentTicket.priority === 'alta' ? 'alta' : 
+                      currentTicket.priority === 'baixa' ? 'baixa' : 
+                      'normal') as 'baixa' | 'normal' | 'alta' | 'urgente',
+            // Normalizar canal para valores aceitos pelo constraint
+            channel: (['email', 'telefone', 'chat', 'site', 'indicacao'].includes(currentTicket.channel) 
+              ? currentTicket.channel 
+              : 'chat') as 'email' | 'telefone' | 'chat' | 'site' | 'indicacao',
+            // Atender constraint valid_customer_or_anonymous - deixar undefined para não passar no insert
             metadata: {
               client_name: currentTicket.client,
+              anonymous_contact: currentTicket.client_email || currentTicket.client || 'Cliente Anônimo',
+              client_phone: currentTicket.client_phone || '(11) 99999-9999',
               original_id: ticket.id,
-              migrated_from_mock: true
+              migrated_from_mock: true,
+              migration_timestamp: new Date().toISOString()
             },
-            unread: currentTicket.unread,
-            tags: currentTicket.tags || []
+            unread: currentTicket.unread !== undefined ? currentTicket.unread : true,
+            tags: Array.isArray(currentTicket.tags) ? currentTicket.tags : [],
+            is_internal: false,
+            last_message_at: new Date().toISOString()
           };
 
+          console.log('📤 Enviando dados para createTicket:', newTicketData);
+          
           const createdTicket = await createTicket(newTicketData);
           if (createdTicket?.id) {
             realTicketId = createdTicket.id;
+            console.log('✅ Novo ticket criado com ID:', realTicketId);
           } else {
+            console.error('❌ Ticket criado mas ID não retornado:', createdTicket);
             throw new Error('Ticket criado mas ID não retornado');
           }
-          console.log('✅ Novo ticket criado:', realTicketId);
-          
-          toast({
-            title: "💾 Ticket salvo",
-            description: "Ticket migrado para o banco de dados",
+        
+        toast({
+            title: "💾 Ticket salvo no banco",
+            description: `Ticket "${currentTicket.subject}" migrado com sucesso`,
           });
-        } catch (createError) {
-          console.error('❌ Erro ao criar ticket:', createError);
-          throw new Error('Não foi possível criar ticket no banco de dados');
+        } catch (createError: any) {
+          console.error('❌ Erro detalhado ao criar ticket:', createError);
+          console.error('❌ Stack trace:', createError?.stack);
+          
+          // Log detalhado do erro para debug
+          if (createError?.message?.includes('constraint')) {
+            console.error('❌ Violação de constraint do banco. Verifique:');
+            console.error('- valid_customer_or_anonymous: customer_id OU metadata.anonymous_contact');
+            console.error('- status deve ser: pendente, atendimento, finalizado, cancelado');
+            console.error('- priority deve ser: baixa, normal, alta, urgente');
+            console.error('- channel deve ser: whatsapp, email, telefone, chat, site, indicacao');
+          }
+          
+          throw new Error(`Não foi possível criar ticket no banco de dados: ${createError?.message || 'Erro desconhecido'}`);
         }
       }
       
@@ -483,6 +524,68 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
         throw new Error('Não foi possível obter ID válido do ticket');
       }
       
+      // --- INTEGRAÇÃO COM EVOLUTION API (WHATSAPP) ---
+      if (!isInternal && whatsappInstance && whatsappStatus === 'connected') {
+        const clientPhone = currentTicket.metadata?.client_phone;
+        
+        if (clientPhone && evolutionApiService.isValidWhatsAppNumber(clientPhone)) {
+          setIsSendingWhatsApp(true);
+          
+          try {
+            console.log(`🚀 Enviando via WhatsApp [Instância: ${whatsappInstance}]`);
+            
+            const messageToSend = replyToMessage 
+              ? `↩️ *Respondendo:* "${replyToMessage.content}"\n\n${message}` 
+              : message;
+            
+            await evolutionApiService.sendTextMessage(whatsappInstance, {
+              number: clientPhone,
+              textMessage: {
+                text: messageToSend
+              },
+              options: {
+                delay: 1200,
+                presence: 'composing',
+                linkPreview: false
+              }
+            });
+
+            console.log(`✅ Mensagem enviada para ${clientPhone} via WhatsApp`);
+            
+            toast({
+              title: "📱 Enviado via WhatsApp",
+              description: `Mensagem entregue para ${currentTicket.client}`,
+            });
+            
+          } catch (whatsappError: any) {
+            console.error('❌ Erro ao enviar via WhatsApp:', whatsappError);
+            toast({
+              title: "⚠️ Erro no WhatsApp",
+              description: "Mensagem salva no sistema, mas não foi enviada via WhatsApp",
+              variant: "destructive"
+            });
+          } finally {
+            setIsSendingWhatsApp(false);
+          }
+        } else {
+          console.warn('⚠️ Telefone do cliente inválido ou não configurado');
+          toast({
+            title: "📞 Telefone não configurado",
+            description: "Configure o telefone do cliente para enviar via WhatsApp",
+            variant: "destructive"
+          });
+        }
+      } else if (!isInternal && !whatsappInstance) {
+        console.warn('⚠️ Instância WhatsApp não configurada para este ticket');
+      } else if (!isInternal && whatsappStatus !== 'connected') {
+        console.warn('⚠️ WhatsApp desconectado');
+        toast({
+          title: "📱 WhatsApp desconectado",
+          description: "Mensagem salva apenas no sistema",
+          variant: "destructive"
+        });
+      }
+
       // Criar mensagem no banco de dados
       const messageData = {
         ticket_id: realTicketId,
@@ -492,44 +595,23 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
         is_internal: isInternal,
         sender_name: currentUserProfile?.name || user.email?.split('@')[0] || 'Usuário',
         sender_email: user.email,
-        metadata: replyToMessage ? {
-          reply_to: replyToMessage.id,
-          reply_to_content: replyToMessage.content,
-          reply_to_sender: replyToMessage.senderName
-        } : {}
+        metadata: {
+          ...(replyToMessage ? {
+            reply_to: replyToMessage.id,
+            reply_to_content: replyToMessage.content,
+            reply_to_sender: replyToMessage.senderName
+          } : {}),
+          ...(whatsappInstance ? {
+            whatsapp_instance: whatsappInstance,
+            sent_via_whatsapp: !isInternal && whatsappStatus === 'connected'
+          } : {})
+        }
       };
 
       const newMessage = await sendMessage(messageData);
       console.log('✅ Mensagem salva no banco:', newMessage);
 
-      // Enviar mensagem para webhook do n8n
-      console.log('🔄 [CHAT] Preparando envio para webhook...');
-      const webhookData = webhookService.createMessageData(
-        realTicketId,
-        newMessage.id,
-        message,
-        'agent',
-        currentUserProfile?.name || user.email?.split('@')[0] || 'Usuário',
-        {
-          senderId: user.id,
-          senderEmail: user.email,
-          isInternal,
-          messageType: 'text',
-          ticketInfo: {
-            id: realTicketId,
-            subject: currentTicket.subject,
-            client: currentTicket.client,
-            client_phone: "(11) 99999-9999",
-            status: currentTicket.status,
-            priority: currentTicket.priority,
-            channel: currentTicket.channel
-          }
-        }
-      );
-      
-      console.log('📤 [CHAT] Chamando webhook service...');
-      const webhookResult = await webhookService.sendMessage(webhookData);
-      console.log('📋 [CHAT] Resultado do webhook:', webhookResult ? 'SUCESSO' : 'FALHA');
+
 
       // Adicionar mensagem localmente para feedback imediato
       const localMessage: LocalMessage = {
@@ -1127,14 +1209,13 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
               </div>
             ) : (
               <div className="space-y-4">
-                {realTimeMessages.map((msg, index) => (
+                {realTimeMessages.map((msg) => (
                   <div
                     key={msg.id}
                     className={cn(
                       "flex animate-in slide-in-from-bottom-2 duration-300 group",
                       msg.sender === 'agent' ? 'justify-end' : 'justify-start'
                     )}
-                    style={{ animationDelay: `${index * 50}ms` }}
                   >
                     {/* Selection Checkbox */}
                     {isSelectionMode && (
@@ -1303,6 +1384,23 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 </div>
               </div>
             )}
+
+            {/* Waiting for webhook response indicator */}
+            {isWaitingResponse && (
+              <div className="flex justify-start mt-4 animate-in slide-in-from-bottom-2 duration-300">
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-2xl px-4 py-3 shadow-sm flex items-center space-x-3">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Bot className="w-4 h-4 text-blue-600 animate-spin" />
+                    <span className="text-sm text-blue-700 font-medium">Aguardando resposta automática...</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
@@ -1431,6 +1529,8 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                   </TooltipProvider>
                 )}
 
+
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1516,16 +1616,23 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                   disabled={!message.trim() || isSending}
                   className={cn(
                     "h-12 px-6 rounded-xl font-semibold transition-all duration-200 shadow-sm",
-                    "bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed",
+                    !isInternal && whatsappStatus === 'connected' 
+                      ? "bg-green-600 hover:bg-green-700" 
+                      : "bg-blue-600 hover:bg-blue-700",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
                     "transform hover:scale-105 active:scale-95"
                   )}
                 >
-                  {isSending ? (
+                  {isSending || isSendingWhatsApp ? (
                     <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  ) : !isInternal && whatsappStatus === 'connected' ? (
+                    <Smartphone className="w-5 h-5 mr-2" />
                   ) : (
                     <Send className="w-5 h-5 mr-2" />
                   )}
-                  {isSending ? 'Enviando...' : 'Enviar'}
+                  {isSending ? 'Enviando...' : 
+                   isSendingWhatsApp ? 'Enviando WhatsApp...' :
+                   !isInternal && whatsappStatus === 'connected' ? 'Enviar WhatsApp' : 'Enviar'}
                 </Button>
               </div>
             </div>
@@ -1689,6 +1796,66 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
               </CardContent>
             </Card>
 
+            {/* WhatsApp Status Card */}
+            {whatsappInstance && (
+              <Card className="border-0 shadow-sm bg-white">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold text-gray-800 flex items-center">
+                    <Smartphone className="w-4 h-4 mr-2 text-green-600" />
+                    Status WhatsApp
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {whatsappStatus === 'connected' ? (
+                        <Wifi className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <WifiOff className="w-4 h-4 text-red-600" />
+                      )}
+                      <span className="text-sm font-medium text-gray-700">Instância:</span>
+                    </div>
+                    <span className="text-sm text-gray-600">{whatsappInstance}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-700">Status:</span>
+                    <Badge 
+                      className={cn(
+                        "text-xs",
+                        whatsappStatus === 'connected' 
+                          ? "bg-green-100 text-green-800 border-green-200" 
+                          : "bg-red-100 text-red-800 border-red-200"
+                      )}
+                    >
+                      {whatsappStatus === 'connected' ? 'Conectado' : 'Desconectado'}
+                    </Badge>
+                  </div>
+                  
+                  {currentTicket.metadata?.client_phone && (
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="text-sm font-medium text-gray-700">WhatsApp:</span>
+                      <span className="text-sm text-gray-600">
+                        {evolutionApiService.formatPhoneNumber(currentTicket.metadata.client_phone)}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => whatsappInstance && checkWhatsAppStatus(whatsappInstance)}
+                      className="w-full text-blue-600 border-blue-200 hover:bg-blue-50"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Verificar Status
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Stats Card */}
             <Card className="border-0 shadow-sm bg-white">
               <CardHeader className="pb-3">
@@ -1714,6 +1881,8 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                 </div>
               </CardContent>
             </Card>
+
+
 
             {/* Quick Actions Card */}
             <Card className="border-0 shadow-sm bg-white">

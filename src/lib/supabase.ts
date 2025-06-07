@@ -35,6 +35,10 @@ export interface Ticket {
   customer_id: string;
   agent_id?: string;
   department: string;
+  // Campos para tipos de canal
+  client_phone?: string;
+  channel: 'email' | 'phone' | 'chat' | 'web';
+  metadata?: Record<string, any>;
 }
 
 export interface Message {

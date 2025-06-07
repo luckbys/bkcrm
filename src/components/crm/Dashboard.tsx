@@ -402,7 +402,7 @@ export const Dashboard = ({ onViewChange, onOpenAddTicket }: DashboardProps = { 
           <CardContent>
             <div className="space-y-4">
               {[
-                { name: 'WhatsApp', value: 45, color: 'bg-green-500', icon: Phone },
+                { name: 'Chat Online', value: 45, color: 'bg-green-500', icon: Phone },
                 { name: 'Email', value: 25, color: 'bg-blue-500', icon: Mail },
                 { name: 'Chat Web', value: 20, color: 'bg-purple-500', icon: MessageSquare },
                 { name: 'Telefone', value: 10, color: 'bg-orange-500', icon: Phone }

@@ -3,6 +3,7 @@ import { TicketManagement } from './TicketManagement';
 import { CustomerManagement } from './customers/CustomerManagement';
 import { SalesFunnel } from './SalesFunnel';
 import { DepartmentDiagnostic } from './admin/DepartmentDiagnostic';
+import { DepartmentEvolutionManager } from './admin/DepartmentEvolutionManager';
 import { Dashboard } from './Dashboard';
 import { Loader2, MessageSquare, Filter, Users, Plus, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -84,6 +85,14 @@ export const MainContent = ({
               </div>
             </div>
           </div>
+        );
+      case 'whatsapp':
+        return (
+          <DepartmentEvolutionManager 
+            departmentId={selectedSector?.id || ''} 
+            departmentName={selectedSector?.name || 'Departamento'} 
+            departmentColor={selectedSector?.color || '#3B82F6'} 
+          />
         );
       case 'admin':
         return <DepartmentDiagnostic />;

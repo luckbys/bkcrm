@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Filter, BarChart3 } from 'lucide-react';
+import { MessageSquare, Filter, BarChart3, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SectorActionsProps {
@@ -51,6 +51,20 @@ export const SectorActions = ({ currentView, onViewChange }: SectorActionsProps)
       >
         <Filter className="w-4 h-4 mr-1.5" />
         <span className="hidden sm:inline">Funil</span>
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => onViewChange('whatsapp')}
+        className={cn(
+          "transition-all duration-200",
+          currentView === 'whatsapp' 
+            ? "bg-white shadow-sm text-gray-900 hover:bg-white" 
+            : "text-gray-600 hover:bg-white/70 hover:text-gray-900"
+        )}
+      >
+        <Smartphone className="w-4 h-4 mr-1.5" />
+        <span className="hidden sm:inline">WhatsApp</span>
       </Button>
     </div>
   );
