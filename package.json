@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build-check": "tsc && vite build",
+    "build": "vite build --mode production",
+    "build-strict": "tsc && vite build",
+    "build-prod": "tsc --project tsconfig.build.json --noEmit && vite build",
     "start": "vite preview --port $PORT --host 0.0.0.0",
     "preview": "vite preview --port ${PORT:-3000} --host 0.0.0.0",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

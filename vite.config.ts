@@ -32,7 +32,14 @@ export default defineConfig(({ mode }) => {
       outDir: "dist",
       sourcemap: false,
       minify: "terser",
+      target: "es2015",
       rollupOptions: {
+        onwarn(warning, warn) {
+          // Ignorar avisos específicos do TypeScript
+          if (warning.code === 'UNUSED_EXTERNAL_IMPORT') return;
+          if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return;
+          warn(warning);
+        },
         output: {
           manualChunks: {
             vendor: ["react", "react-dom"],
