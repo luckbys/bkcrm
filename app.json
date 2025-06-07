@@ -1,0 +1,52 @@
+{
+  "name": "BKCRM - Customer Relationship Management",
+  "description": "Sistema de CRM com integração WhatsApp via Evolution API",
+  "keywords": [
+    "crm",
+    "whatsapp",
+    "evolution-api",
+    "customer-management",
+    "react",
+    "typescript"
+  ],
+  "website": "https://github.com/seu-usuario/bkcrm",
+  "repository": "https://github.com/seu-usuario/bkcrm",
+  "success_url": "/",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    },
+    {
+      "url": "heroku/static"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "description": "Environment for Node.js",
+      "value": "production"
+    },
+    "VITE_SUPABASE_URL": {
+      "description": "URL do projeto Supabase",
+      "required": true
+    },
+    "VITE_SUPABASE_ANON_KEY": {
+      "description": "Chave anônima do Supabase",
+      "required": true
+    },
+    "VITE_EVOLUTION_API_URL": {
+      "description": "URL da Evolution API",
+      "value": "https://press-evolution-api.jhkbgs.easypanel.host"
+    },
+    "VITE_EVOLUTION_API_KEY": {
+      "description": "API Key da Evolution API",
+      "value": "429683C4C977415CAAFCCE10F7D57E11"
+    }
+  },
+  "stack": "heroku-24",
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+} 

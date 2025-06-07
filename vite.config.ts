@@ -25,8 +25,22 @@ export default defineConfig(({ mode }) => {
       host: true,
     },
     preview: {
-      port: 3000,
-      host: true,
+      port: parseInt(env.PORT) || 3000,
+      host: "0.0.0.0",
+    },
+    build: {
+      outDir: "dist",
+      sourcemap: false,
+      minify: "terser",
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ["react", "react-dom"],
+            ui: ["@radix-ui/react-dialog", "@radix-ui/react-select"],
+            supabase: ["@supabase/supabase-js"]
+          }
+        }
+      }
     },
   };
 });
