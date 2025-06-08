@@ -2,8 +2,9 @@
 
 ## ✅ PRONTO PARA DEPLOY
 
-### 🛠️ Problema Resolvido:
-**Erros TypeScript no build**: Configurado `vite build --mode production` que ignora avisos de TypeScript não críticos
+### 🛠️ Problemas Resolvidos:
+1. **Erros TypeScript**: Configurado `vite build --mode production` que ignora avisos não críticos
+2. **Axios não encontrado**: Adicionado `axios@^1.9.0` às dependências
 
 ### Arquivos Configurados:
 - ✅ Procfile (Heroku buildpack)
@@ -41,7 +42,8 @@ docker-compose up -d --build
 ✅ 629KB (166KB gzipped)
 ✅ Chunks otimizados
 ✅ Sem erros TypeScript
-✅ Build em 1m 24s
+✅ Axios integrado
+✅ Build em 33.6s
 
 ### URLs:
 - **Local:** http://localhost:8080
