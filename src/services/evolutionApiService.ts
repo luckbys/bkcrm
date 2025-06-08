@@ -729,37 +729,268 @@ export const debugEvolutionApi = async () => {
   return { success: true, connectionResult };
 };
 
-// --- EXPORT DO SERVIÇO ---
+// --- MÉTODOS DE WEBHOOK ---
 
-export const evolutionApiService = {
-  // Instâncias
+/**
+ * Configurar webhook para uma instância
+ */
+const setInstanceWebhook = async (instanceName: string, webhookData: {
+  url: string;
+  events?: string[];
+  enabled?: boolean;
+}): Promise<{ success: boolean; message?: string; error?: string }> => {
+  try {
+    console.log(`🔗 Configurando webhook para instância: ${instanceName}`);
+    console.log('📡 Dados do webhook:', webhookData);
+
+    const payload = {
+      url: webhookData.url,
+      enabled: webhookData.enabled ?? true,
+      events: webhookData.events ?? [
+        'MESSAGES_UPSERT',
+        'MESSAGES_UPDATE', 
+        'MESSAGES_DELETE',
+        'SEND_MESSAGE',
+        'CONNECTION_UPDATE'
+      ]
+    };
+
+    const response = await apiClient.put(`/webhook/set/${instanceName}`, payload);
+    
+    if (response.data) {
+      console.log('✅ Webhook configurado com sucesso:', response.data);
+      return {
+        success: true,
+        message: 'Webhook configurado com sucesso'
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Resposta inesperada da API'
+    };
+
+  } catch (error: any) {
+    console.error('❌ Erro ao configurar webhook:', error);
+    
+    const errorMessage = error.response?.data?.message || 
+                        error.response?.data?.error ||
+                        error.message || 
+                        'Erro desconhecido ao configurar webhook';
+
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+};
+
+/**
+ * Obter configuração atual do webhook
+ */
+const getInstanceWebhook = async (instanceName: string): Promise<{
+  success: boolean;
+  webhook?: {
+    url: string;
+    enabled: boolean;
+    events: string[];
+  };
+  error?: string;
+}> => {
+  try {
+    console.log(`📡 Obtendo configuração de webhook: ${instanceName}`);
+
+    const response = await apiClient.get(`/webhook/find/${instanceName}`);
+    
+    if (response.data) {
+      console.log('✅ Webhook obtido:', response.data);
+      return {
+        success: true,
+        webhook: {
+          url: response.data.url || '',
+          enabled: response.data.enabled ?? false,
+          events: response.data.events || []
+        }
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Webhook não configurado'
+    };
+
+  } catch (error: any) {
+    console.error('❌ Erro ao obter webhook:', error);
+    
+    // Se for 404, significa que não tem webhook configurado
+    if (error.response?.status === 404) {
+      return {
+        success: true,
+        webhook: {
+          url: '',
+          enabled: false,
+          events: []
+        }
+      };
+    }
+
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Erro ao obter webhook'
+    };
+  }
+};
+
+/**
+ * Remover webhook da instância
+ */
+const removeInstanceWebhook = async (instanceName: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+  try {
+    console.log(`🗑️ Removendo webhook da instância: ${instanceName}`);
+
+    const response = await apiClient.delete(`/webhook/remove/${instanceName}`);
+    
+    console.log('✅ Webhook removido com sucesso');
+    return {
+      success: true,
+      message: 'Webhook removido com sucesso'
+    };
+
+  } catch (error: any) {
+    console.error('❌ Erro ao remover webhook:', error);
+    
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Erro ao remover webhook'
+    };
+  }
+};
+
+/**
+ * Testar webhook (verificar se está configurado e ativo)
+ */
+const testInstanceWebhook = async (instanceName: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+  try {
+    console.log(`🧪 Testando webhook da instância: ${instanceName}`);
+
+    // Verificar se o webhook está configurado
+    const webhookInfo = await getInstanceWebhook(instanceName);
+    
+    if (webhookInfo.success && webhookInfo.webhook?.enabled && webhookInfo.webhook?.url) {
+      console.log('✅ Webhook configurado e ativo');
+      return {
+        success: true,
+        message: `Webhook ativo: ${webhookInfo.webhook.url}`
+      };
+    } else {
+      return {
+        success: false,
+        error: 'Webhook não está configurado ou não está ativo'
+      };
+    }
+
+  } catch (error: any) {
+    console.error('❌ Erro ao testar webhook:', error);
+    
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Erro ao testar webhook'
+    };
+  }
+};
+
+/**
+ * Validar URL de webhook
+ */
+const validateWebhookUrl = (url: string): { valid: boolean; error?: string } => {
+  try {
+    const urlObj = new URL(url);
+    
+    // Verificar se é HTTPS (recomendado para produção)
+    if (urlObj.protocol !== 'https:' && urlObj.protocol !== 'http:') {
+      return {
+        valid: false,
+        error: 'URL deve usar protocolo HTTP ou HTTPS'
+      };
+    }
+
+    // Verificar se não é localhost em produção
+    if (process.env.NODE_ENV === 'production' && 
+        (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1')) {
+      return {
+        valid: false,
+        error: 'URLs localhost não funcionam em produção'
+      };
+    }
+
+    // Verificar se tem um path válido
+    if (!urlObj.pathname || urlObj.pathname === '/') {
+      return {
+        valid: false,
+        error: 'URL deve ter um caminho específico (ex: /api/webhooks/evolution)'
+      };
+    }
+
+    return { valid: true };
+
+  } catch (error) {
+    return {
+      valid: false,
+      error: 'URL inválida'
+    };
+  }
+};
+
+/**
+ * Gerar URL de webhook sugerida baseada no domínio atual
+ */
+const generateSuggestedWebhookUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    const portSuffix = port && port !== '80' && port !== '443' ? `:${port}` : '';
+    return `${protocol}//${hostname}${portSuffix}/api/webhooks/evolution`;
+  }
+  
+  // Fallback para ambiente de desenvolvimento
+  return 'https://seu-dominio.com/api/webhooks/evolution';
+};
+
+// Criação do objeto principal com todos os métodos
+const evolutionApiService = {
+  // Métodos de instância
   createInstance,
   getInstanceQRCode,
   getInstanceStatus,
   deleteInstance,
   logoutInstance,
   restartInstance,
+  restartInstanceConnection,
+  instanceExists,
   listInstances,
   
-  // Mensagens
+  // Métodos de mensagem
   sendTextMessage,
   sendMediaMessage,
   markMessageAsRead,
   
-  // Utilitários
+  // Métodos utilitários
   formatPhoneNumber,
   isValidWhatsAppNumber,
   phoneToJid,
   processWebhookPayload,
   
-  // Debug e teste
+  // Métodos de teste/debug
   testConnection,
   testCreateInstance,
   debugEvolutionApi,
   
-  // Novas funções
-  restartInstanceConnection,
-  instanceExists
+  // Métodos de webhook
+  setInstanceWebhook,
+  getInstanceWebhook,
+  removeInstanceWebhook,
+  testInstanceWebhook,
+  validateWebhookUrl,
+  generateSuggestedWebhookUrl
 };
 
 export default evolutionApiService; 

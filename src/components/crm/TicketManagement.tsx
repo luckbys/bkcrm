@@ -411,10 +411,9 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
               ) : userInfo.department ? (
                 <Badge variant="outline" className="text-green-600 border-green-200">
                   <div 
-                    className="w-2 h-2 rounded-full mr-1" 
-                    style={{ backgroundColor: userInfo.department.color }}
+                    className="w-2 h-2 rounded-full mr-1 bg-green-500"
                   />
-                  Departamento: {userInfo.department.name}
+                  Departamento: {userInfo.department}
                 </Badge>
               ) : (
                 <Badge variant="outline" className="text-amber-600 border-amber-200">

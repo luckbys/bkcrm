@@ -7,10 +7,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { evolutionApiService } from '@/services/evolutionApiService';
+import evolutionApiService from '@/services/evolutionApiService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { WebhookConfigModal } from './WebhookConfigModal';
 import { 
   Smartphone, 
   QrCode, 
@@ -28,7 +29,13 @@ import {
   Settings,
   Users,
   Building2,
-  Info
+  Info,
+  Webhook,
+  Link,
+  Check,
+  X,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -76,6 +83,14 @@ export const DepartmentEvolutionManager = ({
   const [qrInstance, setQrInstance] = useState<string>('');
   const [qrRefreshCount, setQrRefreshCount] = useState(0);
   const [isQRLoading, setIsQRLoading] = useState(false);
+  
+  // Estados para configuração de webhook
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
+  const [webhookInstance, setWebhookInstance] = useState<string>('');
+  const [webhookUrl, setWebhookUrl] = useState<string>('');
+  const [webhookEnabled, setWebhookEnabled] = useState(true);
+  const [currentWebhookConfig, setCurrentWebhookConfig] = useState<any>(null);
+  const [isWebhookLoading, setIsWebhookLoading] = useState(false);
   
   // Carregamento inicial
   useEffect(() => {
@@ -486,6 +501,215 @@ export const DepartmentEvolutionManager = ({
     }
   };
 
+  // ===== FUNÇÕES DE WEBHOOK =====
+
+  const openWebhookModal = async (instanceName: string) => {
+    setWebhookInstance(instanceName);
+    setIsWebhookLoading(true);
+    setShowWebhookModal(true);
+    
+    try {
+      // Obter configuração atual do webhook
+      const webhookService = await import('@/services/evolutionWebhookService');
+      const result = await webhookService.getInstanceWebhook(instanceName);
+      
+      if (result.success && result.webhook) {
+        setCurrentWebhookConfig(result.webhook);
+        setWebhookUrl(result.webhook.url);
+        setWebhookEnabled(result.webhook.enabled);
+      } else {
+        // Webhook não configurado, usar URL sugerida
+        const suggestedUrl = webhookService.generateSuggestedWebhookUrl();
+        setWebhookUrl(suggestedUrl);
+        setWebhookEnabled(true);
+        setCurrentWebhookConfig(null);
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao carregar webhook:', error);
+      toast({
+        title: "⚠️ Erro ao carregar webhook",
+        description: error.message || "Não foi possível carregar a configuração",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWebhookLoading(false);
+    }
+  };
+
+  const saveWebhookConfig = async () => {
+    setIsWebhookLoading(true);
+    try {
+      const webhookService = await import('@/services/evolutionWebhookService');
+      
+      // Usar dados do modal
+      const configData = currentWebhookConfig || {
+        url: webhookUrl,
+        enabled: webhookEnabled,
+        events: webhookService.getRecommendedEvents()
+      };
+
+      // Validar URL
+      const validation = webhookService.validateWebhookUrl(configData.url);
+      if (!validation.valid) {
+        toast({
+          title: "⚠️ URL inválida",
+          description: validation.error,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Configurar webhook
+      const result = await webhookService.setInstanceWebhook(webhookInstance, {
+        url: configData.url,
+        enabled: configData.enabled,
+        events: configData.events
+      });
+
+      if (result.success) {
+        toast({
+          title: "✅ Webhook configurado",
+          description: "Configuração salva com sucesso. Agora você receberá eventos do WhatsApp.",
+        });
+        setShowWebhookModal(false);
+      } else {
+        throw new Error(result.error || 'Erro desconhecido');
+      }
+
+    } catch (error: any) {
+      console.error('❌ Erro ao configurar webhook:', error);
+      toast({
+        title: "❌ Erro ao configurar webhook",
+        description: error.message || "Não foi possível salvar a configuração",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWebhookLoading(false);
+    }
+  };
+
+  const saveWebhookConfigWithData = async (webhookData: { url: string; enabled: boolean; events: string[] }) => {
+    setIsWebhookLoading(true);
+    try {
+      console.log('🔧 Configurando webhook com dados do modal:', {
+        instance: webhookInstance,
+        url: webhookData.url,
+        enabled: webhookData.enabled,
+        events: webhookData.events
+      });
+
+      const webhookService = await import('@/services/evolutionWebhookService');
+
+      // Validar URL dos dados vindos do modal
+      const validation = webhookService.validateWebhookUrl(webhookData.url);
+      if (!validation.valid) {
+        toast({
+          title: "⚠️ URL inválida",
+          description: validation.error,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Configurar webhook com os dados corretos do modal
+      const result = await webhookService.setInstanceWebhook(webhookInstance, {
+        url: webhookData.url,
+        enabled: webhookData.enabled,
+        events: webhookData.events
+      });
+
+      if (result.success) {
+        console.log('✅ Webhook configurado com sucesso!', result);
+        toast({
+          title: "✅ Webhook configurado",
+          description: `URL ${webhookData.url} configurada para ${webhookInstance}`,
+        });
+        setShowWebhookModal(false);
+        
+        // Atualizar as configurações locais com os dados salvos
+        setCurrentWebhookConfig(webhookData);
+      } else {
+        console.error('❌ Falha na configuração do webhook:', result);
+        throw new Error(result.error || 'Erro desconhecido na configuração');
+      }
+
+    } catch (error: any) {
+      console.error('❌ Erro ao configurar webhook:', error);
+      toast({
+        title: "❌ Erro ao configurar webhook",
+        description: error.message || "Não foi possível salvar a configuração",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWebhookLoading(false);
+    }
+  };
+
+  const testWebhook = async () => {
+    setIsWebhookLoading(true);
+    try {
+      const webhookService = await import('@/services/evolutionWebhookService');
+      const result = await webhookService.testInstanceWebhook(webhookInstance);
+
+      if (result.success) {
+        toast({
+          title: "✅ Webhook funcionando",
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: "⚠️ Problema no webhook",
+          description: result.error,
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao testar webhook:', error);
+      toast({
+        title: "❌ Erro no teste",
+        description: error.message || "Não foi possível testar o webhook",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWebhookLoading(false);
+    }
+  };
+
+  const removeWebhook = async () => {
+    setIsWebhookLoading(true);
+    try {
+      const webhookService = await import('@/services/evolutionWebhookService');
+      const result = await webhookService.removeInstanceWebhook(webhookInstance);
+
+      if (result.success) {
+        toast({
+          title: "🗑️ Webhook removido",
+          description: "Configuração de webhook removida com sucesso",
+        });
+        setShowWebhookModal(false);
+      } else {
+        throw new Error(result.error || 'Erro desconhecido');
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao remover webhook:', error);
+      toast({
+        title: "❌ Erro ao remover webhook",
+        description: error.message || "Não foi possível remover a configuração",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWebhookLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "📋 Copiado!",
+      description: "URL copiada para a área de transferência",
+    });
+  };
+
   const getStatusIcon = (status: string, connected: boolean) => {
     if (connected && status === 'open') {
       return <CheckCircle className="w-4 h-4 text-green-600" />;
@@ -547,7 +771,7 @@ export const DepartmentEvolutionManager = ({
                 const updatedInstances: DepartmentInstance[] = [];
                 
                 for (const dbInstance of (dbInstances || [])) {
-                  let currentStatus = 'unknown' as const;
+                  let currentStatus: 'open' | 'close' | 'connecting' | 'unknown' = 'unknown';
                   let connected = false;
                   
                                      try {
@@ -694,17 +918,29 @@ export const DepartmentEvolutionManager = ({
                   </Button>
                 </div>
 
-                {!instance.isDefault && (
+                <div className="grid grid-cols-2 gap-2">
+                  {!instance.isDefault && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAsDefaultInstance(instance.instanceName)}
+                      className="text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Padrão
+                    </Button>
+                  )}
+                  
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAsDefaultInstance(instance.instanceName)}
-                    className="w-full text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                    onClick={() => openWebhookModal(instance.instanceName)}
+                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
                   >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Definir como Padrão
+                    <Webhook className="w-4 h-4 mr-2" />
+                    Webhook
                   </Button>
-                )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -864,6 +1100,26 @@ export const DepartmentEvolutionManager = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Configuração de Webhook */}
+      <WebhookConfigModal
+        isOpen={showWebhookModal}
+        onClose={() => setShowWebhookModal(false)}
+        instanceName={webhookInstance}
+        departmentName={departmentName}
+        currentWebhook={currentWebhookConfig}
+        onSave={async (webhookData) => {
+          console.log('💾 Salvando dados do modal:', webhookData);
+          
+          // Atualizar estados locais
+          setCurrentWebhookConfig(webhookData);
+          setWebhookUrl(webhookData.url);
+          setWebhookEnabled(webhookData.enabled);
+          
+          // Salvar na Evolution API usando os dados corretos do modal
+          await saveWebhookConfigWithData(webhookData);
+        }}
+      />
     </div>
   );
 }; 

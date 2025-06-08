@@ -1,9 +1,9 @@
 import { supabase } from '@/lib/supabase';
 
 // Helper para teste rápido de criação de tickets
-(window as any).testTicketCreation = async (numero?: string, nome?: string, mensagem?: string) => {
+  (window as any).testTicketCreation = async (numero?: string, nome?: string, mensagem?: string) => {
   console.log('🧪 [DEV] Testando criação de ticket...');
-  const defaultNumber = numero || '5511999888777';
+    const defaultNumber = numero || '5511999888777';
   const defaultName = nome || 'Teste Dev';
   const defaultMessage = mensagem || `Teste de criação automática: ${new Date().toLocaleString()}`;
   
@@ -212,7 +212,7 @@ import { supabase } from '@/lib/supabase';
       .insert([testTicket])
       .select()
       .single();
-
+    
     if (error) {
       console.error('❌ [DEV] Erro ao criar ticket teste:', error);
       return { success: false, error };
@@ -327,7 +327,7 @@ import { supabase } from '@/lib/supabase';
       console.log('❌ Nenhum perfil encontrado na tabela');
       return null;
     }
-    
+
   } catch (error) {
     console.error('❌ Erro na verificação:', error);
     return null;
@@ -497,8 +497,8 @@ export const checkMigrationStatus = async () => {
 (window as any).checkMigrationStatus = checkMigrationStatus;
 
 // Helper para mostrar comandos disponíveis
-(window as any).devHelp = () => {
-  console.log(`
+  (window as any).devHelp = () => {
+    console.log(`
 🛠️ Comandos de Desenvolvimento Disponíveis:
 
 📋 Tickets:
@@ -538,8 +538,8 @@ testEvolutionInstancesMigration()
 testTicketCreation('5511999888777', 'João', 'Preciso de ajuda')
 createWhatsAppTestTicket()
 testEvolutionAPI()
-  `);
-};
+    `);
+  };
 
 // Log inicial
 console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver comandos disponíveis.');
@@ -590,7 +590,7 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
     
     if (error) {
       console.log('❌ Erro ao buscar instâncias locais:', error.message);
-    } else {
+      } else {
       console.log(`📊 Instâncias locais: ${localInstances?.length || 0}`);
       localInstances?.forEach((instance, index) => {
         console.log(`   ${index + 1}. ${instance.instance_name} (${instance.department_name}) - Status: ${instance.status}`);
@@ -667,13 +667,13 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
     if (result.success) {
       console.log('✅ [DEV] Evolution API conectada com sucesso!');
       console.log('📊 [DEV] Dados da resposta:', result.data);
-    } else {
+      } else {
       console.error('❌ [DEV] Falha na conectividade:', result.error);
       console.error('📊 [DEV] Status HTTP:', result.status);
-    }
-    
+      }
+      
     return result;
-  } catch (error) {
+    } catch (error) {
     console.error('❌ [DEV] Erro inesperado:', error);
     return { success: false, error };
   }
@@ -712,21 +712,21 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
     const { evolutionApiService } = await import('@/services/evolutionApiService');
     
     const result = await evolutionApiService.testCreateInstance(instanceName);
-    
-    if (result.success) {
+      
+      if (result.success) {
       console.log('✅ [DEV] Instância criada com sucesso!');
       console.log('📊 [DEV] Dados da instância:', result.data);
       console.log(`💡 [DEV] Use: testInstanceQRCode('${instanceName}') para obter QR Code`);
-    } else {
+      } else {
       console.error('❌ [DEV] Falha ao criar instância:', result.error);
-    }
-    
+      }
+      
     return result;
-  } catch (error) {
+    } catch (error) {
     console.error('❌ [DEV] Erro ao criar instância:', error);
-    return { success: false, error };
-  }
-};
+      return { success: false, error };
+    }
+  };
 
 // Helper para testar QR Code de uma instância
 (window as any).testInstanceQRCode = async (instanceName = 'test') => {
@@ -908,12 +908,12 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
     } else {
       throw new Error('QR Code não foi gerado');
     }
-    
-  } catch (error) {
+
+    } catch (error) {
     console.error('❌ [DEV] Erro no teste de QR Code:', error);
-    return { success: false, error };
-  }
-};
+      return { success: false, error };
+    }
+  };
 
 // Helper para verificar formatação de QR Code
 (window as any).validateQRCodeFormat = (qrCodeString: string) => {
@@ -981,18 +981,18 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
       } catch (error: any) {
         if (error.message.includes('404')) {
           console.log(`❌ [DEV] "${instanceName}" NÃO EXISTE (404)`);
-        } else {
+      } else {
           console.log(`⚠️ [DEV] "${instanceName}" erro:`, error.message);
         }
       }
-    }
-    
+      }
+
     return { success: true, instances };
-  } catch (error) {
+    } catch (error) {
     console.error('❌ [DEV] Erro no debug:', error);
-    return { success: false, error };
-  }
-};
+      return { success: false, error };
+    }
+  };
 
 // Helper para testar QR Code com instância correta
 (window as any).testCorrectInstance = async () => {
@@ -1022,7 +1022,7 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
       console.log('✅ [DEV] QR Code obtido com sucesso!');
       console.log('📊 [DEV] Estrutura da resposta:', qrResult);
       return { success: true, instanceName, qrCode: qrResult };
-    } else {
+        } else {
       throw new Error('QR Code não foi gerado');
     }
     
@@ -1060,8 +1060,8 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
     }
     
     return result;
-    
-  } catch (error) {
+
+    } catch (error) {
     console.error('❌ [DEV] Erro ao simular webhook:', error);
     return { success: false, error };
   }
