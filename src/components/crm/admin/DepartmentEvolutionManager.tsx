@@ -114,9 +114,9 @@ export const DepartmentEvolutionManager = ({
              );
              
              const status = await Promise.race([statusPromise, timeoutPromise]) as any;
-             if (status?.instance?.status) {
-               evolutionStatus = status.instance.status === 'open' ? 'open' : 'close';
-               isConnected = status.instance.status === 'open';
+             if (status?.instance?.state) {
+               evolutionStatus = status.instance.state === 'open' ? 'open' : 'close';
+               isConnected = status.instance.state === 'open';
              }
              
            } catch (error: any) {
@@ -331,13 +331,14 @@ export const DepartmentEvolutionManager = ({
       
       const qrResponse = await evolutionApiService.getInstanceQRCode(instanceName);
       
-      if (qrResponse.base64) {
-        setCurrentQRCode(`data:image/png;base64,${qrResponse.base64}`);
+      if (qrResponse && qrResponse.base64) {
+        // O serviço já retorna com o prefixo correto
+        setCurrentQRCode(qrResponse.base64);
         console.log('✅ QR Code obtido com sucesso');
         
         toast({
           title: "📱 QR Code gerado!",
-          description: `Escaneie com WhatsApp para conectar ${instanceName}`,
+          description: "Escaneie o código com seu WhatsApp para conectar",
         });
       } else {
         throw new Error('QR Code não retornado pela API');
@@ -372,16 +373,15 @@ export const DepartmentEvolutionManager = ({
   };
 
   const refreshQRCode = async () => {
-    if (!qrInstance) return;
-    
     setIsQRLoading(true);
     setQrRefreshCount(prev => prev + 1);
     
     try {
       const qrResponse = await evolutionApiService.getInstanceQRCode(qrInstance);
       
-      if (qrResponse.base64) {
-        setCurrentQRCode(`data:image/png;base64,${qrResponse.base64}`);
+      if (qrResponse && qrResponse.base64) {
+        // O serviço já retorna com o prefixo correto
+        setCurrentQRCode(qrResponse.base64);
         toast({
           title: "🔄 QR Code atualizado",
           description: "Novo código gerado com sucesso",
@@ -533,7 +533,62 @@ export const DepartmentEvolutionManager = ({
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => {}} 
+            onClick={async () => {
+              setIsLoading(true);
+              try {
+                // Recarregar dados de instâncias do banco e da Evolution API
+                const { data: dbInstances } = await supabase
+                  .from('evolution_instances')
+                  .select('*')
+                  .eq('department_id', departmentId)
+                  .eq('is_active', true);
+
+                // Tentar obter status atual de cada instância da Evolution API
+                const updatedInstances: DepartmentInstance[] = [];
+                
+                for (const dbInstance of (dbInstances || [])) {
+                  let currentStatus = 'unknown' as const;
+                  let connected = false;
+                  
+                                     try {
+                     const statusResponse = await evolutionApiService.getInstanceStatus(dbInstance.instance_name);
+                     currentStatus = statusResponse.instance.state as 'open' | 'close' | 'connecting';
+                     connected = currentStatus === 'open';
+                   } catch (error) {
+                     console.warn(`⚠️ Não foi possível obter status de ${dbInstance.instance_name}:`, error);
+                   }
+                  
+                  updatedInstances.push({
+                    id: dbInstance.id,
+                    instanceName: dbInstance.instance_name,
+                    status: currentStatus,
+                    departmentId: dbInstance.department_id,
+                    departmentName: dbInstance.department_name,
+                    phone: dbInstance.phone || undefined,
+                    connected,
+                    lastUpdate: new Date(),
+                    isDefault: dbInstance.is_default || false,
+                    createdBy: dbInstance.created_by || undefined
+                  });
+                }
+                
+                setInstances(updatedInstances);
+                
+                toast({
+                  title: "🔄 Status atualizado",
+                  description: `${updatedInstances.length} instância(s) verificada(s)`,
+                });
+              } catch (error: any) {
+                console.error('❌ Erro ao atualizar status:', error);
+                toast({
+                  title: "❌ Erro na atualização",
+                  description: "Não foi possível atualizar o status das instâncias",
+                  variant: "destructive"
+                });
+              } finally {
+                setIsLoading(false);
+              }
+            }} 
             disabled={isLoading}
             className="flex items-center space-x-2"
           >

@@ -287,8 +287,8 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
   const checkWhatsAppStatus = async (instanceName: string) => {
     try {
       const status = await evolutionApiService.getInstanceStatus(instanceName);
-      setWhatsappStatus(status.instance.status === 'open' ? 'connected' : 'disconnected');
-      console.log('📱 Status WhatsApp:', status.instance.status);
+      setWhatsappStatus(status.instance.state === 'open' ? 'connected' : 'disconnected');
+      console.log('📱 Status WhatsApp:', status.instance.state);
     } catch (error) {
       console.error('❌ Erro ao verificar status WhatsApp:', error);
       setWhatsappStatus('disconnected');

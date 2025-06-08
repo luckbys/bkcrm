@@ -641,4 +641,624 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
       api_online: false
     };
   }
+};
+
+// 🔧 COMANDOS DE DEBUG EVOLUTION API
+
+// Helper para testar conectividade com Evolution API
+(window as any).testEvolutionConnection = async () => {
+  console.log('🔗 [DEV] Testando conectividade Evolution API...');
+  
+  try {
+    // Importar dinamicamente o serviço
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    const result = await evolutionApiService.testConnection();
+    
+    if (result.success) {
+      console.log('✅ [DEV] Evolution API conectada com sucesso!');
+      console.log('📊 [DEV] Dados da resposta:', result.data);
+    } else {
+      console.error('❌ [DEV] Falha na conectividade:', result.error);
+      console.error('📊 [DEV] Status HTTP:', result.status);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ [DEV] Erro inesperado:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para listar todas as instâncias existentes
+(window as any).listEvolutionInstances = async () => {
+  console.log('📋 [DEV] Listando instâncias existentes...');
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const instances = await evolutionApiService.listInstances();
+    
+    console.log(`✅ [DEV] Encontradas ${instances?.length || 0} instância(s):`);
+    instances?.forEach((instance: any, index: number) => {
+      // Campos corretos baseados na resposta da API
+      const instanceName = instance.name || instance.instanceName || instance.instance?.instanceName || 'Nome não disponível';
+      const status = instance.connectionStatus || instance.status || instance.instance?.status || 'Status não disponível';
+      const id = instance.id || 'ID não disponível';
+      
+      console.log(`${index + 1}. Nome: "${instanceName}", Status: ${status}, ID: ${id}`);
+    });
+    
+    return instances || [];
+  } catch (error) {
+    console.error('❌ [DEV] Erro ao listar instâncias:', error);
+    return [];
+  }
+};
+
+// Helper para criar uma instância de teste
+(window as any).createTestInstance = async (instanceName = 'test-' + Date.now()) => {
+  console.log(`🆕 [DEV] Criando instância de teste: ${instanceName}`);
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    const result = await evolutionApiService.testCreateInstance(instanceName);
+    
+    if (result.success) {
+      console.log('✅ [DEV] Instância criada com sucesso!');
+      console.log('📊 [DEV] Dados da instância:', result.data);
+      console.log(`💡 [DEV] Use: testInstanceQRCode('${instanceName}') para obter QR Code`);
+    } else {
+      console.error('❌ [DEV] Falha ao criar instância:', result.error);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ [DEV] Erro ao criar instância:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para testar QR Code de uma instância
+(window as any).testInstanceQRCode = async (instanceName = 'test') => {
+  console.log(`📱 [DEV] Testando QR Code para instância: ${instanceName}`);
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    // Verificar se existe primeiro
+    const exists = await evolutionApiService.instanceExists(instanceName);
+    console.log(`🔍 [DEV] Instância ${instanceName} existe:`, exists);
+    
+    if (!exists) {
+      console.log('⚠️ [DEV] Instância não existe. Criando...');
+      const createResult = await evolutionApiService.testCreateInstance(instanceName);
+      
+      if (!createResult.success) {
+        throw new Error('Falha ao criar instância: ' + createResult.error);
+      }
+      
+      console.log('✅ [DEV] Instância criada. Aguardando estabilização...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    
+    // Tentar obter QR Code
+    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
+    
+    if (qrResult && qrResult.base64) {
+      console.log('✅ [DEV] QR Code obtido com sucesso!');
+      console.log('📱 [DEV] QR Code base64 length:', qrResult.base64.length);
+      
+      // Mostrar QR Code no console (se for pequeno)
+      if (qrResult.base64.length < 1000) {
+        console.log('📊 [DEV] QR Code data:', qrResult);
+      }
+      
+      return { success: true, qrCode: qrResult };
+    } else {
+      throw new Error('QR Code não foi gerado');
+    }
+    
+  } catch (error) {
+    console.error('❌ [DEV] Erro no teste de QR Code:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para verificar status de uma instância
+(window as any).checkInstanceStatus = async (instanceName = 'test') => {
+  console.log(`📊 [DEV] Verificando status da instância: ${instanceName}`);
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const status = await evolutionApiService.getInstanceStatus(instanceName);
+    
+    console.log('✅ [DEV] Status obtido:', status);
+    return status;
+  } catch (error) {
+    console.error('❌ [DEV] Erro ao verificar status:', error);
+    return { error };
+  }
+};
+
+// Helper para reiniciar conexão de uma instância
+(window as any).restartInstanceConnection = async (instanceName = 'test') => {
+  console.log(`🔄 [DEV] Reiniciando conexão da instância: ${instanceName}`);
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const result = await evolutionApiService.restartInstanceConnection(instanceName);
+    
+    console.log('✅ [DEV] Conexão reiniciada:', result);
+    return result;
+  } catch (error) {
+    console.error('❌ [DEV] Erro ao reiniciar conexão:', error);
+    return { error };
+  }
+};
+
+// Helper para deletar uma instância
+(window as any).deleteTestInstance = async (instanceName = 'test') => {
+  console.log(`🗑️ [DEV] Deletando instância: ${instanceName}`);
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    await evolutionApiService.deleteInstance(instanceName);
+    
+    console.log('✅ [DEV] Instância deletada com sucesso!');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [DEV] Erro ao deletar instância:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para mostrar todos os comandos Evolution disponíveis
+(window as any).evolutionCommands = () => {
+  console.log(`
+🔧 COMANDOS EVOLUTION API DISPONÍVEIS:
+
+📋 DIAGNÓSTICO:
+• testEvolutionConnection() - Testa conectividade básica
+• listEvolutionInstances() - Lista todas as instâncias
+• checkInstanceStatus('nomeInstancia') - Verifica status específico
+• debugInstanceNames() - 🆕 Investiga problemas de nomes de instâncias
+
+🆕 CRIAÇÃO E GERENCIAMENTO:
+• createTestInstance('nome') - Cria nova instância
+• deleteTestInstance('nome') - Remove instância
+
+📱 QR CODE E CONEXÃO:
+• testInstanceQRCode('nome') - Testa geração de QR Code
+• testFinanceiroQRCode() - Testa QR Code da instância financeiro-encontra
+• testCorrectInstance() - 🆕 Testa QR Code da instância financeiro correta
+• validateQRCodeFormat('qrString') - Valida formato do QR Code
+• restartInstanceConnection('nome') - Reinicia conexão
+• testEvolutionStateField() - 🔧 Testa correção do campo "state" vs "status"
+
+💡 EXEMPLO DE USO COMPLETO:
+1. testEvolutionConnection()
+2. debugInstanceNames() (🆕 para ver instâncias existentes)
+3. testCorrectInstance() (🆕 testa automaticamente a instância correta)
+
+🧪 TESTE ESPECÍFICO (SUA INSTÂNCIA):
+• testFinanceiroQRCode() - Testa a instância financeiro-encontra
+• testCorrectInstance() - 🆕 Detecta e testa automaticamente
+
+🔧 SOLUÇÃO ATUAL (RECOMENDADO):
+• debugInstanceNames() - Ver qual instância realmente existe
+• testCorrectInstance() - Testar QR Code da instância encontrada
+
+⚠️ SOLUÇÃO DE PROBLEMAS:
+• Se QR Code não aparecer: restartInstanceConnection('nome')
+• Se instância não existir: createTestInstance('nome')
+• Se status estiver inconsistente: deleteTestInstance('nome') → createTestInstance('nome')
+• Se QR Code com formato inválido: validateQRCodeFormat('string')
+• Se erro 404: debugInstanceNames() para ver instâncias existentes
+  `);
+};
+
+// Mostrar comandos disponíveis no carregamento
+console.log('🔧 [DEV] Evolution API Debug Commands carregados!');
+console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
+
+// Helper específico para testar a instância financeiro-encontra
+(window as any).testFinanceiroQRCode = async () => {
+  console.log('📱 [DEV] Testando QR Code da instância financeiro-encontra...');
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    // Verificar status primeiro
+    const status = await evolutionApiService.getInstanceStatus('financeiro-encontra');
+    console.log('📊 [DEV] Status atual:', status);
+    
+    // Tentar obter QR Code
+    const qrResult = await evolutionApiService.getInstanceQRCode('financeiro-encontra');
+    
+    if (qrResult && qrResult.base64) {
+      console.log('✅ [DEV] QR Code obtido com sucesso!');
+      console.log('📱 [DEV] QR Code length:', qrResult.base64.length);
+      console.log('🔍 [DEV] QR Code prefix:', qrResult.base64.substring(0, 50));
+      
+      // Verificar se há duplicação
+      if (qrResult.base64.includes('data:image/png;base64,data:image/png;base64,')) {
+        console.error('❌ [DEV] DUPLICAÇÃO DETECTADA no QR Code!');
+      } else {
+        console.log('✅ [DEV] QR Code formatado corretamente');
+      }
+      
+      return { success: true, qrCode: qrResult.base64 };
+    } else {
+      throw new Error('QR Code não foi gerado');
+    }
+    
+  } catch (error) {
+    console.error('❌ [DEV] Erro no teste de QR Code:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para verificar formatação de QR Code
+(window as any).validateQRCodeFormat = (qrCodeString: string) => {
+  console.log('🔍 [DEV] Validando formato do QR Code...');
+  
+  if (!qrCodeString) {
+    console.error('❌ [DEV] QR Code vazio');
+    return false;
+  }
+  
+  if (qrCodeString.includes('data:image/png;base64,data:image/png;base64,')) {
+    console.error('❌ [DEV] DUPLICAÇÃO DETECTADA!');
+    console.log('🔧 [DEV] QR Code duplicado:', qrCodeString.substring(0, 100) + '...');
+    return false;
+  }
+  
+  if (qrCodeString.startsWith('data:image/png;base64,')) {
+    console.log('✅ [DEV] Formato correto');
+    return true;
+  }
+  
+  console.warn('⚠️ [DEV] Formato inesperado:', qrCodeString.substring(0, 50));
+  return false;
+};
+
+// Helper específico para debug do problema atual
+(window as any).debugInstanceNames = async () => {
+  console.log('🔍 [DEV] Investigando problemas de nomes de instâncias...');
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    // 1. Listar todas as instâncias
+    console.log('📋 [DEV] Listando instâncias existentes...');
+    const instances = await evolutionApiService.listInstances();
+    
+    if (instances && instances.length > 0) {
+      console.log(`✅ [DEV] Encontradas ${instances.length} instância(s):`);
+      instances.forEach((instance: any, index: number) => {
+        // Usar campos corretos da API
+        const instanceName = instance.name || instance.instanceName || 'Nome não disponível';
+        const status = instance.connectionStatus || instance.status || 'Status não disponível';
+        const id = instance.id || 'ID não disponível';
+        
+        console.log(`${index + 1}. Nome: "${instanceName}", Status: ${status}, ID: ${id}`);
+        
+        // Verificar se alguma contém "financeiro"
+        if (instanceName.includes('financeiro')) {
+          console.log(`   📍 [DEV] Instância do financeiro encontrada: "${instanceName}"`);
+        }
+      });
+    } else {
+      console.log('❌ [DEV] Nenhuma instância encontrada');
+    }
+    
+    // 2. Testar instâncias específicas
+    const instancesToTest = ['financeiro-encontra', 'financeiro-financeiro'];
+    
+    for (const instanceName of instancesToTest) {
+      console.log(`\n🧪 [DEV] Testando instância: "${instanceName}"`);
+      
+      try {
+        const status = await evolutionApiService.getInstanceStatus(instanceName);
+        console.log(`✅ [DEV] "${instanceName}" existe! Status:`, status);
+      } catch (error: any) {
+        if (error.message.includes('404')) {
+          console.log(`❌ [DEV] "${instanceName}" NÃO EXISTE (404)`);
+        } else {
+          console.log(`⚠️ [DEV] "${instanceName}" erro:`, error.message);
+        }
+      }
+    }
+    
+    return { success: true, instances };
+  } catch (error) {
+    console.error('❌ [DEV] Erro no debug:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para testar QR Code com instância correta
+(window as any).testCorrectInstance = async () => {
+  console.log('🎯 [DEV] Testando com instância correta...');
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    // Primeiro descobrir qual instância do financeiro existe
+    const instances = await evolutionApiService.listInstances();
+    const financeiroInstance = instances?.find((inst: any) => {
+      const name = inst.name || inst.instanceName || '';
+      return name.includes('financeiro');
+    });
+    
+    if (!financeiroInstance) {
+      console.error('❌ [DEV] Nenhuma instância do financeiro encontrada');
+      return { success: false, error: 'Instância não encontrada' };
+    }
+    
+    const instanceName = financeiroInstance.name || financeiroInstance.instanceName;
+    console.log(`📱 [DEV] Testando QR Code da instância encontrada: "${instanceName}"`);
+    
+    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
+    
+    if (qrResult) {
+      console.log('✅ [DEV] QR Code obtido com sucesso!');
+      console.log('📊 [DEV] Estrutura da resposta:', qrResult);
+      return { success: true, instanceName, qrCode: qrResult };
+    } else {
+      throw new Error('QR Code não foi gerado');
+    }
+    
+  } catch (error) {
+    console.error('❌ [DEV] Erro no teste:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper específico para testar a instância financeiro-encontra (que sabemos que existe)
+(window as any).testFinanceiroEncontra = async () => {
+  console.log('📱 [DEV] Testando QR Code da instância financeiro-encontra...');
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    // Testar diretamente a instância que sabemos que existe
+    const instanceName = 'financeiro-encontra';
+    
+    // Verificar status primeiro
+    console.log(`🔍 [DEV] Verificando status de: ${instanceName}`);
+    const status = await evolutionApiService.getInstanceStatus(instanceName);
+    console.log('📊 [DEV] Status atual:', status);
+    
+    // Se status é "connecting", é perfeito para QR Code
+    const statusData = status as any;
+    if (statusData.instance?.state === 'connecting') {
+      console.log('✅ [DEV] Status "connecting" - ideal para QR Code');
+    }
+    
+    // Tentar obter QR Code
+    console.log(`📱 [DEV] Obtendo QR Code...`);
+    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
+    
+    if (qrResult) {
+      console.log('✅ [DEV] QR Code obtido com sucesso!');
+      console.log('📊 [DEV] Estrutura completa da resposta:', qrResult);
+      
+      // Verificar campos específicos
+      const qrData = qrResult as any;
+      
+      if (qrData.code) {
+        console.log('📱 [DEV] Campo "code" encontrado:', qrData.code.substring(0, 50) + '...');
+      }
+      
+      if (qrData.base64) {
+        console.log('🖼️ [DEV] Campo "base64" encontrado:', qrData.base64.substring(0, 50) + '...');
+        
+        // Verificar se é válido
+        if (qrData.base64.startsWith('data:image/')) {
+          console.log('✅ [DEV] Base64 formatado corretamente para exibição');
+        } else {
+          console.log('⚠️ [DEV] Base64 pode precisar de formatação adicional');
+        }
+      }
+      
+      if (qrData.pairingCode) {
+        console.log('📲 [DEV] Pairing Code encontrado:', qrData.pairingCode);
+      }
+      
+      return { success: true, instanceName, qrCode: qrResult };
+    } else {
+      throw new Error('QR Code não foi gerado');
+    }
+    
+  } catch (error) {
+    console.error('❌ [DEV] Erro no teste:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para debug de QR Code com display visual
+(window as any).debugQRCodeGeneration = async () => {
+  console.log('🔍 [DEV] Debug completo de geração de QR Code...');
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    // Testar a instância que sabemos que existe
+    const instanceName = 'financeiro-encontra';
+    
+    console.log(`📱 [DEV] Testando QR Code para: ${instanceName}`);
+    
+    // Obter QR Code
+    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
+    
+    if (qrResult) {
+      console.log('✅ [DEV] QR Code obtido:', qrResult);
+      
+      // Se temos o código textual, criar uma imagem simples
+      if (qrResult.code && !qrResult.base64) {
+        console.log('🎨 [DEV] Gerando imagem QR Code com API externa...');
+        
+        try {
+          // Usar API simples para gerar QR Code
+          const qrText = encodeURIComponent(qrResult.code);
+          const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrText}`;
+          
+          console.log('🖼️ [DEV] URL da imagem QR Code:', qrImageUrl);
+          
+          // Criar elemento de imagem para testar
+          const img = document.createElement('img');
+          img.src = qrImageUrl;
+          img.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 9999;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+          `;
+          
+          // Adicionar botão de fechar
+          const closeBtn = document.createElement('button');
+          closeBtn.innerHTML = '❌ Fechar';
+          closeBtn.style.cssText = `
+            position: fixed;
+            top: calc(50% - 200px);
+            left: calc(50% + 100px);
+            z-index: 10000;
+            background: #ff4444;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+          `;
+          closeBtn.onclick = () => {
+            document.body.removeChild(img);
+            document.body.removeChild(closeBtn);
+          };
+          
+          document.body.appendChild(img);
+          document.body.appendChild(closeBtn);
+          
+          console.log('📱 [DEV] QR Code exibido na tela! Clique no botão vermelho para fechar.');
+          
+          return { success: true, qrCode: qrResult, imageUrl: qrImageUrl };
+        } catch (imgError) {
+          console.error('❌ [DEV] Erro ao gerar imagem:', imgError);
+        }
+      }
+      
+      // Se já temos base64, exibir
+      if (qrResult.base64) {
+        console.log('📱 [DEV] Base64 encontrado, exibindo...');
+        
+        const img = document.createElement('img');
+        img.src = qrResult.base64;
+        img.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          z-index: 9999;
+          background: white;
+          padding: 20px;
+          border-radius: 10px;
+          box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        `;
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '❌ Fechar';
+        closeBtn.style.cssText = `
+          position: fixed;
+          top: calc(50% - 200px);
+          left: calc(50% + 100px);
+          z-index: 10000;
+          background: #ff4444;
+          color: white;
+          border: none;
+          padding: 10px;
+          border-radius: 5px;
+          cursor: pointer;
+        `;
+        closeBtn.onclick = () => {
+          document.body.removeChild(img);
+          document.body.removeChild(closeBtn);
+        };
+        
+        document.body.appendChild(img);
+        document.body.appendChild(closeBtn);
+        
+        console.log('📱 [DEV] QR Code Base64 exibido na tela!');
+      }
+      
+      return { success: true, qrCode: qrResult };
+    } else {
+      console.error('❌ [DEV] Nenhum QR Code obtido');
+      return { success: false, error: 'QR Code não obtido' };
+    }
+    
+  } catch (error) {
+    console.error('❌ [DEV] Erro no debug:', error);
+    return { success: false, error };
+  }
+};
+
+// Helper para testar a correção do campo 'state' da Evolution API
+(window as any).testEvolutionStateField = async () => {
+  console.log('🔍 [DEV] Testando correção do campo "state" da Evolution API...');
+  
+  try {
+    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    
+    // Testar com instâncias conhecidas
+    const instancesToTest = ['financeiro-encontra', 'marcas', 'vendas-bd1'];
+    
+    for (const instanceName of instancesToTest) {
+      console.log(`\n📱 [DEV] Testando: ${instanceName}`);
+      
+      try {
+        const response = await evolutionApiService.getInstanceStatus(instanceName);
+        console.log('✅ [DEV] Resposta da API:', response);
+        
+        // Verificar se tem o campo state
+        if (response.instance?.state) {
+          console.log(`✅ [DEV] Campo "state" encontrado: ${response.instance.state}`);
+          
+          // Verificar se o mapeamento está correto
+          const isConnected = response.instance.state === 'open';
+          const status = response.instance.state === 'open' ? 'open' : 'close';
+          
+          console.log(`📊 [DEV] Status mapeado: ${status}, Conectado: ${isConnected}`);
+          
+          // Simular o que acontece no DepartmentEvolutionManager
+          const evolutionStatus = response.instance.state === 'open' ? 'open' : 'close';
+          const connected = response.instance.state === 'open';
+          
+          console.log(`🎯 [DEV] Para interface: status="${evolutionStatus}", connected=${connected}`);
+          
+        } else {
+          console.error(`❌ [DEV] Campo "state" não encontrado em ${instanceName}`);
+          console.log('📋 [DEV] Campos disponíveis:', Object.keys(response.instance || {}));
+        }
+        
+      } catch (error: any) {
+        if (error.message.includes('404')) {
+          console.log(`⚠️ [DEV] Instância ${instanceName} não existe`);
+        } else {
+          console.error(`❌ [DEV] Erro ao testar ${instanceName}:`, error.message);
+        }
+      }
+    }
+    
+    return { success: true, message: 'Teste do campo state concluído' };
+    
+  } catch (error) {
+    console.error('❌ [DEV] Erro no teste:', error);
+    return { success: false, error };
+  }
 }; 

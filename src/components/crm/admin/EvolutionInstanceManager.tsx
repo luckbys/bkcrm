@@ -25,7 +25,10 @@ import {
   Download,
   Copy,
   Power,
-  PowerOff
+  PowerOff,
+  Bug,
+  TestTube,
+  Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +50,7 @@ export const EvolutionInstanceManager = () => {
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isDebugging, setIsDebugging] = useState(false);
   
   // Estados para criação de instância
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -60,6 +64,10 @@ export const EvolutionInstanceManager = () => {
   const [qrRefreshCount, setQrRefreshCount] = useState(0);
   const [isQRLoading, setIsQRLoading] = useState(false);
   
+  // Estados para debug
+  const [showDebugModal, setShowDebugModal] = useState(false);
+  const [debugResults, setDebugResults] = useState<any>(null);
+
   // Carregamento inicial
   useEffect(() => {
     loadInstances();
@@ -71,15 +79,35 @@ export const EvolutionInstanceManager = () => {
   const loadInstances = async () => {
     setIsLoading(true);
     try {
-      // Aqui você buscaria as instâncias do seu banco de dados
-      // Por enquanto, vou simular algumas instâncias
+      // Tentar carregar instâncias reais da Evolution API
+      try {
+        const realInstances = await evolutionApiService.listInstances();
+        
+        if (realInstances && realInstances.length > 0) {
+          const formattedInstances: EvolutionInstance[] = realInstances.map((inst: any) => ({
+            instanceName: inst.instanceName || inst.instance?.instanceName,
+            status: inst.instance?.status || 'unknown',
+            connected: inst.instance?.status === 'open',
+            lastUpdate: new Date(),
+            department: 'Carregado da API'
+          }));
+          
+          setInstances(formattedInstances);
+          console.log('✅ Instâncias carregadas da Evolution API:', formattedInstances.length);
+          return;
+        }
+      } catch (apiError) {
+        console.warn('⚠️ Não foi possível carregar da Evolution API, usando dados mock:', apiError);
+      }
+
+      // Fallback para dados mock
       const mockInstances: EvolutionInstance[] = [
         {
           instanceName: 'vendas-principal',
-          status: 'open',
+          status: 'close',
           department: 'Vendas',
           phone: '(11) 99999-8888',
-          connected: true,
+          connected: false,
           lastUpdate: new Date()
         },
         {
@@ -91,33 +119,9 @@ export const EvolutionInstanceManager = () => {
         }
       ];
       
-      // Verificar status real de cada instância
-      const updatedInstances = await Promise.allSettled(
-        mockInstances.map(async (instance) => {
-          try {
-            const statusResponse = await evolutionApiService.getInstanceStatus(instance.instanceName);
-            return {
-              ...instance,
-              status: statusResponse.instance.status,
-              connected: statusResponse.instance.status === 'open',
-              lastUpdate: new Date()
-            };
-          } catch (error) {
-            return {
-              ...instance,
-              status: 'unknown' as const,
-              connected: false,
-              lastUpdate: new Date()
-            };
-          }
-        })
-      );
+      setInstances(mockInstances);
+      console.log('ℹ️ Usando instâncias mock');
       
-      const finalInstances = updatedInstances.map((result, index) => 
-        result.status === 'fulfilled' ? result.value : mockInstances[index]
-      );
-      
-      setInstances(finalInstances);
     } catch (error) {
       console.error('Erro ao carregar instâncias:', error);
       toast({
@@ -144,12 +148,14 @@ export const EvolutionInstanceManager = () => {
     try {
       console.log(`🚀 Criando instância: ${newInstanceName}`);
       
-      const response = await evolutionApiService.createInstance(
-        newInstanceName.trim(),
-        `${window.location.origin}/api/webhooks/evolution`
-      );
+      // Usar a função de teste melhorada
+      const result = await evolutionApiService.testCreateInstance(newInstanceName.trim());
       
-      console.log('✅ Instância criada:', response);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
+      console.log('✅ Instância criada:', result.data);
       
       // Adicionar à lista local
       const newInstance: EvolutionInstance = {
@@ -177,13 +183,58 @@ export const EvolutionInstanceManager = () => {
       
     } catch (error: any) {
       console.error('❌ Erro ao criar instância:', error);
+      
+      // Mostrar erro específico
+      let errorMessage = error.message;
+      if (error.message.includes('API Key')) {
+        errorMessage = 'Chave de API inválida. Verifique suas configurações.';
+      } else if (error.message.includes('já existe')) {
+        errorMessage = 'Esta instância já existe. Escolha um nome diferente.';
+      } else if (error.message.includes('conectar')) {
+        errorMessage = 'Evolution API não está respondendo. Verifique se está rodando.';
+      }
+      
       toast({
         title: "❌ Erro ao criar instância",
-        description: error.message || "Falha na criação da instância",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const runDebugTest = async () => {
+    setIsDebugging(true);
+    setShowDebugModal(true);
+    
+    try {
+      console.log('🔍 Iniciando diagnóstico da Evolution API...');
+      const results = await evolutionApiService.debugEvolutionApi();
+      setDebugResults(results);
+      
+      if (results.success) {
+        toast({
+          title: "✅ Diagnóstico concluído",
+          description: "Verifique o console para detalhes completos",
+        });
+      } else {
+        toast({
+          title: "⚠️ Problemas detectados",
+          description: "Verifique as configurações da Evolution API",
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Erro no diagnóstico:', error);
+      setDebugResults({ success: false, error: error.message });
+      toast({
+        title: "❌ Erro no diagnóstico",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsDebugging(false);
     }
   };
 
@@ -192,33 +243,130 @@ export const EvolutionInstanceManager = () => {
     setQrInstance(instanceName);
     setShowQRModal(true);
     setQrRefreshCount(0);
+    setCurrentQRCode('');
     
     try {
-      console.log(`📱 Obtendo QR Code para: ${instanceName}`);
+      console.log(`📱 Iniciando conexão para: ${instanceName}`);
       
-      const qrResponse = await evolutionApiService.getInstanceQRCode(instanceName);
+      // Verificar se a instância existe
+      const exists = await evolutionApiService.instanceExists(instanceName);
       
-      if (qrResponse.base64) {
-        setCurrentQRCode(`data:image/png;base64,${qrResponse.base64}`);
-        console.log('✅ QR Code obtido com sucesso');
+      if (!exists) {
+        console.log(`⚠️ Instância "${instanceName}" não encontrada. Tentando criar...`);
         
         toast({
-          title: "📱 QR Code gerado!",
-          description: "Escaneie o código com seu WhatsApp para conectar",
+          title: "⚠️ Instância não encontrada",
+          description: "Criando instância automaticamente...",
+        });
+        
+        try {
+          const createResult = await evolutionApiService.testCreateInstance(instanceName);
+          
+          if (!createResult.success) {
+            throw new Error(createResult.error);
+          }
+          
+          console.log('✅ Instância criada automaticamente');
+          toast({
+            title: "✅ Instância criada",
+            description: `Instância "${instanceName}" foi criada. Aguarde o QR Code...`,
+          });
+          
+          // Aguardar um pouco para a instância se estabilizar
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+        } catch (createError: any) {
+          console.error('❌ Erro ao criar instância automaticamente:', createError);
+          setIsQRLoading(false);
+          toast({
+            title: "❌ Erro ao criar instância",
+            description: createError.message || "Não foi possível criar a instância automaticamente",
+            variant: "destructive"
+          });
+          return;
+        }
+      }
+      
+      // Tentar obter QR Code
+      const qrResponse = await evolutionApiService.getInstanceQRCode(instanceName);
+      
+      if (qrResponse && qrResponse.base64) {
+        // O serviço já retorna com o prefixo correto
+        setCurrentQRCode(qrResponse.base64);
+        
+        toast({
+          title: "📱 QR Code gerado",
+          description: "Escaneie com seu WhatsApp para conectar",
         });
       } else {
-        throw new Error('QR Code não retornado pela API');
+        throw new Error('QR Code não foi gerado pela API');
       }
+      
     } catch (error: any) {
-      console.error('❌ Erro ao obter QR Code:', error);
-      setShowQRModal(false);
+      console.error('❌ Erro ao conectar instância:', error);
+      setCurrentQRCode('');
+      
+      let errorMessage = error.message;
+      let showRetryOption = false;
+      
+      if (error.message.includes('não existe') || error.message.includes('404')) {
+        errorMessage = `Instância "${instanceName}" não encontrada. Verifique se foi criada corretamente.`;
+        showRetryOption = true;
+      } else if (error.message.includes('já está conectada')) {
+        errorMessage = 'Instância já está conectada. Desconecte primeiro se precisar gerar novo QR Code.';
+      } else if (error.message.includes('estado inválido')) {
+        errorMessage = 'Instância em estado inválido. Tente reiniciar a conexão.';
+        showRetryOption = true;
+      }
+      
       toast({
         title: "❌ Erro ao gerar QR Code",
-        description: error.message || "Não foi possível gerar o QR Code",
-        variant: "destructive"
+        description: errorMessage,
+        variant: "destructive",
+        action: showRetryOption ? (
+          <Button 
+            size="sm" 
+            onClick={() => handleInstanceRecovery(instanceName)}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Tentar Corrigir
+          </Button>
+        ) : undefined
       });
     } finally {
       setIsQRLoading(false);
+    }
+  };
+
+  const handleInstanceRecovery = async (instanceName: string) => {
+    console.log(`🔧 Tentando recuperar instância: ${instanceName}`);
+    
+    try {
+      toast({
+        title: "🔧 Recuperando instância",
+        description: "Tentando corrigir problemas de conexão...",
+      });
+      
+      // Tentar reiniciar a conexão
+      await evolutionApiService.restartInstanceConnection(instanceName);
+      
+      toast({
+        title: "✅ Instância recuperada",
+        description: "Tentando gerar QR Code novamente...",
+      });
+      
+      // Aguardar e tentar conectar novamente
+      setTimeout(() => {
+        connectInstance(instanceName);
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('❌ Erro na recuperação:', error);
+      toast({
+        title: "❌ Falha na recuperação",
+        description: "Não foi possível recuperar a instância. Tente criar uma nova.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -232,7 +380,7 @@ export const EvolutionInstanceManager = () => {
       const qrResponse = await evolutionApiService.getInstanceQRCode(qrInstance);
       
       if (qrResponse.base64) {
-        setCurrentQRCode(`data:image/png;base64,${qrResponse.base64}`);
+        setCurrentQRCode(qrResponse.base64);
         toast({
           title: "🔄 QR Code atualizado",
           description: "Novo código gerado com sucesso",
@@ -323,6 +471,16 @@ export const EvolutionInstanceManager = () => {
         </div>
         
         <div className="flex items-center space-x-3">
+          <Button 
+            variant="outline" 
+            onClick={() => setShowDebugModal(true)}
+            disabled={isDebugging}
+            className="flex items-center space-x-2 text-red-600 border-red-200 hover:bg-red-50"
+          >
+            <Bug className="w-4 h-4" />
+            <span>Debug API</span>
+          </Button>
+          
           <Button 
             variant="outline" 
             onClick={loadInstances} 
@@ -574,6 +732,132 @@ export const EvolutionInstanceManager = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+             {/* Modal de Debug */}
+       <Dialog open={showDebugModal} onOpenChange={setShowDebugModal}>
+         <DialogContent className="max-w-2xl">
+           <DialogHeader>
+             <DialogTitle className="flex items-center space-x-2">
+               <Bug className="w-5 h-5 text-red-600" />
+               <span>Diagnóstico da Evolution API</span>
+             </DialogTitle>
+             <DialogDescription>
+               Verifique a saúde e configuração da Evolution API
+             </DialogDescription>
+           </DialogHeader>
+           
+           <div className="space-y-6 py-4">
+             {/* Informações atuais */}
+             <div className="space-y-3">
+               <h3 className="font-medium text-gray-900 flex items-center">
+                 <Info className="w-4 h-4 mr-2 text-blue-600" />
+                 Configurações Atuais
+               </h3>
+               <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
+                 <div className="flex justify-between">
+                   <span className="text-gray-600">URL da API:</span>
+                   <span className="font-mono">{import.meta.env.VITE_EVOLUTION_API_URL || 'Não configurada'}</span>
+                 </div>
+                 <div className="flex justify-between">
+                   <span className="text-gray-600">API Key:</span>
+                   <span className="font-mono">
+                     {import.meta.env.VITE_EVOLUTION_API_KEY 
+                       ? `${import.meta.env.VITE_EVOLUTION_API_KEY.substring(0, 8)}...` 
+                       : '❌ Não configurada'}
+                   </span>
+                 </div>
+               </div>
+             </div>
+
+             {/* Botão de teste */}
+             <Button 
+               onClick={runDebugTest} 
+               disabled={isDebugging}
+               className="w-full bg-red-600 hover:bg-red-700"
+             >
+               {isDebugging ? (
+                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
+               ) : (
+                 <TestTube className="w-4 h-4 mr-2" />
+               )}
+               {isDebugging ? 'Executando Diagnóstico...' : 'Executar Diagnóstico Completo'}
+             </Button>
+
+             {/* Resultados do debug */}
+             {debugResults && (
+               <div className="space-y-4">
+                 <h3 className="font-medium text-gray-900 flex items-center">
+                   {debugResults.success ? (
+                     <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                   ) : (
+                     <XCircle className="w-4 h-4 mr-2 text-red-600" />
+                   )}
+                   Resultados do Diagnóstico
+                 </h3>
+                 
+                 <div className={cn(
+                   "p-4 rounded-lg text-sm",
+                   debugResults.success 
+                     ? "bg-green-50 border border-green-200" 
+                     : "bg-red-50 border border-red-200"
+                 )}>
+                   {debugResults.success ? (
+                     <div className="space-y-2">
+                       <div className="flex items-center text-green-800">
+                         <CheckCircle className="w-4 h-4 mr-2" />
+                         <span className="font-medium">Evolution API está funcionando!</span>
+                       </div>
+                       <p className="text-green-700">
+                         A conexão foi estabelecida com sucesso. Você pode criar instâncias.
+                       </p>
+                     </div>
+                   ) : (
+                     <div className="space-y-2">
+                       <div className="flex items-center text-red-800">
+                         <XCircle className="w-4 h-4 mr-2" />
+                         <span className="font-medium">Problemas detectados:</span>
+                       </div>
+                       <p className="text-red-700">{debugResults.error}</p>
+                       <div className="mt-3 p-3 bg-red-100 rounded text-red-800">
+                         <p className="font-medium mb-2">💡 Soluções sugeridas:</p>
+                         <ul className="space-y-1 text-sm list-disc list-inside">
+                           <li>Verifique se a Evolution API está rodando</li>
+                           <li>Confirme se a URL está correta no arquivo .env</li>
+                           <li>Verifique se a API Key está configurada corretamente</li>
+                           <li>Teste o acesso direto: {import.meta.env.VITE_EVOLUTION_API_URL}</li>
+                         </ul>
+                       </div>
+                     </div>
+                   )}
+                 </div>
+                 
+                 <p className="text-xs text-gray-500 flex items-center">
+                   <Info className="w-3 h-3 mr-1" />
+                   Verifique o console do navegador (F12) para logs detalhados
+                 </p>
+               </div>
+             )}
+           </div>
+           
+           <DialogFooter>
+             <Button variant="outline" onClick={() => setShowDebugModal(false)}>
+               Fechar
+             </Button>
+             {debugResults?.success && (
+               <Button 
+                 onClick={() => {
+                   setShowDebugModal(false);
+                   setShowCreateModal(true);
+                 }}
+                 className="bg-green-600 hover:bg-green-700"
+               >
+                 <Plus className="w-4 h-4 mr-2" />
+                 Criar Nova Instância
+               </Button>
+             )}
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
     </div>
   );
 }; 
