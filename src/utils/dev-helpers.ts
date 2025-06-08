@@ -510,9 +510,18 @@ checkTicketsTable()                               - Verifica estrutura da tabela
 📱 WhatsApp/Evolution API:
 testEvolutionAPI()                                - Testa funções da Evolution API
 testRealEvolutionAPI()                            - Testa conexão com Evolution API real
+testEvolutionStateField()                         - 🔧 Testa correção campo "state" vs "status"
+debugInstanceNames()                              - 🆕 Investiga problemas de nomes instâncias
+testFinanceiroEncontra()                          - 🧪 Testa instância financeiro-encontra
 createWhatsAppTestTicket()                        - Cria ticket de teste com WhatsApp
 simulateWhatsAppMessage(ticketId, mensagem?)      - Simula mensagem do WhatsApp
 cleanWhatsAppTestData()                           - Remove dados de teste WhatsApp
+
+🎫 ROTEAMENTO AUTOMÁTICO:
+testTicketAutoCreation()                          - 🆕 Testa criação automática de tickets  
+simulateMessage('phone', 'message', 'name')       - 🆕 Simula mensagem específica
+checkTicketsTable()                               - 🆕 Verifica estado da tabela tickets
+cleanTestTickets()                                - 🆕 Remove tickets automáticos de teste
 
 🔧 Diagnóstico de Migração:
 checkProfilesStructure()                          - Verifica estrutura tabela profiles
@@ -816,13 +825,20 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
 // Helper para mostrar todos os comandos Evolution disponíveis
 (window as any).evolutionCommands = () => {
   console.log(`
-🔧 COMANDOS EVOLUTION API DISPONÍVEIS:
+🔧 COMANDOS EVOLUTION API E TICKETS DISPONÍVEIS:
 
-📋 DIAGNÓSTICO:
+📋 DIAGNÓSTICO EVOLUTION:
 • testEvolutionConnection() - Testa conectividade básica
 • listEvolutionInstances() - Lista todas as instâncias
 • checkInstanceStatus('nomeInstancia') - Verifica status específico
 • debugInstanceNames() - 🆕 Investiga problemas de nomes de instâncias
+• testEvolutionStateField() - 🔧 Testa correção do campo "state" vs "status"
+
+🎫 ROTEAMENTO AUTOMÁTICO DE TICKETS:
+• testTicketAutoCreation() - 🆕 Testa criação automática de tickets
+• simulateMessage('phone', 'message', 'name') - 🆕 Simula mensagem específica
+• checkTicketsTable() - 🆕 Verifica estado da tabela de tickets
+• cleanTestTickets() - 🆕 Remove tickets de teste criados
 
 🆕 CRIAÇÃO E GERENCIAMENTO:
 • createTestInstance('nome') - Cria nova instância
@@ -1016,249 +1032,222 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
   }
 };
 
-// Helper específico para testar a instância financeiro-encontra (que sabemos que existe)
-(window as any).testFinanceiroEncontra = async () => {
-  console.log('📱 [DEV] Testando QR Code da instância financeiro-encontra...');
+// Helper para simular webhook da Evolution API
+(window as any).simulateWebhook = async (senderPhone: string, content: string, senderName?: string, instanceName?: string) => {
+  console.log('📨 [DEV] Simulando webhook Evolution API...');
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const { TicketRoutingService } = await import('@/services/ticketRoutingService');
     
-    // Testar diretamente a instância que sabemos que existe
-    const instanceName = 'financeiro-encontra';
+    const result = await TicketRoutingService.simulateIncomingMessage({
+      senderPhone: senderPhone,
+      senderName: senderName || `Cliente ${senderPhone.slice(-4)}`,
+      content: content,
+      instanceName: instanceName || 'financeiro-encontra'
+    });
     
-    // Verificar status primeiro
-    console.log(`🔍 [DEV] Verificando status de: ${instanceName}`);
-    const status = await evolutionApiService.getInstanceStatus(instanceName);
-    console.log('📊 [DEV] Status atual:', status);
+    console.log('✅ [DEV] Webhook processado:', result);
     
-    // Se status é "connecting", é perfeito para QR Code
-    const statusData = status as any;
-    if (statusData.instance?.state === 'connecting') {
-      console.log('✅ [DEV] Status "connecting" - ideal para QR Code');
+    // Mostrar notificação visual
+    if (result.action === 'created') {
+      console.log(`🎫 [DEV] NOVO TICKET CRIADO: #${result.ticketId}`);
+      console.log(`📱 [DEV] Cliente: ${senderName || senderPhone}`);
+      console.log(`💬 [DEV] Mensagem: "${content}"`);
+    } else if (result.action === 'updated') {
+      console.log(`💬 [DEV] MENSAGEM ADICIONADA AO TICKET: #${result.ticketId}`);
+      console.log(`📱 [DEV] Cliente: ${senderName || senderPhone}`);
+      console.log(`💬 [DEV] Nova mensagem: "${content}"`);
     }
     
-    // Tentar obter QR Code
-    console.log(`📱 [DEV] Obtendo QR Code...`);
-    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
-    
-    if (qrResult) {
-      console.log('✅ [DEV] QR Code obtido com sucesso!');
-      console.log('📊 [DEV] Estrutura completa da resposta:', qrResult);
-      
-      // Verificar campos específicos
-      const qrData = qrResult as any;
-      
-      if (qrData.code) {
-        console.log('📱 [DEV] Campo "code" encontrado:', qrData.code.substring(0, 50) + '...');
-      }
-      
-      if (qrData.base64) {
-        console.log('🖼️ [DEV] Campo "base64" encontrado:', qrData.base64.substring(0, 50) + '...');
-        
-        // Verificar se é válido
-        if (qrData.base64.startsWith('data:image/')) {
-          console.log('✅ [DEV] Base64 formatado corretamente para exibição');
-        } else {
-          console.log('⚠️ [DEV] Base64 pode precisar de formatação adicional');
-        }
-      }
-      
-      if (qrData.pairingCode) {
-        console.log('📲 [DEV] Pairing Code encontrado:', qrData.pairingCode);
-      }
-      
-      return { success: true, instanceName, qrCode: qrResult };
-    } else {
-      throw new Error('QR Code não foi gerado');
-    }
+    return result;
     
   } catch (error) {
-    console.error('❌ [DEV] Erro no teste:', error);
+    console.error('❌ [DEV] Erro ao simular webhook:', error);
     return { success: false, error };
   }
 };
 
-// Helper para debug de QR Code com display visual
-(window as any).debugQRCodeGeneration = async () => {
-  console.log('🔍 [DEV] Debug completo de geração de QR Code...');
+// Helper para simular uma conversa completa
+(window as any).simulateConversation = async (phone: string, clientName?: string) => {
+  console.log(`🎭 [DEV] Simulando conversa completa para ${phone}...`);
   
-  try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+  const name = clientName || `Cliente ${phone.slice(-4)}`;
+  const messages = [
+    'Olá! Preciso de ajuda com meu pedido.',
+    'Fiz uma compra ontem mas não recebi confirmação.',
+    'O número do pedido é #12345',
+    'Vocês podem verificar para mim?',
+    'É urgente, por favor!'
+  ];
+  
+  console.log(`📱 [DEV] Enviando ${messages.length} mensagens em sequência...`);
+  
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    console.log(`\n📨 [DEV] Mensagem ${i + 1}/${messages.length}: "${message}"`);
     
-    // Testar a instância que sabemos que existe
-    const instanceName = 'financeiro-encontra';
+    const result = await (window as any).simulateWebhook(phone, message, name);
     
-    console.log(`📱 [DEV] Testando QR Code para: ${instanceName}`);
-    
-    // Obter QR Code
-    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
-    
-    if (qrResult) {
-      console.log('✅ [DEV] QR Code obtido:', qrResult);
-      
-      // Se temos o código textual, criar uma imagem simples
-      if (qrResult.code && !qrResult.base64) {
-        console.log('🎨 [DEV] Gerando imagem QR Code com API externa...');
-        
-        try {
-          // Usar API simples para gerar QR Code
-          const qrText = encodeURIComponent(qrResult.code);
-          const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrText}`;
-          
-          console.log('🖼️ [DEV] URL da imagem QR Code:', qrImageUrl);
-          
-          // Criar elemento de imagem para testar
-          const img = document.createElement('img');
-          img.src = qrImageUrl;
-          img.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 9999;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-          `;
-          
-          // Adicionar botão de fechar
-          const closeBtn = document.createElement('button');
-          closeBtn.innerHTML = '❌ Fechar';
-          closeBtn.style.cssText = `
-            position: fixed;
-            top: calc(50% - 200px);
-            left: calc(50% + 100px);
-            z-index: 10000;
-            background: #ff4444;
-            color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 5px;
-            cursor: pointer;
-          `;
-          closeBtn.onclick = () => {
-            document.body.removeChild(img);
-            document.body.removeChild(closeBtn);
-          };
-          
-          document.body.appendChild(img);
-          document.body.appendChild(closeBtn);
-          
-          console.log('📱 [DEV] QR Code exibido na tela! Clique no botão vermelho para fechar.');
-          
-          return { success: true, qrCode: qrResult, imageUrl: qrImageUrl };
-        } catch (imgError) {
-          console.error('❌ [DEV] Erro ao gerar imagem:', imgError);
-        }
-      }
-      
-      // Se já temos base64, exibir
-      if (qrResult.base64) {
-        console.log('📱 [DEV] Base64 encontrado, exibindo...');
-        
-        const img = document.createElement('img');
-        img.src = qrResult.base64;
-        img.style.cssText = `
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          z-index: 9999;
-          background: white;
-          padding: 20px;
-          border-radius: 10px;
-          box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        `;
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '❌ Fechar';
-        closeBtn.style.cssText = `
-          position: fixed;
-          top: calc(50% - 200px);
-          left: calc(50% + 100px);
-          z-index: 10000;
-          background: #ff4444;
-          color: white;
-          border: none;
-          padding: 10px;
-          border-radius: 5px;
-          cursor: pointer;
-        `;
-        closeBtn.onclick = () => {
-          document.body.removeChild(img);
-          document.body.removeChild(closeBtn);
-        };
-        
-        document.body.appendChild(img);
-        document.body.appendChild(closeBtn);
-        
-        console.log('📱 [DEV] QR Code Base64 exibido na tela!');
-      }
-      
-      return { success: true, qrCode: qrResult };
-    } else {
-      console.error('❌ [DEV] Nenhum QR Code obtido');
-      return { success: false, error: 'QR Code não obtido' };
+    if (i === 0) {
+      console.log(`🎫 [DEV] Ticket principal: #${result.ticketId}`);
     }
     
-  } catch (error) {
-    console.error('❌ [DEV] Erro no debug:', error);
-    return { success: false, error };
+    // Aguardar um pouco entre mensagens (exceto a última)
+    if (i < messages.length - 1) {
+      console.log('⏱️ [DEV] Aguardando 2 segundos...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   }
+  
+  console.log('✅ [DEV] Conversa completa simulada!');
+  console.log('💡 [DEV] Verifique a sidebar de departamentos para ver as notificações');
 };
 
-// Helper para testar a correção do campo 'state' da Evolution API
-(window as any).testEvolutionStateField = async () => {
-  console.log('🔍 [DEV] Testando correção do campo "state" da Evolution API...');
+// Helper para testar cenários diferentes
+(window as any).runWebhookScenarios = async () => {
+  console.log('🎭 [DEV] Executando cenários de teste de webhook...');
   
-  try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+  const scenarios = [
+    {
+      name: 'João Silva - Cliente Novo',
+      phone: '5511999887766',
+      messages: ['Olá! Gostaria de conhecer seus serviços.', 'Vocês atendem na Vila Madalena?']
+    },
+    {
+      name: 'Maria Santos - Cliente Retornando', 
+      phone: '5511999887755',
+      messages: ['Oi, sou cliente e preciso de suporte.', 'Meu último pedido teve problema.']
+    },
+    {
+      name: 'Pedro Costa - Dúvida Técnica',
+      phone: '5511999887744', 
+      messages: ['Tenho uma dúvida técnica.', 'Como configuro a integração?']
+    }
+  ];
+  
+  console.log(`🎯 [DEV] Executando ${scenarios.length} cenários...`);
+  
+  for (let s = 0; s < scenarios.length; s++) {
+    const scenario = scenarios[s];
+    console.log(`\n📋 [DEV] Cenário ${s + 1}: ${scenario.name}`);
     
-    // Testar com instâncias conhecidas
-    const instancesToTest = ['financeiro-encontra', 'marcas', 'vendas-bd1'];
-    
-    for (const instanceName of instancesToTest) {
-      console.log(`\n📱 [DEV] Testando: ${instanceName}`);
+    for (let m = 0; m < scenario.messages.length; m++) {
+      const message = scenario.messages[m];
+      console.log(`  📱 Mensagem ${m + 1}: ${message}`);
       
-      try {
-        const response = await evolutionApiService.getInstanceStatus(instanceName);
-        console.log('✅ [DEV] Resposta da API:', response);
-        
-        // Verificar se tem o campo state
-        if (response.instance?.state) {
-          console.log(`✅ [DEV] Campo "state" encontrado: ${response.instance.state}`);
-          
-          // Verificar se o mapeamento está correto
-          const isConnected = response.instance.state === 'open';
-          const status = response.instance.state === 'open' ? 'open' : 'close';
-          
-          console.log(`📊 [DEV] Status mapeado: ${status}, Conectado: ${isConnected}`);
-          
-          // Simular o que acontece no DepartmentEvolutionManager
-          const evolutionStatus = response.instance.state === 'open' ? 'open' : 'close';
-          const connected = response.instance.state === 'open';
-          
-          console.log(`🎯 [DEV] Para interface: status="${evolutionStatus}", connected=${connected}`);
-          
-        } else {
-          console.error(`❌ [DEV] Campo "state" não encontrado em ${instanceName}`);
-          console.log('📋 [DEV] Campos disponíveis:', Object.keys(response.instance || {}));
-        }
-        
-      } catch (error: any) {
-        if (error.message.includes('404')) {
-          console.log(`⚠️ [DEV] Instância ${instanceName} não existe`);
-        } else {
-          console.error(`❌ [DEV] Erro ao testar ${instanceName}:`, error.message);
-        }
+      await (window as any).simulateWebhook(scenario.phone, message, scenario.name);
+      
+      // Aguardar entre mensagens
+      if (m < scenario.messages.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
     
-    return { success: true, message: 'Teste do campo state concluído' };
+    // Aguardar entre cenários
+    if (s < scenarios.length - 1) {
+      console.log('⏱️ [DEV] Aguardando próximo cenário...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+  
+  console.log('\n✅ [DEV] Todos os cenários executados!');
+  console.log('📊 [DEV] Execute checkTicketsTable() para ver os resultados');
+};
+
+// Helper para configurar webhook na Evolution API (simulado)
+(window as any).configureEvolutionWebhook = async () => {
+  console.log('🔧 [DEV] Configurando webhook na Evolution API...');
+  
+  const webhookUrl = `${window.location.origin}/api/webhooks/evolution`;
+  
+  console.log(`📡 [DEV] URL do webhook: ${webhookUrl}`);
+  console.log('⚠️ [DEV] ATENÇÃO: Este é um ambiente de desenvolvimento!');
+  console.log('💡 [DEV] Para produção, configure as variáveis na Evolution API:');
+  console.log('   WEBHOOK_GLOBAL_URL=' + webhookUrl);
+  console.log('   WEBHOOK_GLOBAL_ENABLED=true');
+  console.log('   WEBHOOK_EVENTS_MESSAGES_UPSERT=true');
+  
+  // Em desenvolvimento, registrar um simulador 
+  console.log('🎭 [DEV] Registrando simulador local...');
+  
+  // Simular configuração bem-sucedida
+  setTimeout(() => {
+    console.log('✅ [DEV] Webhook configurado com sucesso (simulado)');
+    console.log('🧪 [DEV] Use simulateWebhook() para testar');
+  }, 1000);
+  
+  return {
+    success: true,
+    url: webhookUrl,
+    message: 'Webhook configurado em modo desenvolvimento'
+  };
+};
+
+// Helper para mostrar status do sistema de roteamento
+(window as any).showRoutingStatus = async () => {
+  console.log('📊 [DEV] Status do Sistema de Roteamento de Tickets');
+  console.log('================================================');
+  
+  try {
+    const { supabase } = await import('@/lib/supabase');
+    
+    // Verificar instâncias ativas
+    const { data: instances } = await supabase
+      .from('evolution_instances') 
+      .select('instance_name, department_name, is_active')
+      .eq('is_active', true);
+    
+    console.log('📱 Instâncias ativas:');
+    instances?.forEach((instance, i) => {
+      console.log(`  ${i + 1}. ${instance.instance_name} (${instance.department_name})`);
+    });
+    
+    // Verificar tickets automáticos recentes
+    const { data: autoTickets } = await supabase
+      .from('tickets')
+      .select('id, title, status, created_at, metadata')
+      .eq('metadata->>auto_created', 'true')
+      .order('created_at', { ascending: false })
+      .limit(5);
+    
+    console.log(`\n🎫 Tickets automáticos recentes (${autoTickets?.length || 0}):`);
+    autoTickets?.forEach((ticket, i) => {
+      const phone = ticket.metadata?.client_phone || 'N/A';
+      const time = new Date(ticket.created_at).toLocaleTimeString();
+      console.log(`  ${i + 1}. #${ticket.id} | ${phone} | ${ticket.status} | ${time}`);
+    });
+    
+    // Estatísticas
+    const { data: stats } = await supabase
+      .from('tickets')
+      .select('status')
+      .eq('metadata->>auto_created', 'true');
+    
+    const statusCount = stats?.reduce((acc: any, ticket) => {
+      acc[ticket.status] = (acc[ticket.status] || 0) + 1;
+      return acc;
+    }, {}) || {};
+    
+    console.log('\n📈 Estatísticas de tickets automáticos:');
+    Object.entries(statusCount).forEach(([status, count]) => {
+      console.log(`  ${status}: ${count}`);
+    });
+    
+    console.log('\n💡 Comandos úteis:');
+    console.log('  simulateWebhook("5511999887766", "Olá!", "João")');
+    console.log('  simulateConversation("5511999887755", "Maria")');
+    console.log('  runWebhookScenarios()');
+    console.log('  cleanTestTickets()');
+    
+    return {
+      success: true,
+      activeInstances: instances?.length || 0,
+      autoTickets: autoTickets?.length || 0,
+      statusCount
+    };
     
   } catch (error) {
-    console.error('❌ [DEV] Erro no teste:', error);
+    console.error('❌ [DEV] Erro ao verificar status:', error);
     return { success: false, error };
   }
 }; 
