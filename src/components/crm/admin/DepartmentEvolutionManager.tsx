@@ -344,51 +344,165 @@ export const DepartmentEvolutionManager = ({
     setQrInstance(instanceName);
     setShowQRModal(true);
     setQrRefreshCount(0);
+    setCurrentQRCode('');
     
     try {
-      console.log(`📱 Obtendo QR Code para ${departmentName}: ${instanceName}`);
+      console.log(`📱 Iniciando conexão para: ${instanceName}`);
       
+      // Verificar se a instância existe
+      const exists = await evolutionApiService.instanceExists(instanceName);
+      
+      if (!exists) {
+        console.log(`⚠️ Instância "${instanceName}" não encontrada. Tentando criar...`);
+        
+        toast({
+          title: "⚠️ Instância não encontrada",
+          description: "Criando instância automaticamente...",
+        });
+        
+        try {
+          const createResult = await evolutionApiService.testCreateInstance(instanceName);
+          
+          if (!createResult.success) {
+            throw new Error(createResult.error);
+          }
+          
+          console.log('✅ Instância criada automaticamente');
+          toast({
+            title: "✅ Instância criada",
+            description: `Instância "${instanceName}" foi criada. Aguarde o QR Code...`,
+          });
+          
+          // Aguardar um pouco para a instância se estabilizar
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+        } catch (createError: any) {
+          console.error('❌ Erro ao criar instância automaticamente:', createError);
+          setIsQRLoading(false);
+          toast({
+            title: "❌ Erro ao criar instância",
+            description: createError.message || "Não foi possível criar a instância automaticamente",
+            variant: "destructive"
+          });
+          return;
+        }
+      }
+      
+      // Tentar obter QR Code
       const qrResponse = await evolutionApiService.getInstanceQRCode(instanceName);
       
       if (qrResponse && qrResponse.base64) {
-        // O serviço já retorna com o prefixo correto
         setCurrentQRCode(qrResponse.base64);
-        console.log('✅ QR Code obtido com sucesso');
         
         toast({
-          title: "📱 QR Code gerado!",
-          description: "Escaneie o código com seu WhatsApp para conectar",
+          title: "📱 QR Code gerado",
+          description: "Escaneie com seu WhatsApp para conectar",
         });
+        
+        // Iniciar monitoramento do status da conexão
+        startConnectionMonitoring(instanceName);
+        
       } else {
-        throw new Error('QR Code não retornado pela API');
+        throw new Error('QR Code não foi gerado pela API');
       }
-    } catch (error: any) {
-      console.error('❌ Erro ao obter QR Code:', error);
-      setShowQRModal(false);
       
-      if (error.message?.includes('404') || error.message?.includes('Request failed')) {
-        toast({
-          title: "🔧 Evolution API não configurada",
-          description: `Instância "${instanceName}" criada localmente. Configure Evolution API para WhatsApp real.`,
-          variant: "default"
-        });
-        
-        // Marcar como conectada localmente
-        setInstances(prev => prev.map(instance => 
-          instance.instanceName === instanceName 
-            ? { ...instance, status: 'open', connected: true, lastUpdate: new Date() }
-            : instance
-        ));
-      } else {
-        toast({
-          title: "❌ Erro ao gerar QR Code",
-          description: error.message || "Não foi possível gerar o QR Code",
-          variant: "destructive"
-        });
+    } catch (error: any) {
+      console.error('❌ Erro ao conectar instância:', error);
+      setCurrentQRCode('');
+      
+      let errorMessage = error.message;
+      let showRetryOption = false;
+      
+      if (error.message.includes('não existe') || error.message.includes('404')) {
+        errorMessage = `Instância "${instanceName}" não encontrada. Verifique se foi criada corretamente.`;
+        showRetryOption = true;
+      } else if (error.message.includes('já está conectada')) {
+        errorMessage = 'Instância já está conectada. Desconecte primeiro se precisar gerar novo QR Code.';
+      } else if (error.message.includes('estado inválido')) {
+        errorMessage = 'Instância em estado inválido. Tente reiniciar a conexão.';
+        showRetryOption = true;
       }
+      
+      toast({
+        title: "❌ Erro ao gerar QR Code",
+        description: errorMessage,
+        variant: "destructive",
+        action: showRetryOption ? (
+          <Button 
+            size="sm" 
+            onClick={() => handleInstanceRecovery(instanceName)}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Tentar Corrigir
+          </Button>
+        ) : undefined
+      });
     } finally {
       setIsQRLoading(false);
     }
+  };
+
+  // Função para monitorar o status da conexão após gerar QR Code
+  const startConnectionMonitoring = (instanceName: string) => {
+    console.log(`🔍 Iniciando monitoramento de conexão para: ${instanceName}`);
+    
+    const monitoringInterval = setInterval(async () => {
+      try {
+        const status = await evolutionApiService.getInstanceStatus(instanceName, false);
+        
+        if (status?.instance?.state === 'open') {
+          // Conexão estabelecida com sucesso!
+          console.log(`✅ Instância ${instanceName} conectada com sucesso!`);
+          
+          // Atualizar lista local
+          setInstances(prev => prev.map(instance => 
+            instance.instanceName === instanceName 
+              ? { ...instance, status: 'open', connected: true, lastUpdate: new Date() }
+              : instance
+          ));
+          
+          // Fechar modal do QR Code
+          setShowQRModal(false);
+          setCurrentQRCode('');
+          
+          // Mostrar mensagem de sucesso
+          toast({
+            title: "🎉 Conectado com sucesso!",
+            description: `A instância "${instanceName}" foi conectada ao WhatsApp. Você já pode enviar e receber mensagens!`,
+            className: "border-green-200 bg-green-50 text-green-800",
+            duration: 5000
+          });
+          
+          // Parar monitoramento
+          clearInterval(monitoringInterval);
+          
+          // Opcional: Fazer uma chamada para atualizar a lista completa
+          setTimeout(() => {
+            console.log('🔄 Atualizando lista completa de instâncias...');
+            loadDepartmentInstances();
+          }, 2000);
+          
+        } else if (status?.instance?.state === 'connecting') {
+          console.log(`🔄 Instância ${instanceName} ainda conectando...`);
+          
+          // Atualizar status local para connecting
+          setInstances(prev => prev.map(instance => 
+            instance.instanceName === instanceName 
+              ? { ...instance, status: 'connecting', connected: false, lastUpdate: new Date() }
+              : instance
+          ));
+        }
+        
+      } catch (error: any) {
+        console.warn(`⚠️ Erro no monitoramento de ${instanceName}:`, error.message);
+      }
+    }, 3000); // Verificar a cada 3 segundos
+    
+    // Parar monitoramento após 5 minutos para evitar polling infinito
+    setTimeout(() => {
+      clearInterval(monitoringInterval);
+      console.log(`⏱️ Timeout no monitoramento de ${instanceName}`);
+    }, 5 * 60 * 1000);
   };
 
   const refreshQRCode = async () => {

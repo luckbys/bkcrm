@@ -291,13 +291,16 @@ export const EvolutionInstanceManager = () => {
       const qrResponse = await evolutionApiService.getInstanceQRCode(instanceName);
       
       if (qrResponse && qrResponse.base64) {
-        // O serviço já retorna com o prefixo correto
         setCurrentQRCode(qrResponse.base64);
         
         toast({
           title: "📱 QR Code gerado",
           description: "Escaneie com seu WhatsApp para conectar",
         });
+        
+        // Iniciar monitoramento do status da conexão
+        startConnectionMonitoring(instanceName);
+        
       } else {
         throw new Error('QR Code não foi gerado pela API');
       }
@@ -336,6 +339,69 @@ export const EvolutionInstanceManager = () => {
     } finally {
       setIsQRLoading(false);
     }
+  };
+
+  // Função para monitorar o status da conexão após gerar QR Code
+  const startConnectionMonitoring = (instanceName: string) => {
+    console.log(`🔍 Iniciando monitoramento de conexão para: ${instanceName}`);
+    
+    const monitoringInterval = setInterval(async () => {
+      try {
+        const status = await evolutionApiService.getInstanceStatus(instanceName, false);
+        
+        if (status?.instance?.state === 'open') {
+          // Conexão estabelecida com sucesso!
+          console.log(`✅ Instância ${instanceName} conectada com sucesso!`);
+          
+          // Atualizar lista local
+          setInstances(prev => prev.map(instance => 
+            instance.instanceName === instanceName 
+              ? { ...instance, status: 'open', connected: true, lastUpdate: new Date() }
+              : instance
+          ));
+          
+          // Fechar modal do QR Code
+          setShowQRModal(false);
+          setCurrentQRCode('');
+          
+          // Mostrar mensagem de sucesso
+          toast({
+            title: "🎉 Conectado com sucesso!",
+            description: `A instância "${instanceName}" foi conectada ao WhatsApp. Você já pode enviar e receber mensagens!`,
+            className: "border-green-200 bg-green-50 text-green-800",
+            duration: 5000
+          });
+          
+          // Parar monitoramento
+          clearInterval(monitoringInterval);
+          
+          // Opcional: Recarregar lista completa
+          setTimeout(() => {
+            console.log('🔄 Atualizando lista completa de instâncias...');
+            loadInstances();
+          }, 2000);
+          
+        } else if (status?.instance?.state === 'connecting') {
+          console.log(`🔄 Instância ${instanceName} ainda conectando...`);
+          
+          // Atualizar status local para connecting
+          setInstances(prev => prev.map(instance => 
+            instance.instanceName === instanceName 
+              ? { ...instance, status: 'connecting', connected: false, lastUpdate: new Date() }
+              : instance
+          ));
+        }
+        
+      } catch (error: any) {
+        console.warn(`⚠️ Erro no monitoramento de ${instanceName}:`, error.message);
+      }
+    }, 3000); // Verificar a cada 3 segundos
+    
+    // Parar monitoramento após 5 minutos para evitar polling infinito
+    setTimeout(() => {
+      clearInterval(monitoringInterval);
+      console.log(`⏱️ Timeout no monitoramento de ${instanceName}`);
+    }, 5 * 60 * 1000);
   };
 
   const handleInstanceRecovery = async (instanceName: string) => {

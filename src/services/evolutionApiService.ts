@@ -450,6 +450,19 @@ class EvolutionApiManager {
       console.error('❌ Erro na reconexão automática:', error);
     }
   }
+
+  // Adiciona método para verificar se a instância existe
+  async instanceExists(instanceName: string): Promise<boolean> {
+    try {
+      await this.apiClient.get(`/instance/connectionState/${instanceName}`);
+      return true;
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        return false;
+      }
+      throw error;
+    }
+  }
 }
 
 // Interfaces TypeScript
@@ -576,5 +589,8 @@ export const setInstanceWebhook = (instanceName: string, webhookData: {
 
 export const autoReconnectInstances = () =>
   evolutionManager.autoReconnectInstances();
+
+export const instanceExists = (instanceName: string) =>
+  evolutionManager.instanceExists(instanceName);
 
 export default evolutionManager; 

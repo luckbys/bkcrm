@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/toaster'
 // Importar helpers para desenvolvimento
 import './utils/dev-helpers'
 import './utils/migration-helpers'
+import './utils/database-test'
 
 // Configurar endpoint global para receber respostas de webhook (mencionado nas memórias)
 import webhookResponseService from './services/webhook-response-service'
