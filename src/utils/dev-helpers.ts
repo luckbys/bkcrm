@@ -1154,100 +1154,401 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
   console.log('📊 [DEV] Execute checkTicketsTable() para ver os resultados');
 };
 
-// Helper para configurar webhook na Evolution API (simulado)
-(window as any).configureEvolutionWebhook = async () => {
-  console.log('🔧 [DEV] Configurando webhook na Evolution API...');
-  
-  const webhookUrl = `${window.location.origin}/api/webhooks/evolution`;
-  
-  console.log(`📡 [DEV] URL do webhook: ${webhookUrl}`);
-  console.log('⚠️ [DEV] ATENÇÃO: Este é um ambiente de desenvolvimento!');
-  console.log('💡 [DEV] Para produção, configure as variáveis na Evolution API:');
-  console.log('   WEBHOOK_GLOBAL_URL=' + webhookUrl);
-  console.log('   WEBHOOK_GLOBAL_ENABLED=true');
-  console.log('   WEBHOOK_EVENTS_MESSAGES_UPSERT=true');
-  
-  // Em desenvolvimento, registrar um simulador 
-  console.log('🎭 [DEV] Registrando simulador local...');
-  
-  // Simular configuração bem-sucedida
-  setTimeout(() => {
-    console.log('✅ [DEV] Webhook configurado com sucesso (simulado)');
-    console.log('🧪 [DEV] Use simulateWebhook() para testar');
-  }, 1000);
-  
-  return {
-    success: true,
-    url: webhookUrl,
-    message: 'Webhook configurado em modo desenvolvimento'
-  };
+// Helper para configurar webhook para o próprio CRM (melhor que N8N)
+export const configureWebhookToCRM = async (crmDomain: string = 'localhost:3007') => {
+  try {
+    console.log('🎯 Configurando webhook para o próprio CRM...');
+    
+    // Importar funções específicas do Evolution API Service
+    const { listInstances, getInstanceWebhook, removeInstanceWebhook, setInstanceWebhook } = await import('@/services/evolutionApiService');
+    
+    // Determinar URL baseada no ambiente
+    const webhookUrl = crmDomain.includes('localhost') 
+      ? `http://${crmDomain}/api/webhook/evolution`
+      : `https://${crmDomain}/api/webhook/evolution`;
+    
+    console.log('🌐 URL do webhook:', webhookUrl);
+    
+    // Listar instâncias
+    const instances = await listInstances();
+    console.log(`📋 ${instances.data.length} instâncias encontradas`);
+    
+    let configured = 0;
+    let skipped = 0;
+    let errors = 0;
+    
+    for (const instance of instances.data) {
+      try {
+        console.log(`🔄 Processando ${instance.name} (${instance.state})...`);
+        
+        // Verificar webhook atual
+        const currentWebhook = await getInstanceWebhook(instance.name);
+        
+        // Se tem webhook incorreto (N8N), remover primeiro
+        if (currentWebhook.webhook?.url?.includes('n8n') || 
+            currentWebhook.webhook?.url?.includes('connection-update')) {
+          console.log(`🗑️ Removendo webhook incorreto de ${instance.name}`);
+          await removeInstanceWebhook(instance.name);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Aguardar 1s
+        }
+        
+        // Configurar apenas instâncias conectadas
+        if (instance.state === 'open') {
+          await setInstanceWebhook(instance.name, {
+            url: webhookUrl,
+            events: [
+              'MESSAGES_UPSERT',      // Mensagens recebidas
+              'CONNECTION_UPDATE',    // Status de conexão
+              'QRCODE_UPDATED'       // QR Code atualizado
+            ],
+            enabled: true
+          });
+          
+          console.log(`✅ Webhook configurado para ${instance.name}`);
+          
+          // Verificar se funcionou
+          const check = await getInstanceWebhook(instance.name);
+          if (check.webhook?.url === webhookUrl) {
+            console.log(`🔍 Verificação OK: ${instance.name}`);
+            configured++;
+          } else {
+            console.warn(`⚠️ Verificação falhou: ${instance.name}`);
+          }
+          
+        } else {
+          console.log(`⏸️ Pulando ${instance.name} (não conectada: ${instance.state})`);
+          skipped++;
+        }
+        
+      } catch (error: any) {
+        console.error(`❌ Erro ao configurar ${instance.name}:`, error.message);
+        errors++;
+      }
+      
+      // Aguardar entre requisições para evitar rate limit
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Resumo final
+    console.log('\n📊 RESUMO DA CONFIGURAÇÃO:');
+    console.log(`✅ Configuradas: ${configured}`);
+    console.log(`⏸️ Puladas: ${skipped}`);
+    console.log(`❌ Erros: ${errors}`);
+    console.log(`🌐 URL configurada: ${webhookUrl}`);
+    
+    if (configured > 0) {
+      console.log('\n🎉 Webhook configurado com sucesso!');
+      console.log('📱 Agora envie uma mensagem no WhatsApp para testar');
+      console.log('🔍 Monitore o console para ver as mensagens chegando');
+      
+      // Ativar monitoramento automático
+      startWebhookMonitoring();
+      
+      return {
+        success: true,
+        configured,
+        skipped,
+        errors,
+        webhookUrl
+      };
+    } else {
+      console.log('\n⚠️ Nenhuma instância foi configurada');
+      console.log('💡 Verifique se suas instâncias estão conectadas (status: open)');
+      
+      return {
+        success: false,
+        message: 'Nenhuma instância conectada encontrada',
+        configured,
+        skipped,
+        errors
+      };
+    }
+    
+  } catch (error: any) {
+    console.error('❌ Erro geral na configuração:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 };
 
-// Helper para mostrar status do sistema de roteamento
-(window as any).showRoutingStatus = async () => {
-  console.log('📊 [DEV] Status do Sistema de Roteamento de Tickets');
-  console.log('================================================');
+/**
+ * Monitorar mensagens chegando via webhook
+ */
+export const startWebhookMonitoring = () => {
+  console.log('👀 Iniciando monitoramento de webhooks...');
+  
+  // Verificar mensagens novas a cada 10 segundos
+  const monitor = setInterval(async () => {
+    try {
+      const { data: recentMessages } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(3);
+      
+      if (recentMessages && recentMessages.length > 0) {
+        const lastMessage = recentMessages[0];
+        const timeAgo = Date.now() - new Date(lastMessage.created_at).getTime();
+        
+        // Se a mensagem é dos últimos 30 segundos
+        if (timeAgo < 30000) {
+          console.log('📨 Nova mensagem detectada:', {
+            content: lastMessage.content.substring(0, 50) + '...',
+            sender: lastMessage.sender_name,
+            timeAgo: Math.round(timeAgo / 1000) + 's atrás'
+          });
+        }
+      }
+      
+    } catch (error) {
+      // Silenciar erros do monitor para não poluir console
+    }
+  }, 10000);
+  
+  // Parar monitor após 5 minutos
+  setTimeout(() => {
+    clearInterval(monitor);
+    console.log('⏹️ Monitoramento de webhook finalizado');
+  }, 300000);
+  
+  return monitor;
+};
+
+/**
+ * Verificar status atual dos webhooks
+ */
+export const checkWebhookStatus = async () => {
+  try {
+    console.log('🔍 Verificando status atual dos webhooks...');
+    
+    const instances = await evolutionApiService.listInstances();
+    
+    for (const instance of instances.data) {
+      try {
+        const webhook = await evolutionApiService.getInstanceWebhook(instance.name);
+        
+        console.log(`📱 ${instance.name}:`);
+        console.log(`   Estado: ${instance.state}`);
+        console.log(`   Webhook: ${webhook.webhook?.url || 'Não configurado'}`);
+        console.log(`   Eventos: ${webhook.webhook?.events?.join(', ') || 'Nenhum'}`);
+        console.log(`   Ativo: ${webhook.webhook?.enabled ? 'Sim' : 'Não'}`);
+        console.log('');
+        
+      } catch (error: any) {
+        console.log(`📱 ${instance.name}: Erro ao verificar (${error.message})`);
+      }
+    }
+    
+  } catch (error: any) {
+    console.error('❌ Erro ao verificar status:', error.message);
+  }
+};
+
+/**
+ * Comando rápido para configurar webhook local
+ */
+export const configureLocalWebhook = () => {
+  return configureWebhookToCRM('localhost:3007');
+};
+
+// 🧪 TESTE COMPLETO DA INTEGRAÇÃO EVOLUTION API + WEBHOOK
+(window as any).testEvolutionIntegration = async () => {
+  console.log('🧪 =========== TESTE COMPLETO - EVOLUTION API + WEBHOOK ===========');
   
   try {
-    const { supabase } = await import('@/lib/supabase');
+    // 1. Testar conexão com Evolution API
+    console.log('1️⃣ Testando conexão com Evolution API...');
+    const connectionTest = await (window as any).testEvolutionConnection();
+    console.log('   Resultado:', connectionTest ? '✅ Conectado' : '❌ Falhou');
     
-    // Verificar instâncias ativas
-    const { data: instances } = await supabase
-      .from('evolution_instances') 
-      .select('instance_name, department_name, is_active')
-      .eq('is_active', true);
+    // 2. Verificar se instância existe
+    console.log('2️⃣ Verificando instância atendimento-ao-cliente-suporte-n1...');
+    const instanceCheck = await (window as any).checkInstance('atendimento-ao-cliente-suporte-n1');
+    console.log('   Resultado:', instanceCheck ? '✅ Existe' : '❌ Não encontrada');
     
-    console.log('📱 Instâncias ativas:');
-    instances?.forEach((instance, i) => {
-      console.log(`  ${i + 1}. ${instance.instance_name} (${instance.department_name})`);
-    });
+    // 3. Testar webhook configurado
+    console.log('3️⃣ Testando webhook configurado...');
+    const webhookTest = await (window as any).testWebhookFix();
+    console.log('   Resultado:', webhookTest.success ? '✅ Webhook OK' : '❌ Webhook falhou');
     
-    // Verificar tickets automáticos recentes
-    const { data: autoTickets } = await supabase
-      .from('tickets')
-      .select('id, title, status, created_at, metadata')
-      .eq('metadata->>auto_created', 'true')
-      .order('created_at', { ascending: false })
-      .limit(5);
+    // 4. Simular recebimento de mensagem
+    console.log('4️⃣ Simulando recebimento de mensagem via webhook...');
+    const messageTest = await (window as any).simulateIncomingWhatsAppMessage();
+    console.log('   Resultado:', messageTest.success ? '✅ Mensagem processada' : '❌ Falhou');
     
-    console.log(`\n🎫 Tickets automáticos recentes (${autoTickets?.length || 0}):`);
-    autoTickets?.forEach((ticket, i) => {
-      const phone = ticket.metadata?.client_phone || 'N/A';
-      const time = new Date(ticket.created_at).toLocaleTimeString();
-      console.log(`  ${i + 1}. #${ticket.id} | ${phone} | ${ticket.status} | ${time}`);
-    });
+    // 5. Verificar criação de ticket
+    console.log('5️⃣ Verificando criação automática de ticket...');
+    const ticketCheck = await (window as any).checkLatestTickets();
+    console.log('   Resultado:', ticketCheck.length > 0 ? `✅ ${ticketCheck.length} ticket(s) encontrado(s)` : '❌ Nenhum ticket');
     
-    // Estatísticas
-    const { data: stats } = await supabase
-      .from('tickets')
-      .select('status')
-      .eq('metadata->>auto_created', 'true');
-    
-    const statusCount = stats?.reduce((acc: any, ticket) => {
-      acc[ticket.status] = (acc[ticket.status] || 0) + 1;
-      return acc;
-    }, {}) || {};
-    
-    console.log('\n📈 Estatísticas de tickets automáticos:');
-    Object.entries(statusCount).forEach(([status, count]) => {
-      console.log(`  ${status}: ${count}`);
-    });
-    
-    console.log('\n💡 Comandos úteis:');
-    console.log('  simulateWebhook("5511999887766", "Olá!", "João")');
-    console.log('  simulateConversation("5511999887755", "Maria")');
-    console.log('  runWebhookScenarios()');
-    console.log('  cleanTestTickets()');
+    console.log('🎉 =========== TESTE COMPLETO FINALIZADO ===========');
     
     return {
       success: true,
-      activeInstances: instances?.length || 0,
-      autoTickets: autoTickets?.length || 0,
-      statusCount
+      results: {
+        connection: connectionTest,
+        instance: instanceCheck,
+        webhook: webhookTest.success,
+        message: messageTest.success,
+        tickets: ticketCheck.length
+      }
     };
     
   } catch (error) {
-    console.error('❌ [DEV] Erro ao verificar status:', error);
+    console.error('❌ Erro no teste completo:', error);
     return { success: false, error };
+  }
+};
+
+// 🧪 Simular mensagem WhatsApp chegando via webhook
+(window as any).simulateIncomingWhatsAppMessage = async () => {
+  console.log('📱 Simulando mensagem WhatsApp recebida...');
+  
+  try {
+    // Usar o TicketRoutingService para simular
+    const result = await (window as any).simulateWebhook(
+      '5511999887766',
+      'Olá! Estou com dúvidas sobre o produto. Podem me ajudar?',
+      'Cliente Teste WhatsApp',
+      'atendimento-ao-cliente-suporte-n1'
+    );
+    
+    if (result.success) {
+      console.log('✅ Mensagem WhatsApp simulada com sucesso!');
+      console.log('📊 Detalhes:', result);
+      
+      if (result.action === 'created') {
+        console.log('🎫 NOVO TICKET CRIADO:', result.ticketId);
+      } else if (result.action === 'updated') {
+        console.log('💬 MENSAGEM ADICIONADA AO TICKET:', result.ticketId);
+      }
+    } else {
+      console.error('❌ Falha na simulação:', result.error);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error('❌ Erro ao simular mensagem WhatsApp:', error);
+    return { success: false, error };
+  }
+};
+
+// 🧪 Verificar últimos tickets criados
+(window as any).checkLatestTickets = async () => {
+  console.log('🔍 Verificando últimos tickets criados...');
+  
+  try {
+    const { data: tickets, error } = await supabase
+      .from('tickets')
+      .select(`
+        id,
+        title,
+        status,
+        metadata,
+        created_at,
+        last_message_at
+      `)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    
+    if (error) {
+      console.error('❌ Erro ao buscar tickets:', error);
+      return [];
+    }
+    
+    console.log(`📋 ${tickets.length} tickets encontrados:`);
+    tickets.forEach((ticket, index) => {
+      const isWhatsApp = ticket.metadata?.created_from_whatsapp;
+      const clientName = ticket.metadata?.client_name || 'Cliente';
+      const clientPhone = ticket.metadata?.client_phone || 'N/A';
+      
+      console.log(`   ${index + 1}. ${ticket.id} - ${ticket.title}`);
+      console.log(`      📱 WhatsApp: ${isWhatsApp ? '✅ Sim' : '❌ Não'}`);
+      console.log(`      👤 Cliente: ${clientName} (${clientPhone})`);
+      console.log(`      📅 Criado: ${new Date(ticket.created_at).toLocaleString()}`);
+      console.log(`      🎯 Status: ${ticket.status}`);
+      console.log('      ---');
+    });
+    
+    return tickets;
+    
+  } catch (error) {
+    console.error('❌ Erro ao verificar tickets:', error);
+    return [];
+  }
+};
+
+// 🧪 Testar endpoint de recebimento de webhook
+(window as any).testWebhookEndpoint = async () => {
+  console.log('🌐 Testando endpoint de webhook...');
+  
+  const webhookUrl = 'https://press-n8n.jhkbgs.easypanel.host/webhook/res';
+  
+  try {
+    // Testar se o endpoint está ativo
+    const response = await fetch(webhookUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('📡 Status do endpoint:', response.status);
+    console.log('📡 URL testada:', webhookUrl);
+    
+    if (response.ok) {
+      console.log('✅ Endpoint acessível');
+      return { success: true, status: response.status, url: webhookUrl };
+    } else {
+      console.log('⚠️ Endpoint retornou:', response.status, response.statusText);
+      return { success: false, status: response.status, url: webhookUrl };
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro ao testar endpoint:', error);
+    return { success: false, error, url: webhookUrl };
+  }
+};
+
+// 🧪 Verificar status de todas as instâncias
+(window as any).checkAllInstances = async () => {
+  console.log('📱 Verificando status de todas as instâncias...');
+  
+  try {
+    // Buscar instâncias no banco local
+    const { data: localInstances, error } = await supabase
+      .from('evolution_instances')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('❌ Erro ao buscar instâncias locais:', error);
+      return [];
+    }
+    
+    console.log(`📋 ${localInstances.length} instância(s) encontrada(s) no banco:`);
+    
+    for (const instance of localInstances) {
+      console.log(`\n🔍 Verificando: ${instance.instance_name}`);
+      console.log(`   💼 Departamento: ${instance.department_name || 'N/A'}`);
+      console.log(`   📅 Criada: ${new Date(instance.created_at).toLocaleString()}`);
+      
+      // Tentar verificar status na Evolution API
+      try {
+        const status = await (window as any).checkInstance(instance.instance_name);
+        console.log(`   📊 Status API: ${status ? '✅ Ativa' : '❌ Inativa'}`);
+      } catch (error) {
+        console.log(`   📊 Status API: ❌ Erro ao verificar`);
+      }
+    }
+    
+    return localInstances;
+    
+  } catch (error) {
+    console.error('❌ Erro ao verificar instâncias:', error);
+    return [];
   }
 }; 

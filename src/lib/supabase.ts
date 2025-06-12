@@ -12,7 +12,105 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Supabase URL and Anon Key são necessários.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Verificar se deve usar Realtime (pode ser desabilitado via variável de ambiente)
+const useRealtime = import.meta.env.VITE_ENABLE_REALTIME !== 'false';
+
+console.log('🔌 Configuração Realtime:', useRealtime ? 'Habilitado' : 'Desabilitado (Fallback)');
+
+// Configurações para Supabase com fallback para desabilitar Realtime
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  realtime: {
+    timeout: 20000,
+    heartbeatIntervalMs: 15000
+  },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: localStorage,
+    storageKey: 'bkcrm-supabase-auth'
+  },
+  db: {
+    schema: 'public'
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'bkcrm-client',
+      'User-Agent': 'BKCRM/1.0.0'
+    }
+  }
+});
+
+// Conectar ao Realtime apenas se habilitado
+if (useRealtime) {
+  let connectionAttempts = 0;
+  const maxAttempts = 3;
+
+  const connectRealtime = () => {
+    try {
+      console.log('🔗 Tentando conectar ao Supabase Realtime...');
+      supabase.realtime.connect();
+      
+      // Verificar status da conexão após um tempo
+      setTimeout(() => {
+        const isConnected = supabase.realtime.isConnected?.() || false;
+        if (isConnected) {
+          console.log('✅ Supabase Realtime: Conectado com sucesso');
+        } else {
+          console.warn('⚠️ Supabase Realtime: Conexão não estabelecida');
+          
+          // Tentar reconectar se ainda há tentativas
+          if (connectionAttempts < maxAttempts) {
+            connectionAttempts++;
+            console.log(`🔄 Tentativa de reconexão ${connectionAttempts}/${maxAttempts}`);
+            setTimeout(connectRealtime, 5000);
+          } else {
+            console.log('📴 Máximo de tentativas atingido - Sistema funcionará sem tempo real');
+            // Desabilitar tentativas futuras
+            (window as any).realtimeDisabled = true;
+          }
+        }
+      }, 3000);
+      
+    } catch (error) {
+      console.warn('⚠️ Erro ao inicializar Realtime:', error);
+      console.log('📴 Sistema funcionará em modo offline para tempo real');
+    }
+  };
+
+  // Iniciar conexão
+  connectRealtime();
+} else {
+  console.log('📴 Realtime desabilitado - Sistema funcionará com polling manual');
+}
+
+// Função de diagnóstico global para debug
+(window as any).diagnoseSupabaseConnection = async () => {
+  const status = {
+    url: supabaseUrl,
+    realtimeEnabled: useRealtime,
+    isConnected: useRealtime ? (supabase.realtime.isConnected?.() || false) : false,
+    user: await supabase.auth.getUser(),
+    timestamp: new Date().toISOString()
+  };
+  
+  console.log('🔍 Diagnóstico Supabase:', status);
+  return status;
+};
+
+// Função para alternar Realtime dinamicamente
+(window as any).toggleRealtime = (enable: boolean) => {
+  if (enable && !useRealtime) {
+    console.log('🔄 Tentando reabilitar Realtime...');
+    supabase.realtime.connect();
+  } else if (!enable && useRealtime) {
+    console.log('📴 Desabilitando Realtime...');
+    supabase.realtime.disconnect();
+  }
+  
+  (window as any).realtimeManuallyDisabled = !enable;
+  console.log(`🔌 Realtime ${enable ? 'habilitado' : 'desabilitado'} manualmente`);
+};
 
 // Tipos para as tabelas do Supabase
 export interface Profile {

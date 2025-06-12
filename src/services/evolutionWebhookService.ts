@@ -27,7 +27,7 @@ export const checkInstanceExists = async (instanceName: string): Promise<{ exist
     console.log(`🔍 Verificando se a instância ${instanceName} existe...`);
     
     // Usar endpoint correto para verificar estado da conexão
-    const response = await apiClient.get(`/instance/connectionState/${instanceName}`);
+    const response = await apiClient.get(`instance/connectionState/${instanceName}`);
     
     if (response.data) {
       console.log(`✅ Instância ${instanceName} encontrada:`, response.data);
@@ -69,10 +69,10 @@ export const setInstanceWebhook = async (instanceName: string, webhookData: {
       console.warn(`⚠️ Não foi possível verificar a instância ${instanceName}, mas continuando com a configuração do webhook`);
     }
 
-    // Validar eventos antes de enviar
+    // Validar eventos antes de enviar - usar apenas eventos essenciais por padrão
     const eventsToSend = webhookData.events && webhookData.events.length > 0 
       ? webhookData.events 
-      : ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'];
+      : getRecommendedEvents();
     
     const eventValidation = validateEvents(eventsToSend);
     if (!eventValidation.valid) {
@@ -104,7 +104,8 @@ export const setInstanceWebhook = async (instanceName: string, webhookData: {
     console.log('🌐 URL da requisição:', `${EVOLUTION_API_URL}/webhook/set/${instanceName}`);
 
     // Usar POST conforme documentação (não PUT)
-    const response = await apiClient.post(`/webhook/set/${instanceName}`, payload);
+    // Correção: remover barra inicial para evitar URL dupla
+    const response = await apiClient.post(`webhook/set/${instanceName}`, payload);
     
     if (response.data) {
       console.log('✅ Webhook configurado com sucesso:', response.data);
@@ -172,7 +173,7 @@ export const getInstanceWebhook = async (instanceName: string): Promise<{
   try {
     console.log(`📡 Obtendo configuração de webhook: ${instanceName}`);
 
-    const response = await apiClient.get(`/webhook/find/${instanceName}`);
+    const response = await apiClient.get(`webhook/find/${instanceName}`);
     
     if (response.data) {
       console.log('✅ Webhook obtido:', response.data);
@@ -220,7 +221,7 @@ export const removeInstanceWebhook = async (instanceName: string): Promise<{ suc
   try {
     console.log(`🗑️ Removendo webhook da instância: ${instanceName}`);
 
-    const response = await apiClient.delete(`/webhook/remove/${instanceName}`);
+    const response = await apiClient.delete(`webhook/remove/${instanceName}`);
     
     console.log('✅ Webhook removido com sucesso');
     return {
@@ -329,34 +330,55 @@ export const generateSuggestedWebhookUrl = (): string => {
 
 /**
  * Lista completa de eventos válidos na Evolution API
+ * Baseado na documentação oficial v2
  */
 export const getValidEvolutionEvents = (): string[] => {
   return [
+    // Eventos de sistema
     'APPLICATION_STARTUP',
     'QRCODE_UPDATED',
+    'CONNECTION_UPDATE',
+    
+    // Eventos de mensagens
     'MESSAGES_SET',
     'MESSAGES_UPSERT',
-    'MESSAGES_EDITED',
+    'MESSAGES_EDITED', 
     'MESSAGES_UPDATE',
     'MESSAGES_DELETE',
     'SEND_MESSAGE',
+    
+    // Eventos de contatos
     'CONTACTS_SET',
     'CONTACTS_UPSERT',
     'CONTACTS_UPDATE',
+    
+    // Eventos de presença
     'PRESENCE_UPDATE',
+    
+    // Eventos de chats
     'CHATS_SET',
     'CHATS_UPSERT',
     'CHATS_UPDATE',
     'CHATS_DELETE',
+    
+    // Eventos de grupos
     'GROUPS_UPSERT',
-    'GROUP_UPDATE',
+    'GROUPS_UPDATE',
     'GROUP_PARTICIPANTS_UPDATE',
-    'CONNECTION_UPDATE',
+    
+    // Eventos de labels
     'LABELS_EDIT',
     'LABELS_ASSOCIATION',
+    
+    // Eventos de chamadas
     'CALL',
+    
+    // Eventos de typebot
     'TYPEBOT_START',
     'TYPEBOT_CHANGE_STATUS',
+    
+    // Eventos de instância
+    'NEW_TOKEN', // Adicionado conforme documentação
     'REMOVE_INSTANCE',
     'LOGOUT_INSTANCE'
   ];
@@ -377,12 +399,13 @@ export const validateEvents = (events: string[]): { valid: boolean; invalidEvent
 
 /**
  * Eventos padrão recomendados para o sistema de tickets
- * APENAS eventos válidos confirmados pela Evolution API
+ * APENAS eventos essenciais e válidos confirmados pela Evolution API
  */
 export const getRecommendedEvents = (): string[] => {
   return [
     'MESSAGES_UPSERT',    // Mensagens recebidas/enviadas (OBRIGATÓRIO)
-    'CONNECTION_UPDATE'   // Status de conexão WhatsApp (OBRIGATÓRIO)
+    'CONNECTION_UPDATE',  // Status de conexão WhatsApp (OBRIGATÓRIO)
+    'QRCODE_UPDATED'      // QR Code atualizado (RECOMENDADO)
   ];
 };
 
@@ -396,7 +419,7 @@ export const testEvolutionApiConnection = async (): Promise<{ success: boolean; 
     console.log('🔑 API Key:', API_KEY ? `${API_KEY.substring(0, 8)}...` : 'Não configurada');
     
     // Tentar obter informações básicas da API
-    const response = await apiClient.get('/');
+    const response = await apiClient.get('');
     
     console.log('✅ Conexão com Evolution API estabelecida:', response.data);
     return {
@@ -445,7 +468,7 @@ export const getEventDescription = (event: string): string => {
     
     // Eventos de grupos
     'GROUPS_UPSERT': 'Grupos criados/atualizados',
-    'GROUP_UPDATE': 'Atualização de grupos',
+    'GROUPS_UPDATE': 'Atualização de grupos',
     'GROUP_PARTICIPANTS_UPDATE': 'Participantes do grupo atualizados',
     
     // Eventos de presença e status
@@ -497,7 +520,7 @@ export const debugWebhookConfiguration = async (instanceName: string, url: strin
     const setResult = await setInstanceWebhook(instanceName, {
       url: url,
       enabled: true,
-      events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE']
+      events: getRecommendedEvents()
     });
     console.log('📋 Resultado da configuração:', setResult);
     
@@ -544,4 +567,35 @@ export const evolutionWebhookService = {
   validateEvents
 };
 
-export default evolutionWebhookService; 
+export default evolutionWebhookService;
+
+/**
+ * Comando para teste rápido de webhook via console
+ * Para usar no DevTools: testWebhookFix()
+ */
+(window as any).testWebhookFix = async () => {
+  try {
+    console.log('🧪 Iniciando teste de correção de webhook...');
+    
+    const testInstance = 'atendimento-ao-cliente-suporte-n1';
+    const testUrl = 'https://press-n8n.jhkbgs.easypanel.host/webhook/res';
+    
+    console.log('📋 Instância de teste:', testInstance);
+    console.log('📋 URL de teste:', testUrl);
+    
+    const result = await debugWebhookConfiguration(testInstance, testUrl);
+    
+    if (result.success) {
+      console.log('✅ Teste de webhook bem-sucedido!');
+      console.log('📊 Detalhes:', result.details);
+    } else {
+      console.error('❌ Teste de webhook falhou:', result.error);
+      console.log('📊 Detalhes:', result.details);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Erro no teste:', error);
+    return { success: false, error: 'Erro no teste de webhook' };
+  }
+}; 

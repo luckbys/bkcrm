@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import evolutionApiService from '@/services/evolutionApiService';
+import evolutionApiService, { logoutInstance } from '@/services/evolutionApiService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -179,8 +179,12 @@ export const DepartmentEvolutionManager = ({
     const interval = setInterval(async () => {
       try {
         // Teste rápido se Evolution API está disponível
-        await evolutionApiService.getInstanceStatus('test');
-        loadDepartmentInstances();
+        const connectionTest = await evolutionApiService.testConnection();
+        if (connectionTest.success) {
+          loadDepartmentInstances();
+        } else {
+          throw new Error('API offline');
+        }
       } catch {
         // Se Evolution API não estiver disponível, apenas recarregar dados do banco
         console.log('⚠️ Evolution API offline - recarregando apenas dados do banco');
@@ -233,7 +237,7 @@ export const DepartmentEvolutionManager = ({
         try {
           const response = await evolutionApiService.createInstance(
             fullInstanceName,
-            `${window.location.origin}/api/webhooks/evolution`
+            { webhookUrl: `${window.location.origin}/api/webhooks/evolution` }
           );
           console.log('✅ Instância criada na Evolution API:', response);
           evolutionApiCreated = true;
@@ -415,7 +419,7 @@ export const DepartmentEvolutionManager = ({
 
   const disconnectInstance = async (instanceName: string) => {
     try {
-      await evolutionApiService.logoutInstance(instanceName);
+      await logoutInstance(instanceName);
       
       // Atualizar lista local
       setInstances(prev => prev.map(instance => 
@@ -439,30 +443,70 @@ export const DepartmentEvolutionManager = ({
 
   const deleteInstance = async (instanceName: string) => {
     try {
-      await evolutionApiService.deleteInstance(instanceName);
+      let deletedFromApi = false;
       
-      // Remover do banco
+      // Tentar deletar da Evolution API primeiro
       try {
-        await supabase
+        await evolutionApiService.deleteInstance(instanceName);
+        deletedFromApi = true;
+        console.log('✅ Instância deletada da Evolution API:', instanceName);
+      } catch (apiError: any) {
+        if (apiError.response?.status === 404) {
+          console.log('ℹ️ Instância não existe na Evolution API (404) - apenas removendo do banco:', instanceName);
+        } else {
+          console.warn('⚠️ Erro ao deletar da Evolution API:', apiError.message);
+          // Para outros erros além de 404, ainda vamos tentar continuar
+        }
+      }
+      
+      // Sempre tentar remover do banco de dados local
+      try {
+        const { error: dbError } = await supabase
           .from('evolution_instances')
           .delete()
           .eq('instance_name', instanceName)
           .eq('department_id', departmentId);
-      } catch (error) {
-        console.warn('⚠️ Erro ao remover do banco, mas instância deletada da API');
+          
+        if (dbError) {
+          console.error('❌ Erro ao remover do banco:', dbError);
+          throw new Error(`Erro no banco de dados: ${dbError.message}`);
+        }
+        
+        console.log('✅ Instância removida do banco:', instanceName);
+      } catch (dbError: any) {
+        console.error('❌ Erro crítico ao remover do banco:', dbError);
+        
+        // Se não conseguiu remover do banco, mas removeu da API, alertar
+        if (deletedFromApi) {
+          toast({
+            title: "⚠️ Remoção parcial",
+            description: `Instância removida da Evolution API, mas erro no banco: ${dbError.message}`,
+            variant: "destructive"
+          });
+          return;
+        } else {
+          throw dbError;
+        }
       }
       
-      // Remover da lista local
+      // Remover da lista local (interface)
       setInstances(prev => prev.filter(instance => instance.instanceName !== instanceName));
+      
+      // Mensagem de sucesso adequada
+      const successMessage = deletedFromApi 
+        ? `"${instanceName}" foi deletada da Evolution API e banco local`
+        : `"${instanceName}" foi removida do banco local (não existia na Evolution API)`;
       
       toast({
         title: "🗑️ Instância removida",
-        description: `"${instanceName}" foi deletada permanentemente`,
+        description: successMessage,
       });
+      
     } catch (error: any) {
+      console.error('❌ Erro geral ao deletar instância:', error);
       toast({
         title: "❌ Erro ao deletar",
-        description: error.message,
+        description: error.message || 'Erro desconhecido ao deletar instância',
         variant: "destructive"
       });
     }

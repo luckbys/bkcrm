@@ -32,9 +32,13 @@ export default function LoginPage() {
     try {
       await signIn(email, password);
       // O redirecionamento será feito pelo useEffect quando o user for atualizado
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao fazer login:', err);
-      if (err instanceof AuthError) {
+      
+      // Usar a mensagem de erro personalizada do hook useAuth
+      if (err.message) {
+        setError(err.message);
+      } else if (err instanceof AuthError) {
         switch (err.message) {
           case 'Invalid login credentials':
             setError('Email ou senha inválidos');
@@ -82,7 +86,21 @@ export default function LoginPage() {
             <CardContent className="space-y-4">
               {error && (
                 <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>{error}</AlertDescription>
+                  <AlertDescription>
+                    {error}
+                    {error.includes('Email ainda não foi confirmado') && (
+                      <div className="mt-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate('/auth/email-confirmation')}
+                          className="w-full"
+                        >
+                          📧 Reenviar Email de Confirmação
+                        </Button>
+                      </div>
+                    )}
+                  </AlertDescription>
                 </Alert>
               )}
               <div className="space-y-2">

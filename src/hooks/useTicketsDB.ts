@@ -123,18 +123,117 @@ export function useTicketsDB() {
       }
 
         // Calcular ID do departamento do usuário
-  const userDepartmentId = currentUser?.department ? departmentMapping[currentUser.department] : null;
+        let userDepartmentId = null;
+        
+        // Tratamento especial para roles administrativos globais
+        if (currentUser?.department === 'Diretor' || 
+            currentUser?.department === 'CEO' || 
+            currentUser?.department === 'Administrador') {
+          // Diretores e CEOs têm acesso global - não aplicar filtro de departamento
+          userDepartmentId = null;
+          console.log('🏢 Usuário com acesso global detectado:', currentUser.department);
+        } else if (currentUser?.department) {
+          // Para outros departamentos, usar mapeamento normal
+          userDepartmentId = departmentMapping[currentUser.department] || null;
+          
+          if (!userDepartmentId) {
+            console.warn('⚠️ Departamento não encontrado no mapeamento:', currentUser.department);
+            console.log('📋 Departamentos disponíveis:', Object.keys(departmentMapping));
+          }
+        }
+
+        // Determinar se o usuário tem acesso global (antes de aplicar filtros)
+        const hasGlobalAccess = currentUser?.department === 'Diretor' || 
+                               currentUser?.department === 'CEO' || 
+                               currentUser?.department === 'Administrador';
 
   // Debug: mostrar informações do usuário
   console.log('🔍 Debug - Informações do usuário:', {
     userId: user.id,
     userRole: currentUser?.role,
     userDepartment: currentUser?.department,
-    departmentId: userDepartmentId
+    departmentId: userDepartmentId,
+    hasGlobalAccess
   });
 
   // Se os tickets existem, tentar buscar com relacionamentos
   try {
+    // Primeiro tentar consulta simples sem relacionamentos para evitar erros
+    let ticketsWithRelations = null;
+    let relationError = null;
+
+    try {
+      // Tentar com relacionamentos completos primeiro
+      const { data: relatedData, error: relError } = await supabase
+            .from('tickets')
+            .select(`
+              *,
+              customer:profiles!tickets_customer_id_fkey (
+                id,
+                name,
+                email
+              ),
+              agent:profiles!tickets_agent_id_fkey (
+                id,
+                name,
+                email
+              ),
+              department:departments!tickets_department_id_fkey (
+                id,
+                name,
+                color
+              )
+            `)
+            .order('last_message_at', { ascending: false });
+
+      if (relError) {
+        relationError = relError;
+        console.warn('⚠️ Erro nos relacionamentos:', relError);
+      } else {
+        ticketsWithRelations = relatedData;
+      }
+    } catch (relErr) {
+      relationError = relErr;
+      console.warn('⚠️ Erro ao buscar relacionamentos:', relErr);
+    }
+
+    // Se relacionamentos falharam, usar consulta básica
+    if (relationError || !ticketsWithRelations) {
+      console.log('🔄 Fallback: Usando consulta básica sem relacionamentos');
+      
+      const { data: basicData, error: basicError } = await supabase
+        .from('tickets')
+        .select('*')
+        .order('last_message_at', { ascending: false });
+
+      if (basicError) throw basicError;
+      
+      // Aplicar filtro manual usando mapeamento
+      let filteredData = basicData || [];
+      
+      if (currentUser?.role === 'customer') {
+        filteredData = filteredData.filter(ticket => ticket.customer_id === user.id);
+      } else if (!hasGlobalAccess) {
+        // Aplicar filtros apenas se não tiver acesso global
+        if (currentUser?.role === 'agent' && userDepartmentId) {
+          filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
+        } else if (currentUser?.role === 'admin' && userDepartmentId) {
+          filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
+        }
+      }
+      
+      setTickets(filteredData);
+      
+      // Mostrar aviso sobre relacionamentos faltantes apenas uma vez
+      if ((relationError as any)?.code === 'PGRST200') {
+        console.error('❌ ERRO DE RELACIONAMENTO: Execute CORRECAO_RELACIONAMENTOS_TICKETS_DEPARTMENTS.sql no Supabase');
+        setError(`Relacionamentos não configurados. Execute CORRECAO_RELACIONAMENTOS_TICKETS_DEPARTMENTS.sql no Supabase Dashboard.`);
+      }
+      
+      return;
+    }
+
+    // Se chegou aqui, relacionamentos funcionaram - aplicar filtros
     let query = supabase
           .from('tickets')
           .select(`
@@ -157,8 +256,14 @@ export function useTicketsDB() {
           `);
 
         // Aplicar filtro de departamento usando mapeamento
-        
-        if (currentUser?.role === 'agent' && userDepartmentId) {
+        if (currentUser?.role === 'customer') {
+          // Customers só veem seus próprios tickets
+          query = query.eq('customer_id', user.id);
+          console.log('🎯 Filtro Customer aplicado - User ID:', user.id);
+        } else if (hasGlobalAccess) {
+          // Diretores, CEOs e Administradores veem todos os tickets
+          console.log('🎯 Acesso global aplicado - Visualizando todos os tickets');
+        } else if (currentUser?.role === 'agent' && userDepartmentId) {
           // Agents só veem tickets do seu departamento
           query = query.eq('department_id', userDepartmentId);
           console.log('🎯 Filtro Agent aplicado - Departamento ID:', userDepartmentId);
@@ -166,15 +271,11 @@ export function useTicketsDB() {
           // Admins com departamento específico só veem tickets do seu departamento
           query = query.eq('department_id', userDepartmentId);
           console.log('🎯 Filtro Admin aplicado - Departamento ID:', userDepartmentId);
-        } else if (currentUser?.role === 'customer') {
-          // Customers só veem seus próprios tickets
-          query = query.eq('customer_id', user.id);
-          console.log('🎯 Filtro Customer aplicado - User ID:', user.id);
         } else {
-          console.log('🎯 Nenhum filtro aplicado - Admin sem departamento ou erro no mapeamento');
+          console.log('🎯 Sem filtro específico - Visualizando tickets disponíveis');
         }
 
-        const { data: ticketsWithRelations, error: relationError } = await query
+        const { data: filteredTickets, error: filterError } = await query
           .order('last_message_at', { ascending: false });
 
         // Debug: log do filtro aplicado
@@ -182,30 +283,35 @@ export function useTicketsDB() {
           userRole: currentUser?.role,
           userDepartment: currentUser?.department,
           userDepartmentId,
-          filterApplied: currentUser?.role === 'agent' && userDepartmentId ? `Agent - Departamento ${currentUser.department}` :
+          hasGlobalAccess,
+          filterApplied: currentUser?.role === 'customer' ? 'Customer - Próprios tickets' :
+                         hasGlobalAccess ? `Acesso Global - ${currentUser?.department}` :
+                         currentUser?.role === 'agent' && userDepartmentId ? `Agent - Departamento ${currentUser.department}` :
                          currentUser?.role === 'admin' && userDepartmentId ? `Admin - Departamento ${currentUser.department}` :
-                         currentUser?.role === 'customer' ? 'Customer - Próprios tickets' :
-                         'Sem filtro - Admin global ou erro no mapeamento',
-          totalTicketsFound: ticketsWithRelations?.length || 0
+                         'Sem filtro específico',
+          totalTicketsFound: filteredTickets?.length || 0
         });
 
-        if (relationError) {
+        if (filterError) {
           // Se houver erro nos relacionamentos, usar dados básicos com filtro manual
-          console.warn('Erro nos relacionamentos, usando dados básicos:', relationError);
+          console.warn('Erro nos relacionamentos, usando dados básicos:', filterError);
           let filteredData = data || [];
           
           // Aplicar filtro manual usando mapeamento
-          if (currentUser?.role === 'agent' && userDepartmentId) {
-            filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
-          } else if (currentUser?.role === 'admin' && userDepartmentId) {
-            filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
-          } else if (currentUser?.role === 'customer') {
+          if (currentUser?.role === 'customer') {
             filteredData = filteredData.filter(ticket => ticket.customer_id === user.id);
+          } else if (!hasGlobalAccess) {
+            // Aplicar filtros apenas se não tiver acesso global
+            if (currentUser?.role === 'agent' && userDepartmentId) {
+              filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
+            } else if (currentUser?.role === 'admin' && userDepartmentId) {
+              filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
+            }
           }
           
           setTickets(filteredData);
         } else {
-          setTickets(ticketsWithRelations || []);
+          setTickets(filteredTickets || []);
         }
       } catch (relationErr) {
         // Fallback para dados básicos com filtro manual
@@ -213,12 +319,15 @@ export function useTicketsDB() {
         let filteredData = data || [];
         
         // Aplicar filtro manual usando mapeamento
-        if (currentUser?.role === 'agent' && userDepartmentId) {
-          filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
-        } else if (currentUser?.role === 'admin' && userDepartmentId) {
-          filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
-        } else if (currentUser?.role === 'customer') {
+        if (currentUser?.role === 'customer') {
           filteredData = filteredData.filter(ticket => ticket.customer_id === user.id);
+        } else if (!hasGlobalAccess) {
+          // Aplicar filtros apenas se não tiver acesso global
+          if (currentUser?.role === 'agent' && userDepartmentId) {
+            filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
+          } else if (currentUser?.role === 'admin' && userDepartmentId) {
+            filteredData = filteredData.filter(ticket => ticket.department_id === userDepartmentId);
+          }
         }
         
         setTickets(filteredData);

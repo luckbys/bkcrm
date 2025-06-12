@@ -73,7 +73,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import evolutionApiService from '@/services/evolutionApiService';
+import evolutionApiService, { isValidWhatsAppNumber, formatPhoneNumber } from '@/services/evolutionApiService';
 import { useWebhookResponses } from '@/hooks/useWebhookResponses';
 
 
@@ -528,7 +528,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
       if (!isInternal && whatsappInstance && whatsappStatus === 'connected') {
         const clientPhone = currentTicket.metadata?.client_phone;
         
-        if (clientPhone && evolutionApiService.isValidWhatsAppNumber(clientPhone)) {
+        if (clientPhone && isValidWhatsAppNumber(clientPhone)) {
           setIsSendingWhatsApp(true);
           
           try {
@@ -1836,7 +1836,7 @@ export const TicketChat = ({ ticket, onClose }: TicketChatProps) => {
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <span className="text-sm font-medium text-gray-700">WhatsApp:</span>
                       <span className="text-sm text-gray-600">
-                        {evolutionApiService.formatPhoneNumber(currentTicket.metadata.client_phone)}
+                        {formatPhoneNumber(currentTicket.metadata.client_phone)}
                       </span>
                     </div>
                   )}
