@@ -6,28 +6,20 @@ RUN apk add --no-cache curl
 # Criar diretório de trabalho
 WORKDIR /app
 
-# Criar usuário não-root
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
-
-# Copiar package files
+# Copiar package files primeiro
 COPY package*.json ./
 
 # Instalar dependências
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --production
 
-# Copiar apenas o arquivo webhook principal
-COPY webhook-evolution-complete.js ./
-
-# Mudar ownership dos arquivos
-RUN chown -R nextjs:nodejs /app
-USER nextjs
+# Copiar todos os arquivos do projeto
+COPY . .
 
 # Expor porta
 EXPOSE 4000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Health check simples
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:4000/health || exit 1
 
 # Comando para iniciar
