@@ -76,106 +76,111 @@ export const MainMenu = ({ onNavigate }: MainMenuProps) => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button 
-          variant="outline" 
+          variant="ghost" 
           size="sm" 
           className="
-            relative overflow-hidden
-            bg-gradient-to-r from-blue-50 to-indigo-50
-            border-blue-200 hover:border-blue-300
-            text-gray-700 hover:text-blue-700
+            h-10 px-3 rounded-xl
+            bg-white/60 hover:bg-white/80
+            border border-gray-200/60 hover:border-gray-300/80
+            text-gray-600 hover:text-gray-900
             shadow-sm hover:shadow-md
-            transition-all duration-300 ease-in-out
-            hover:scale-105 active:scale-95
+            backdrop-blur-sm
+            transition-all duration-200 ease-out
             group
           "
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 to-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <Menu className="w-4 h-4 mr-2 transition-transform group-hover:rotate-180 duration-300" />
-          <span className="hidden sm:inline font-medium">Menus</span>
+          <Menu className="w-4 h-4 mr-2 transition-transform group-hover:scale-110 duration-200" />
+          <span className="hidden sm:inline font-medium text-sm">Menus</span>
         </Button>
       </DropdownMenuTrigger>
       
       <DropdownMenuContent 
         align="start" 
         className="
-          w-64 p-2
-          bg-white/95 backdrop-blur-lg
-          border border-gray-200/80
-          shadow-xl shadow-black/10
-          rounded-xl
-          animate-in slide-in-from-top-2 duration-200
+          w-72 p-3
+          bg-white/95 backdrop-blur-xl
+          border border-gray-200/50
+          shadow-2xl shadow-black/5
+          rounded-2xl
+          animate-in slide-in-from-top-2 duration-300
         "
       >
-        {menuItems.map((item, index) => (
-          <div key={item.name}>
-            <DropdownMenuItem 
-              onClick={() => handleMenuClick(item)}
-              className="
-                flex items-center p-3 rounded-lg mb-1
-                hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50
-                hover:border hover:border-blue-100
-                transition-all duration-200 ease-in-out
-                cursor-pointer group
-                focus:bg-gradient-to-r focus:from-blue-50 focus:to-indigo-50
-                focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-1
-              "
-            >
-              <div className="
-                mr-3 p-2 rounded-lg
-                bg-gradient-to-br from-gray-100 to-gray-200
-                group-hover:from-blue-100 group-hover:to-indigo-100
-                transition-all duration-200
-                group-hover:scale-110
-              ">
-                <div className="text-gray-600 group-hover:text-blue-600 transition-colors duration-200">
-                  {getIconComponent(item.icon)}
-                </div>
-              </div>
-              
-              <div className="flex-1">
-                <span className="
-                  font-medium text-gray-700
-                  group-hover:text-blue-700
-                  transition-colors duration-200
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Navegação</h3>
+          <p className="text-xs text-gray-500">Acesse os módulos do sistema</p>
+        </div>
+        
+        <div className="space-y-1">
+          {menuItems.map((item, index) => (
+            <div key={item.name}>
+              <DropdownMenuItem 
+                onClick={() => handleMenuClick(item)}
+                className="
+                  flex items-center p-3 rounded-xl
+                  hover:bg-gray-50/80 hover:backdrop-blur-sm
+                  transition-all duration-200 ease-out
+                  cursor-pointer group
+                  focus:bg-gray-50/80
+                  focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                  border border-transparent hover:border-gray-200/50
+                "
+              >
+                <div className="
+                  mr-3 p-2 rounded-lg
+                  bg-gray-100/50 group-hover:bg-blue-50/80
+                  transition-all duration-200
+                  group-hover:scale-105
                 ">
-                  {item.name}
-                </span>
-              </div>
+                  <div className="text-gray-500 group-hover:text-blue-600 transition-colors duration-200">
+                    {getIconComponent(item.icon)}
+                  </div>
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <span className="
+                    text-sm font-medium text-gray-700
+                    group-hover:text-gray-900
+                    transition-colors duration-200
+                    block truncate
+                  ">
+                    {item.name}
+                  </span>
+                </div>
+                
+                <div className="flex items-center ml-3">
+                  {item.external ? (
+                    <ExternalLink className="
+                      w-4 h-4 text-gray-400
+                      group-hover:text-blue-500
+                      transition-all duration-200
+                    " />
+                  ) : (
+                    <ChevronRight className="
+                      w-4 h-4 text-gray-300
+                      group-hover:text-gray-500
+                      transition-all duration-200
+                      group-hover:translate-x-0.5
+                    " />
+                  )}
+                </div>
+              </DropdownMenuItem>
               
-              <div className="flex items-center ml-auto">
-                {item.external ? (
-                  <ExternalLink className="
-                    w-3 h-3 text-gray-400
-                    group-hover:text-blue-500
-                    transition-all duration-200
-                    group-hover:scale-110
-                  " />
-                ) : (
-                  <ChevronRight className="
-                    w-3 h-3 text-gray-300
-                    group-hover:text-blue-400
-                    transition-all duration-200
-                    group-hover:translate-x-1
-                  " />
-                )}
-              </div>
-            </DropdownMenuItem>
-            
-            {index === 4 && (
-              <DropdownMenuSeparator className="
-                my-3 bg-gradient-to-r from-transparent via-gray-200 to-transparent
-                h-px border-0
-              " />
-            )}
-          </div>
-        ))}
+              {index === 4 && (
+                <DropdownMenuSeparator className="
+                  my-3 bg-gradient-to-r from-transparent via-gray-200/60 to-transparent
+                  h-px border-0
+                " />
+              )}
+            </div>
+          ))}
+        </div>
         
         <div className="
-          mt-2 pt-2 border-t border-gray-100
+          mt-4 pt-3 border-t border-gray-100/60
           text-xs text-gray-500 text-center
-          font-medium tracking-wide
+          font-medium
         ">
-          Selecione um módulo
+          {menuItems.length} módulos disponíveis
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -202,8 +202,32 @@ export default {
 			spacing: {
 				'18': '4.5rem',
 				'88': '22rem',
+			},
+			animationDelay: {
+				'100': '100ms',
+				'200': '200ms',
+				'300': '300ms',
+				'500': '500ms'
 			}
 		}
 	},
-	plugins: [require("tailwindcss-animate")],
+	plugins: [
+		require("tailwindcss-animate"),
+		function({ addUtilities }: any) {
+			addUtilities({
+				'.animation-delay-100': {
+					'animation-delay': '100ms'
+				},
+				'.animation-delay-200': {
+					'animation-delay': '200ms'
+				},
+				'.animation-delay-300': {
+					'animation-delay': '300ms'
+				},
+				'.animation-delay-500': {
+					'animation-delay': '500ms'
+				}
+			});
+		}
+	]
 } satisfies Config;

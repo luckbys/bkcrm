@@ -124,28 +124,18 @@ async function processNewMessage(payload) {
       instance: instanceName
     });
 
-    // Buscar instância Evolution no banco
-    const { data: evolutionInstance, error: instanceError } = await supabase
-      .from('evolution_instances')
-      .select('id, department_id, instance_name')
-      .eq('instance_name', instanceName)
-      .eq('status', 'active')
-      .single();
-
-    if (instanceError || !evolutionInstance) {
-      console.error('❌ Instância Evolution não encontrada:', instanceName);
-      return { success: false, message: 'Instância não encontrada' };
-    }
-
-    // Buscar ticket existente ou criar novo
-    let ticketId = await findExistingTicket(clientPhone, evolutionInstance.department_id);
+    // MODO SIMULADO - sem verificar banco
+    console.log('🧪 [MODO SIMULADO] Simulando instância encontrada:', instanceName);
+    
+    // Buscar ticket existente ou criar novo (simulado)
+    let ticketId = await findExistingTicket(clientPhone, 'dept-simulado');
     
     if (!ticketId) {
       ticketId = await createTicketAutomatically({
         clientName: senderName,
         clientPhone: clientPhone,
         instanceName: instanceName,
-        departmentId: evolutionInstance.department_id,
+        departmentId: 'dept-simulado',
         firstMessage: messageContent
       });
     }
@@ -155,7 +145,7 @@ async function processNewMessage(payload) {
       return { success: false, message: 'Erro ao criar ticket' };
     }
 
-    // Salvar mensagem no banco
+    // Salvar mensagem no banco (simulado)
     const saveResult = await saveMessageToDatabase({
       ticketId,
       content: messageContent,
@@ -186,21 +176,9 @@ async function processNewMessage(payload) {
 // Função para buscar ticket existente
 async function findExistingTicket(clientPhone, departmentId) {
   try {
-    const { data: tickets, error } = await supabase
-      .from('tickets')
-      .select('id')
-      .eq('metadata->>client_phone', clientPhone)
-      .eq('department_id', departmentId)
-      .in('status', ['pendente', 'atendimento'])
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (error) {
-      console.error('Erro ao buscar ticket:', error);
-      return null;
-    }
-
-    return tickets?.[0]?.id || null;
+    console.log('🔍 [SIMULADO] Buscando ticket existente para:', clientPhone);
+    // Por enquanto, simular que não há tickets existentes
+    return null;
   } catch (error) {
     console.error('Erro ao buscar ticket:', error);
     return null;
@@ -210,50 +188,17 @@ async function findExistingTicket(clientPhone, departmentId) {
 // Função para criar ticket automaticamente
 async function createTicketAutomatically(data) {
   try {
-    console.log('🎫 Criando ticket automaticamente:', {
-      client: data.clientName,
-      phone: data.clientPhone,
-      department: data.departmentId
+    console.log('🎫 [SIMULADO] Criando ticket automaticamente:', {
+      cliente: data.clientName,
+      telefone: data.clientPhone,
+      mensagem: data.firstMessage?.substring(0, 50) + '...'
     });
-
-    const ticketData = {
-      title: `WhatsApp - ${data.clientName}`,
-      subject: `Conversa via WhatsApp - ${data.clientPhone}`,
-      description: `Ticket criado automaticamente a partir de mensagem recebida no WhatsApp.\n\nPrimeira mensagem: "${data.firstMessage}"`,
-      status: 'pendente',
-      priority: 'normal',
-      channel: 'chat',
-      department_id: data.departmentId,
-      metadata: {
-        client_name: data.clientName,
-        client_phone: data.clientPhone,
-        evolution_instance_name: data.instanceName,
-        auto_created: true,
-        created_from_whatsapp: true,
-        anonymous_contact: data.clientName
-      },
-      unread: true,
-      tags: ['whatsapp', 'auto-created'],
-      is_internal: false,
-      last_message_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    const { data: ticket, error } = await supabase
-      .from('tickets')
-      .insert([ticketData])
-      .select('id')
-      .single();
-
-    if (error) {
-      console.error('❌ Erro ao criar ticket:', error);
-      return null;
-    }
-
-    console.log('✅ Ticket criado automaticamente:', ticket.id);
-    return ticket.id;
-
+    
+    // Simular criação de ticket com ID fictício
+    const mockTicketId = `ticket-${Date.now()}`;
+    
+    console.log('✅ Ticket simulado criado:', mockTicketId);
+    return mockTicketId;
   } catch (error) {
     console.error('❌ Erro ao criar ticket:', error);
     return null;
@@ -263,51 +208,25 @@ async function createTicketAutomatically(data) {
 // Função para salvar mensagem no banco
 async function saveMessageToDatabase(data) {
   try {
-    const messageData = {
-      ticket_id: data.ticketId,
-      content: data.content,
-      sender_name: data.senderName,
-      type: 'text',
-      is_internal: false,
-      is_read: false,
-      metadata: {
-        evolution_instance: data.instanceName,
-        evolution_message_id: data.messageId,
-        sender_phone: data.senderPhone,
-        is_from_whatsapp: true
-      },
-      created_at: data.timestamp
+    console.log('💾 [SIMULADO] Salvando mensagem no banco:', {
+      ticketId: data.ticketId,
+      content: data.content.substring(0, 30) + '...',
+      sender: data.senderName,
+      timestamp: data.timestamp
+    });
+
+    // Simular sucesso
+    console.log('✅ Mensagem simulada salva com sucesso');
+    
+    return {
+      success: true,
+      message: 'Mensagem salva (simulado)',
+      messageId: `msg-${Date.now()}`
     };
-
-    const { error: messageError } = await supabase
-      .from('messages')
-      .insert([messageData]);
-
-    if (messageError) {
-      console.error('❌ Erro ao salvar mensagem:', messageError);
-      return { success: false, error: messageError };
-    }
-
-    // Atualizar timestamp do ticket
-    const { error: updateError } = await supabase
-      .from('tickets')
-      .update({ 
-        last_message_at: data.timestamp,
-        unread: true,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', data.ticketId);
-
-    if (updateError) {
-      console.error('❌ Erro ao atualizar ticket:', updateError);
-    }
-
-    console.log('✅ Mensagem salva no banco de dados');
-    return { success: true };
 
   } catch (error) {
     console.error('❌ Erro ao salvar mensagem:', error);
-    return { success: false, error };
+    return { success: false, message: error.message };
   }
 }
 
