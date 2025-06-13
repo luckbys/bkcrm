@@ -6,18 +6,18 @@ RUN apk add --no-cache curl
 # Criar diretório de trabalho
 WORKDIR /app
 
-# Criar usuário não-root
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
-
-# Copiar package files
+# Copiar package files primeiro (para cache layer)
 COPY package*.json ./
 
 # Instalar dependências
 RUN npm ci --only=production && npm cache clean --force
 
-# Copiar apenas o arquivo webhook principal
-COPY webhook-evolution-complete.js ./
+# Criar usuário não-root
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Copiar todos os arquivos necessários
+COPY . ./
 
 # Mudar ownership dos arquivos
 RUN chown -R nextjs:nodejs /app

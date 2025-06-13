@@ -1,11 +1,10 @@
-import dotenv from 'dotenv';
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 
-// Carregar configurações
-dotenv.config({ path: './webhook.env' });
+// Configurações via variáveis de ambiente (EasyPanel)
+console.log('🔧 Carregando configurações das variáveis de ambiente...');
 
 const app = express();
 const PORT = process.env.WEBHOOK_PORT || 4000;

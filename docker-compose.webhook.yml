@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  evolution-webhook:
+    build:
+      context: .
+      dockerfile: Dockerfile.webhook
+    container_name: evolution-webhook
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - webhook.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.evolution-webhook.rule=Host(`bkcrm.devsible.com.br`) && PathPrefix(`/webhook`)"
+      - "traefik.http.services.evolution-webhook.loadbalancer.server.port=4000"
+      - "traefik.http.routers.evolution-webhook.tls.certresolver=letsencrypt" 
