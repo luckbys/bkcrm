@@ -1,0 +1,16 @@
+{
+  "event": "MESSAGES_UPSERT",
+  "instance": "atendimento-ao-cliente-sac1",
+  "data": {
+    "key": {
+      "remoteJid": "5511999999999@s.whatsapp.net",
+      "fromMe": false,
+      "id": "test123"
+    },
+    "message": {
+      "conversation": "Teste de criação de ticket automático"
+    },
+    "messageTimestamp": 1641909600,
+    "pushName": "Cliente Teste"
+  }
+} 

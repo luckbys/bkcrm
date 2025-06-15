@@ -88,140 +88,6 @@ app.post('/webhook/evolution', async (req, res) => {
   }
 });
 
-
-// Endpoint alternativo para compatibilidade com Evolution API antiga
-app.post('/webhook/messages-upsert', async (req, res) => {
-  try {
-    console.log('📥 [COMPAT] Recebido em /messages-upsert, redirecionando...');
-    
-    // Reformatar payload para nosso padrão
-    const reformattedPayload = {
-      event: 'MESSAGES_UPSERT',
-      instance: req.body.instance || req.headers['instance'] || 'unknown',
-      data: req.body.data || req.body
-    };
-    
-    console.log('🔄 Redirecionando para processamento principal...');
-    
-    // Processar usando nossa função principal
-    const result = await processNewMessage(reformattedPayload);
-    
-    // Resposta compatível
-    res.status(200).json({
-      received: true,
-      timestamp: new Date().toISOString(),
-      event: 'MESSAGES_UPSERT',
-      instance: reformattedPayload.instance,
-      processed: result.success,
-      message: result.message,
-      ticketId: result.ticketId
-    });
-    
-    console.log('✅ Processamento via endpoint alternativo concluído');
-    
-  } catch (error) {
-    console.error('❌ Erro no endpoint alternativo:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor',
-      timestamp: new Date().toISOString(),
-      details: error.message
-    });
-  }
-});
-
-// Endpoints específicos que a Evolution API v2.2.3 usa
-app.post('/webhook/evolution/messages-upsert', async (req, res) => {
-  try {
-    console.log('📥 [MESSAGES-UPSERT] Recebido webhook de mensagem');
-    
-    // Reformatar payload para nosso padrão
-    const reformattedPayload = {
-      event: 'MESSAGES_UPSERT',
-      instance: req.body.instance || req.headers['instance'] || 'unknown',
-      data: req.body.data || req.body
-    };
-    
-    // Processar usando nossa função principal
-    const result = await processNewMessage(reformattedPayload);
-    
-    res.status(200).json({
-      received: true,
-      timestamp: new Date().toISOString(),
-      event: 'MESSAGES_UPSERT',
-      processed: result.success,
-      message: result.message,
-      ticketId: result.ticketId
-    });
-    
-  } catch (error) {
-    console.error('❌ Erro no endpoint messages-upsert:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor',
-      details: error.message
-    });
-  }
-});
-
-app.post('/webhook/evolution/contacts-update', async (req, res) => {
-  try {
-    console.log('📥 [CONTACTS-UPDATE] Recebido webhook de contato');
-    
-    const result = await processContactUpdate(req.body);
-    
-    res.status(200).json({
-      received: true,
-      timestamp: new Date().toISOString(),
-      event: 'CONTACTS_UPDATE',
-      processed: result.success
-    });
-    
-  } catch (error) {
-    console.error('❌ Erro no endpoint contacts-update:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor',
-      details: error.message
-    });
-  }
-});
-
-app.post('/webhook/evolution/chats-update', async (req, res) => {
-  try {
-    console.log('📥 [CHATS-UPDATE] Recebido webhook de chat');
-    
-    const result = await processChatUpdate(req.body);
-    
-    res.status(200).json({
-      received: true,
-      timestamp: new Date().toISOString(),
-      event: 'CHATS_UPDATE',
-      processed: result.success
-    });
-    
-  } catch (error) {
-    console.error('❌ Erro no endpoint chats-update:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor',
-      details: error.message
-    });
-  }
-});
-
-// Endpoint de health check
-app.get('/webhook/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    server: 'Webhook Evolution API',
-    endpoints: [
-      '/webhook/evolution',
-      '/webhook/evolution/messages-upsert',
-      '/webhook/evolution/contacts-update', 
-      '/webhook/evolution/chats-update',
-      '/webhook/messages-upsert'
-    ]
-  });
-});
-
 // Função para processar mensagens recebidas
 async function processNewMessage(payload) {
   try {
@@ -241,16 +107,9 @@ async function processNewMessage(payload) {
     }
 
     // Extrair informações da mensagem
-    console.log('📊 Dados recebidos:', {
-      remoteJid: messageData.key?.remoteJid,
-      fromMe: messageData.key?.fromMe,
-      messageKeys: Object.keys(messageData.message || {}),
-      pushName: messageData.pushName,
-      instanceName: instanceName
-    });
     const clientPhone = extractPhoneFromJid(messageData.key.remoteJid);
     const messageContent = extractMessageContent(messageData.message);
-    const senderName = messageData.pushName || `Cliente ${clientPhone?.slice(-4) || 'Desconhecido'}`;
+    const senderName = messageData.pushName || `Cliente ${clientPhone.slice(-4)}`;
     
     if (!clientPhone || !messageContent) {
       console.warn('⚠️ Telefone ou conteúdo da mensagem inválido');
@@ -328,117 +187,40 @@ async function findExistingTicket(clientPhone, departmentId) {
 // Função para criar ticket automaticamente
 async function createTicketAutomatically(data) {
   try {
-    console.log('🎫 Criando ticket real:', {
+    console.log('🎫 [SIMULADO] Criando ticket automaticamente:', {
       cliente: data.clientName,
       telefone: data.clientPhone,
-      mensagem: data.firstMessage?.substring(0, 50) + '...',
-      instancia: data.instanceName
+      mensagem: data.firstMessage?.substring(0, 50) + '...'
     });
     
-    // Buscar departamento padrão ou criar um
-    let departmentId = 'dept-geral';
+    // Simular criação de ticket com ID fictício
+    const mockTicketId = `ticket-${Date.now()}`;
     
-    // Tentar buscar departamento no banco
-    const { data: departments } = await supabase
-      .from('departments')
-      .select('id')
-      .eq('name', 'Atendimento Geral')
-      .limit(1);
-    
-    if (departments && departments.length > 0) {
-      departmentId = departments[0].id;
-    }
-    
-    // Criar ticket no banco
-    const ticketData = {
-      title: `Mensagem de ${data.clientName}`,
-      description: data.firstMessage,
-      status: 'novo',
-      priority: 'media',
-      channel: 'whatsapp',
-      department_id: departmentId,
-      metadata: {
-        whatsapp_phone: data.clientPhone,
-        whatsapp_name: data.clientName,
-        instance_name: data.instanceName,
-        first_message: data.firstMessage,
-        created_via: 'webhook_auto',
-        source: 'evolution_api'
-      },
-      created_at: new Date().toISOString()
-    };
-    
-    const { data: ticket, error } = await supabase
-      .from('tickets')
-      .insert([ticketData])
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('❌ Erro ao criar ticket no banco:', error);
-      
-      // Fallback: criar ticket simulado se falhar
-      const mockTicketId = `ticket-fallback-${Date.now()}`;
-      console.log('🔄 Criando ticket fallback:', mockTicketId);
-      return mockTicketId;
-    }
-    
-    console.log('✅ Ticket criado com sucesso:', ticket.id);
-    return ticket.id;
-    
+    console.log('✅ Ticket simulado criado:', mockTicketId);
+    return mockTicketId;
   } catch (error) {
     console.error('❌ Erro ao criar ticket:', error);
-    
-    // Fallback: criar ticket simulado
-    const mockTicketId = `ticket-error-${Date.now()}`;
-    console.log('🔄 Criando ticket fallback devido a erro:', mockTicketId);
-    return mockTicketId;
+    return null;
   }
 }
 
 // Função para salvar mensagem no banco
 async function saveMessageToDatabase(data) {
   try {
-    console.log('💾 Salvando mensagem real no banco:', {
+    console.log('💾 [SIMULADO] Salvando mensagem no banco:', {
       ticketId: data.ticketId,
       content: data.content.substring(0, 30) + '...',
       sender: data.senderName,
       timestamp: data.timestamp
     });
 
-    // Salvar mensagem no banco
-    const messageData = {
-      ticket_id: data.ticketId,
-      content: data.content,
-      sender_type: 'customer',
-      sender_name: data.senderName,
-      metadata: {
-        whatsapp_phone: data.senderPhone,
-        instance_name: data.instanceName,
-        message_id: data.messageId,
-        timestamp: data.timestamp,
-        source: 'webhook'
-      },
-      created_at: data.timestamp
-    };
-    
-    const { data: message, error } = await supabase
-      .from('messages')
-      .insert([messageData])
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('❌ Erro ao salvar mensagem:', error);
-      return { success: false, message: error.message };
-    }
-    
-    console.log('✅ Mensagem salva com sucesso:', message.id);
+    // Simular sucesso
+    console.log('✅ Mensagem simulada salva com sucesso');
     
     return {
       success: true,
-      message: 'Mensagem salva no banco',
-      messageId: message.id
+      message: 'Mensagem salva (simulado)',
+      messageId: `msg-${Date.now()}`
     };
 
   } catch (error) {
@@ -531,39 +313,6 @@ async function processSentMessage(payload) {
 
   } catch (error) {
     console.error('❌ Erro ao processar mensagem enviada:', error);
-    return { success: false, message: error.message };
-  }
-}
-
-// Função para processar atualizações de contatos
-async function processContactUpdate(payload) {
-  try {
-    console.log('👤 Processando atualização de contato:', {
-      remoteJid: payload.remoteJid,
-      pushName: payload.pushName,
-      instance: payload.instance
-    });
-    
-    // Por enquanto, apenas log - pode ser usado para atualizar dados do cliente
-    return { success: true, message: 'Contato atualizado processado' };
-  } catch (error) {
-    console.error('❌ Erro ao processar atualização de contato:', error);
-    return { success: false, message: error.message };
-  }
-}
-
-// Função para processar atualizações de chats
-async function processChatUpdate(payload) {
-  try {
-    console.log('💬 Processando atualização de chat:', {
-      remoteJid: payload.remoteJid,
-      instance: payload.instance
-    });
-    
-    // Por enquanto, apenas log - pode ser usado para atualizar status do chat
-    return { success: true, message: 'Chat atualizado processado' };
-  } catch (error) {
-    console.error('❌ Erro ao processar atualização de chat:', error);
     return { success: false, message: error.message };
   }
 }

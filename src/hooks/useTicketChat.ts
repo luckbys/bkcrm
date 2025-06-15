@@ -10,7 +10,7 @@ import { LocalMessage, QuickTemplate, UseTicketChatReturn } from '../types/ticke
 export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { sendMessage, createTicket } = useTicketsDB();
+  const { sendMessage, createTicket, fetchMessages } = useTicketsDB();
 
   // Estados do ticket – precisa vir antes do hook de mensagens Evolution
   const [currentTicket, setCurrentTicket] = useState(ticket || {});
@@ -89,6 +89,56 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     return result;
   };
 
+  // Função para carregar mensagens existentes do banco
+  const loadExistingMessages = useCallback(async (ticketId: string) => {
+    try {
+      console.log('📥 Carregando mensagens existentes do banco para ticket:', ticketId);
+      setIsLoadingHistory(true);
+
+      const messages = await fetchMessages(ticketId);
+      
+      if (messages && messages.length > 0) {
+        const localMessages: LocalMessage[] = messages.map((msg: any) => ({
+          id: generateUniqueId(msg.id),
+          content: msg.content,
+          sender: msg.sender_id ? 'agent' : 'client',
+          senderName: msg.sender_name || msg.sender?.name || (msg.sender_id ? 'Agente' : 'Cliente'),
+          timestamp: new Date(msg.created_at),
+          type: msg.type || 'text',
+          status: 'sent' as const,
+          isInternal: msg.is_internal || false,
+          attachments: msg.file_url ? [{
+            id: generateUniqueId(msg.id + '_file').toString(),
+            name: msg.file_name || 'Arquivo',
+            url: msg.file_url,
+            type: msg.file_type || 'file',
+            size: (msg.file_size || 0).toString()
+          }] : []
+        }));
+
+        setRealTimeMessages(localMessages);
+        console.log(`✅ ${localMessages.length} mensagens carregadas do banco`);
+        
+        toast({
+          title: "📥 Mensagens carregadas",
+          description: `${localMessages.length} mensagens encontradas no histórico`,
+        });
+      } else {
+        console.log('📭 Nenhuma mensagem encontrada no banco para este ticket');
+        setRealTimeMessages([]);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar mensagens do banco:', error);
+      toast({
+        title: "❌ Erro ao carregar histórico",
+        description: "Não foi possível carregar as mensagens anteriores",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [fetchMessages, toast]);
+
   // Função para obter o ticket ID real (UUID do banco de dados)
   const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
     try {
@@ -142,8 +192,6 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       return null;
     }
   }, [currentTicket, ticket]);
-
-
 
   // Função principal para enviar mensagens
   const handleSendMessage = async () => {
@@ -363,30 +411,50 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     return () => window.removeEventListener('resize', handleResize);
   }, [showSidebar, toast]);
 
-  // Simular carregamento inicial
+  // Carregar mensagens quando ticket é aberto
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoadingHistory(false);
-    }, 1000);
+    const loadTicketMessages = async () => {
+      if (!ticket?.id) {
+        setIsLoadingHistory(false);
+        return;
+      }
 
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Mapeia automaticamente o ID real do ticket (caso seja numérico) logo após montar
-  useEffect(() => {
-    const initRealIdMapping = async () => {
-      if (ticket && typeof ticket.id === 'number') {
-        const realId = await getRealTicketId(ticket.id);
-        if (realId) {
-          setCurrentTicket((prev: any) => ({ ...prev, id: realId }));
-          loadEvolutionMessages(realId as string);
+      try {
+        // Se o ticket tem originalId (UUID do banco), usar diretamente
+        if (ticket.originalId) {
+          console.log('🎯 Carregando mensagens para ticket UUID:', ticket.originalId);
+          await loadExistingMessages(ticket.originalId);
+          return;
         }
+
+        // Se é um ID numérico, tentar mapear para UUID
+        if (typeof ticket.id === 'number') {
+          const realId = await getRealTicketId(ticket.id);
+          if (realId) {
+            console.log('🎯 Ticket mapeado para UUID:', realId);
+            setCurrentTicket((prev: any) => ({ ...prev, id: realId, originalId: realId }));
+            await loadExistingMessages(realId);
+            loadEvolutionMessages(realId);
+          } else {
+            console.log('📭 Ticket não encontrado no banco (dados mock)');
+            setIsLoadingHistory(false);
+          }
+        } else if (typeof ticket.id === 'string' && ticket.id.includes('-')) {
+          // É um UUID direto
+          console.log('🎯 Carregando mensagens para UUID direto:', ticket.id);
+          await loadExistingMessages(ticket.id);
+        } else {
+          console.log('📭 Formato de ID não reconhecido:', ticket.id);
+          setIsLoadingHistory(false);
+        }
+      } catch (error) {
+        console.error('❌ Erro ao carregar mensagens do ticket:', error);
+        setIsLoadingHistory(false);
       }
     };
 
-    initRealIdMapping();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadTicketMessages();
+  }, [ticket?.id, ticket?.originalId, getRealTicketId, loadExistingMessages, loadEvolutionMessages]);
 
   return {
     // Estados principais
