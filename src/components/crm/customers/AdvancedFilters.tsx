@@ -130,7 +130,7 @@ export const AdvancedFilters = ({
     if (filters.valueRange[0] > 0 || filters.valueRange[1] < 50000) count++;
     if (filters.company) count++;
     if (filters.tags.length > 0) count++;
-    if (filters.agent) count++;
+    if (filters.agent && filters.agent !== 'all_agents') count++;
     if (filters.hasOrders !== null) count++;
     return count;
   };
@@ -236,7 +236,7 @@ export const AdvancedFilters = ({
                     <SelectValue placeholder="Selecione o canal" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos os canais</SelectItem>
+                    <SelectItem value="all_channels">Todos os canais</SelectItem>
                     {channelOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -257,7 +257,7 @@ export const AdvancedFilters = ({
                     <SelectValue placeholder="Selecione o agente" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos os agentes</SelectItem>
+                    <SelectItem value="all_agents">Todos os agentes</SelectItem>
                     {agentOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -447,7 +447,7 @@ export const AdvancedFilters = ({
                 </Badge>
               )}
               
-              {filters.agent && (
+              {filters.agent && filters.agent !== 'all_agents' && (
                 <Badge variant="secondary" className="bg-blue-100 text-blue-800">
                   Agente: {agentOptions.find(a => a.value === filters.agent)?.label}
                   <X 

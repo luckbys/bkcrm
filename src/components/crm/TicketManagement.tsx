@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 import { 
   Search,
   Filter,
@@ -29,7 +30,8 @@ import {
   XCircle,
   Loader2
 } from 'lucide-react';
-import { TicketChat } from './TicketChat';
+import { TicketChatModal } from './TicketChatModal';
+import { MinimizedChatsDrawer } from './ticket-chat/MinimizedChatsDrawer';
 import { TicketHeader } from './ticket-management/TicketHeader';
 import { TicketFilters } from './ticket-management/TicketFilters';
 import { TicketsList } from './ticket-management/TicketsList';
@@ -56,6 +58,7 @@ interface Ticket {
   updatedAt: Date;
   tags?: string[];
   description?: string;
+  originalId?: string; // UUID original do banco de dados
 }
 
 export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementProps) => {
@@ -72,40 +75,7 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
     canViewAllTickets 
   } = useUserDepartment();
 
-  // Estados principais
-  const [filters, setFilters] = useState({
-    responsible: 'todos',
-    status: 'todos',
-    channel: 'all',
-    tags: '',
-    agent: 'all',
-    client: '',
-    cnpj: '',
-    dateFrom: null as Date | null,
-    dateTo: null as Date | null
-  });
-  
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [ticketCounts, setTicketCounts] = useState({
-    nonVisualized: sector.nonVisualized || 0,
-    total: sector.total || 0
-  });
-  
-  // Estados UX
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'date' | 'priority' | 'status' | 'client'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [selectedTickets, setSelectedTickets] = useState<number[]>([]);
-  const [isAutoRefresh, setIsAutoRefresh] = useState(true);
-  const [showNotifications, setShowNotifications] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(20);
-  const [activeTab, setActiveTab] = useState('todos');
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-
-  // Mock data expandido
+  // Mock data expandido - definido logo após os hooks
   const mockTickets: Ticket[] = [
     {
       id: 1234,
@@ -186,6 +156,51 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
 
   // Usar dados do banco de dados ou fallback para mock durante migração
   const currentTickets = compatibilityTickets.length > 0 ? compatibilityTickets : mockTickets;
+
+  // Estados principais
+  const [filters, setFilters] = useState({
+    responsible: 'todos',
+    status: 'todos',
+    channel: 'all',
+    tags: '',
+    agent: 'all',
+    client: '',
+    cnpj: '',
+    dateFrom: null as Date | null,
+    dateTo: null as Date | null
+  });
+  
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [ticketCounts, setTicketCounts] = useState({
+    nonVisualized: sector.nonVisualized || 0,
+    total: sector.total || 0
+  });
+  
+  // Estados UX
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'priority' | 'status' | 'client'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [selectedTickets, setSelectedTickets] = useState<number[]>([]);
+  const [isAutoRefresh, setIsAutoRefresh] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
+  const [activeTab, setActiveTab] = useState('todos');
+  const [lastUpdate, setLastUpdate] = useState(new Date());
+
+  // Auto-refresh de tickets a cada 30 segundos
+  useEffect(() => {
+    if (!isAutoRefresh) return;
+
+    const interval = setInterval(() => {
+      refreshTickets();
+      setLastUpdate(new Date());
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isAutoRefresh, refreshTickets]);
 
   // Computed values
   const filteredAndSortedTickets = useMemo(() => {
@@ -287,6 +302,21 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
   const handleFilterChange = useCallback((key: string, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }));
     setCurrentPage(1); // Reset para primeira página
+  }, []);
+
+  // Listener para expansão de chats minimizados
+  useEffect(() => {
+    const handleExpandChat = (event: CustomEvent) => {
+      const { ticket } = event.detail;
+      if (ticket) {
+        setSelectedTicket(ticket);
+      }
+    };
+
+    window.addEventListener('expandChat', handleExpandChat as EventListener);
+    return () => {
+      window.removeEventListener('expandChat', handleExpandChat as EventListener);
+    };
   }, []);
 
   const handleTicketClick = useCallback((ticket: Ticket) => {
@@ -753,13 +783,15 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
         </TabsContent>
       </Tabs>
 
-      {/* Ticket Chat Modal */}
-      {selectedTicket && (
-        <TicketChat 
-          ticket={selectedTicket} 
-          onClose={() => setSelectedTicket(null)} 
-        />
-      )}
+      {/* Sistema de Chat Aprimorado */}
+      <TicketChatModal 
+        ticket={selectedTicket} 
+        onClose={() => setSelectedTicket(null)}
+        isOpen={!!selectedTicket}
+      />
+
+      {/* Drawer de Chats Minimizados */}
+      <MinimizedChatsDrawer />
     </div>
   );
 };

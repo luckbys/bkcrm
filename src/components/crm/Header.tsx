@@ -120,10 +120,7 @@ export const Header = ({
           </div>
         </div>
 
-        {/* Desktop Sector Info - Floating */}
-        <div className="hidden lg:block absolute left-8 xl:left-12 top-full mt-3 z-40 transition-all duration-300 hover:scale-105">
-          <SectorTitle selectedSector={selectedSector} variant="floating" />
-        </div>
+
       </div>
       
       {/* Enhanced bottom border with gradient */}

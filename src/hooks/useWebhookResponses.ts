@@ -34,6 +34,11 @@ export const useWebhookResponses = (ticketId?: string) => {
   const [isListening, setIsListening] = useState(false);
   const [lastMessageTime, setLastMessageTime] = useState<string | null>(null);
 
+  // Helper para validar UUID v4 simples (aceita hífens)
+  const isValidUUID = (id?: string) => {
+    return !!id && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+  };
+
   // Função para processar novas mensagens recebidas via webhook
   const handleNewEvolutionMessage = useCallback((message: EvolutionMessage) => {
     if (!ticketId || message.ticketId !== ticketId) return;
@@ -77,7 +82,7 @@ export const useWebhookResponses = (ticketId?: string) => {
 
   // Escutar mudanças na tabela de mensagens (Evolution API)
   useEffect(() => {
-    if (!ticketId) return;
+    if (!isValidUUID(ticketId)) return;
 
     console.log('🔗 Iniciando escuta de mensagens Evolution para ticket:', ticketId);
     setIsListening(true);
@@ -131,7 +136,7 @@ export const useWebhookResponses = (ticketId?: string) => {
   // Buscar mensagens Evolution existentes
   const loadEvolutionMessages = useCallback(async (targetTicketId?: string) => {
     const id = targetTicketId || ticketId;
-    if (!id) return;
+    if (!isValidUUID(id)) return;
 
     try {
       console.log('📥 Carregando mensagens Evolution existentes...');

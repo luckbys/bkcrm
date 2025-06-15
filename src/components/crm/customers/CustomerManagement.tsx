@@ -126,6 +126,7 @@ export const CustomerManagement = () => {
 
         // Agente
         const matchesAgent = !advancedFilters.agent || 
+          advancedFilters.agent === 'all_agents' ||
           customer.responsibleAgent === advancedFilters.agent;
 
         // Período

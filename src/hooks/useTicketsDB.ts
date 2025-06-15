@@ -57,6 +57,7 @@ export interface CompatibilityTicket {
   updatedAt: Date;
   tags?: string[];
   description?: string;
+  originalId: string;
 }
 
 export function useTicketsDB() {
@@ -484,25 +485,35 @@ export function useTicketsDB() {
 
   // Função para converter tickets do banco para o formato esperado pelo componente
   const getCompatibilityTickets = useCallback((): CompatibilityTicket[] => {
-    return tickets.map(ticket => ({
-      id: parseInt(ticket.id.replace(/-/g, '').substring(0, 8), 16), // Converter UUID para número
-      client: ticket.metadata?.client_name || 
-              (ticket as any).customer?.name || 
-              (ticket as any).profiles?.name || 
-              ticket.metadata?.anonymous_contact || 
-              'Cliente Anônimo',
-      subject: ticket.subject || ticket.title,
-      status: ticket.status as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
-      channel: ticket.channel,
-      lastMessage: formatLastMessage(ticket.last_message_at),
-      unread: ticket.unread,
-      priority: mapPriority(ticket.priority),
-      agent: (ticket as any).agent?.name || 'Não atribuído',
-      createdAt: new Date(ticket.created_at),
-      updatedAt: new Date(ticket.updated_at),
-      tags: ticket.tags,
-      description: ticket.description
-    }));
+    return tickets.map((ticket, index) => {
+      // Criar um ID numérico único baseado no índice e hash do UUID
+      // Isso garante que o mesmo ticket sempre terá o mesmo ID numérico
+      const ticketHash = ticket.id.replace(/-/g, '');
+      const hashNumber = parseInt(ticketHash.substring(0, 8), 16);
+      const uniqueId = Math.abs(hashNumber % 2147483647) + index + 1; // Garantir número positivo único
+      
+      return {
+        id: uniqueId,
+        client: ticket.metadata?.client_name || 
+                (ticket as any).customer?.name || 
+                (ticket as any).profiles?.name || 
+                ticket.metadata?.anonymous_contact || 
+                'Cliente Anônimo',
+        subject: ticket.subject || ticket.title,
+        status: ticket.status as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
+        channel: ticket.channel,
+        lastMessage: formatLastMessage(ticket.last_message_at),
+        unread: ticket.unread,
+        priority: mapPriority(ticket.priority),
+        agent: (ticket as any).agent?.name || 'Não atribuído',
+        createdAt: new Date(ticket.created_at),
+        updatedAt: new Date(ticket.updated_at),
+        tags: ticket.tags,
+        description: ticket.description,
+        // Adicionar o UUID original nos metadados para referência
+        originalId: ticket.id
+      };
+    });
   }, [tickets]);
 
   // Funções auxiliares
