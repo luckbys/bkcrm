@@ -235,10 +235,9 @@ async function processNewMessage(payload) {
       return { success: false, message: 'Dados inválidos' };
     }
 
-    // Processar apenas mensagens de clientes (não enviadas por nós)
+    // Processar todas as mensagens, incluindo as enviadas por nós
     if (messageData.key.fromMe) {
-      console.log('📤 Mensagem enviada por nós, ignorando');
-      return { success: true, message: 'Mensagem própria ignorada' };
+      console.log('📤 Mensagem enviada por nós, processando normalmente');
     }
 
     // Extrair informações da mensagem
