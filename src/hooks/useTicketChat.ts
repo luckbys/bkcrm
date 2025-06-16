@@ -20,10 +20,12 @@ const extractClientInfo = (ticket: any) => {
 
   // Verificar se é ticket do WhatsApp via metadata
   const metadata = ticket.metadata || {};
-  const isWhatsApp = metadata.created_from_whatsapp || 
-                    metadata.whatsapp_phone || 
-                    metadata.anonymous_contact || 
-                    ticket.channel === 'whatsapp';
+  const isWhatsApp = Boolean(
+    metadata.created_from_whatsapp || 
+    metadata.whatsapp_phone || 
+    metadata.anonymous_contact || 
+    ticket.channel === 'whatsapp'
+  );
 
   let clientName = 'Cliente Anônimo';
   let clientPhone = 'Telefone não informado';
@@ -402,7 +404,10 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
         }
       });
       
-      if (!isInternal && hasValidPhone && clientInfo.isWhatsApp) {
+      // Corrigir validação do isWhatsApp - deve ser boolean
+      const isWhatsAppTicket = Boolean(clientInfo.isWhatsApp);
+      
+      if (!isInternal && hasValidPhone && isWhatsAppTicket) {
         try {
           console.log('📱 Enviando mensagem via WhatsApp:', {
             phone: clientInfo.clientPhone,
