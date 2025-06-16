@@ -7,8 +7,8 @@ require('dotenv').config();
  */
 class EvolutionMessageSender {
   constructor() {
-    this.baseURL = process.env.EVOLUTION_API_URL || 'https://evolution-api.devsible.com.br';
-    this.apiKey = process.env.EVOLUTION_API_KEY || '';
+    this.baseURL = process.env.EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host/';
+    this.apiKey = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
     this.defaultInstance = process.env.EVOLUTION_DEFAULT_INSTANCE || 'atendimento-ao-cliente-sac1';
     
     // Configurar axios com defaults
