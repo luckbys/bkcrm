@@ -37,11 +37,15 @@ const extractClientInfo = (ticket: any) => {
                 ticket.whatsapp_contact_name ||
                 'Cliente WhatsApp';
 
-    // Extrair telefone do WhatsApp
+    // Extrair telefone do WhatsApp com múltiplas fontes
     clientPhone = metadata.client_phone || 
                  metadata.whatsapp_phone || 
                  (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.phone : null) ||
                  ticket.client_phone ||
+                 ticket.customerPhone ||
+                 ticket.phone ||
+                 // Tentar extrair do próprio nome se contiver números
+                 (clientName && clientName.match(/\d{10,}/)?.[0]) ||
                  'Telefone não informado';
 
     // Formatar telefone brasileiro se necessário
@@ -380,16 +384,22 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       setTimeout(() => setLastSentMessage(null), 2000);
 
       // Enviar via Evolution API se não for mensagem interna e tiver telefone do cliente
-      if (!isInternal && currentTicket?.customerPhone && currentTicket?.isWhatsApp) {
+      const clientInfo = extractClientInfo(currentTicket);
+      const hasValidPhone = clientInfo.clientPhone && 
+                           clientInfo.clientPhone !== 'Telefone não informado' && 
+                           clientInfo.clientPhone.replace(/\D/g, '').length >= 10;
+      
+      if (!isInternal && hasValidPhone && clientInfo.isWhatsApp) {
         try {
           console.log('📱 Enviando mensagem via WhatsApp:', {
-            phone: currentTicket.customerPhone,
+            phone: clientInfo.clientPhone,
             message: message.substring(0, 50) + '...',
-            instance: whatsappInstance
+            instance: whatsappInstance,
+            isWhatsApp: clientInfo.isWhatsApp
           });
 
           const evolutionResult = await sendEvolutionMessage({
-            phone: currentTicket.customerPhone,
+            phone: clientInfo.clientPhone,
             text: message,
             instance: whatsappInstance || 'atendimento-ao-cliente-sac1',
             options: {
@@ -512,9 +522,18 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   // Effect para carregar dados do WhatsApp quando componente monta
   useEffect(() => {
     if (currentTicket) {
-      const instanceName = currentTicket?.department || 'default';
+      // Usar instância específica baseada no metadata ou padrão
+      const instanceName = currentTicket?.metadata?.instance_name || 
+                          currentTicket?.department || 
+                          'atendimento-ao-cliente-sac1';
       setWhatsappInstance(instanceName);
       setWhatsappStatus('connected'); // Para demonstração
+      
+      console.log('🔧 Configurando instância WhatsApp:', {
+        instanceName,
+        department: currentTicket?.department,
+        metadataInstance: currentTicket?.metadata?.instance_name
+      });
     }
   }, [currentTicket]);
 

@@ -31,8 +31,10 @@ interface SendMessageResponse {
   timestamp: string;
 }
 
-const WEBHOOK_BASE_URL = 'https://bkcrm.devsible.com.br'; // Produção
-// const WEBHOOK_BASE_URL = 'http://localhost:4000'; // Local
+// Detectar ambiente automaticamente
+const WEBHOOK_BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:4000'  // Local
+  : 'https://bkcrm.devsible.com.br'; // Produção
 
 export function useEvolutionSender() {
   const [isLoading, setIsLoading] = useState(false);

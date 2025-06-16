@@ -3,6 +3,10 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
+
+// Carregar variáveis de ambiente do arquivo webhook.env
+config({ path: './webhook.env' });
 
 // Configurações via variáveis de ambiente (EasyPanel)
 console.log('🔧 Carregando configurações das variáveis de ambiente...');
@@ -19,7 +23,7 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cC
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Configurar Evolution API para envio de mensagens
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evolution-api.devsible.com.br';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
 
 console.log('🚀 Configurações Evolution API:');
@@ -806,17 +810,15 @@ async function sendWhatsAppMessage(messageData) {
       hasOptions: Object.keys(options).length > 0
     });
 
-    // Payload conforme documentação da Evolution API
+    // Payload correto conforme teste bem-sucedido
     const payload = {
       number: formattedPhone,
+      text: text,
       options: {
         delay: options.delay || 1000, // 1 segundo de delay padrão
         presence: options.presence || 'composing', // Mostrar "digitando..."
         linkPreview: options.linkPreview !== false, // True por padrão
         ...options
-      },
-      textMessage: {
-        text: text
       }
     };
 
