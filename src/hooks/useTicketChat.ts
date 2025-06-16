@@ -389,6 +389,19 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
                            clientInfo.clientPhone !== 'Telefone não informado' && 
                            clientInfo.clientPhone.replace(/\D/g, '').length >= 10;
       
+      console.log('🔍 DEBUG - Verificando condições de envio WhatsApp:', {
+        isInternal,
+        clientInfo,
+        hasValidPhone,
+        currentTicket: {
+          id: currentTicket?.id,
+          client: currentTicket?.client,
+          channel: currentTicket?.channel,
+          isWhatsApp: currentTicket?.isWhatsApp,
+          metadata: currentTicket?.metadata
+        }
+      });
+      
       if (!isInternal && hasValidPhone && clientInfo.isWhatsApp) {
         try {
           console.log('📱 Enviando mensagem via WhatsApp:', {
@@ -437,6 +450,14 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
           // Não interrompe o fluxo principal - mensagem já foi salva
         }
       } else {
+        console.log('❌ DEBUG - Não enviando via WhatsApp. Motivos:', {
+          isInternal: isInternal ? 'Mensagem é interna' : 'OK',
+          hasValidPhone: hasValidPhone ? 'OK' : 'Telefone inválido ou não informado',
+          isWhatsApp: clientInfo.isWhatsApp ? 'OK' : 'Ticket não é do WhatsApp',
+          clientPhone: clientInfo.clientPhone,
+          phoneLength: clientInfo.clientPhone?.replace(/\D/g, '').length
+        });
+        
         toast({
           title: "✅ Mensagem enviada",
           description: isInternal ? "Nota interna salva" : "Mensagem salva no histórico",
@@ -537,19 +558,66 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     }
   }, [currentTicket]);
 
+  // Função para corrigir dados do ticket se necessário
+  const fixTicketData = useCallback((ticket: any) => {
+    if (!ticket) return ticket;
+
+    const metadata = ticket.metadata || {};
+    
+    // Detectar se deveria ser WhatsApp
+    const shouldBeWhatsApp = Boolean(
+      metadata.whatsapp_phone ||
+      metadata.is_whatsapp ||
+      metadata.client_phone ||
+      ticket.client_phone ||
+      ticket.customerPhone ||
+      ticket.channel === 'whatsapp'
+    );
+
+    // Corrigir dados se necessário
+    const fixed = { ...ticket };
+    
+    if (shouldBeWhatsApp && ticket.channel !== 'whatsapp') {
+      console.log('🔧 Corrigindo dados do ticket para WhatsApp:', ticket.id);
+      
+      fixed.channel = 'whatsapp';
+      fixed.isWhatsApp = true;
+      
+      // Enriquecer metadata
+      if (!fixed.metadata) fixed.metadata = {};
+      
+      if (!fixed.metadata.client_phone && (ticket.client_phone || ticket.customerPhone)) {
+        fixed.metadata.client_phone = ticket.client_phone || ticket.customerPhone;
+      }
+      
+      if (!fixed.metadata.client_name && ticket.client) {
+        fixed.metadata.client_name = ticket.client;
+      }
+      
+      if (!fixed.metadata.is_whatsapp) {
+        fixed.metadata.is_whatsapp = true;
+      }
+    }
+
+    return fixed;
+  }, []);
+
   // Effect para reprocessar dados do ticket quando ticket prop mudar
   useEffect(() => {
     if (ticket) {
-      const clientInfo = extractClientInfo(ticket);
+      // Primeiro, corrigir dados do ticket se necessário
+      const fixedTicket = fixTicketData(ticket);
+      
+      const clientInfo = extractClientInfo(fixedTicket);
       setCurrentTicket({
-        ...ticket,
+        ...fixedTicket,
         client: clientInfo.clientName,
         customerPhone: clientInfo.clientPhone,
-        customerEmail: ticket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : ticket.email),
+        customerEmail: fixedTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fixedTicket.email),
         isWhatsApp: clientInfo.isWhatsApp
       });
     }
-  }, [ticket]);
+  }, [ticket, fixTicketData]);
 
   // Effect para responsividade da sidebar
   useEffect(() => {
