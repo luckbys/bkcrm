@@ -372,15 +372,50 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
+                  onClick={async () => {
+                    console.log('🗑️ Removendo cliente do ticket:', {
+                      currentTicket: currentTicket?.id,
+                      originalId: currentTicket?.originalId,
+                      currentCustomer: currentTicket?.client
+                    });
+
+                    // Atualizar estado local
                     setCurrentTicket((prev: any) => ({ 
                       ...prev, 
-                      customer_id: null,
+                      customer_id: undefined,
                       client: 'Cliente Anônimo'
                     }));
+
+                    // Persistir no banco de dados
+                    let persistenceSuccess = false;
+                    const ticketId = currentTicket?.originalId || currentTicket?.id;
+                    
+                    if (ticketId) {
+                      try {
+                        console.log('💾 Removendo cliente do banco de dados:', { ticketId });
+                        
+                        await assignCustomerToTicket(ticketId, {
+                          customer_id: undefined
+                        });
+                        
+                        persistenceSuccess = true;
+                        console.log('✅ Cliente removido do banco com sucesso');
+                        
+                      } catch (error) {
+                        console.error('❌ Erro ao remover cliente do banco:', error);
+                        toast({
+                          title: "⚠️ Aviso",
+                          description: "Cliente removido localmente, mas não foi salvo no banco de dados",
+                          variant: "destructive"
+                        });
+                      }
+                    }
+
                     toast({
-                      title: "✅ Cliente removido",
-                      description: "Cliente foi desassociado do ticket",
+                      title: persistenceSuccess ? "✅ Cliente removido" : "⚠️ Cliente removido (apenas local)",
+                      description: persistenceSuccess 
+                        ? "Cliente foi desassociado do ticket e salvo no banco"
+                        : "Cliente foi desassociado apenas localmente",
                     });
                   }}
                   className="mt-2 text-red-600 border-red-300 hover:bg-red-50"
@@ -487,8 +522,15 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
               Cancelar
             </Button>
             <Button 
-              onClick={() => {
+              onClick={async () => {
                 if (selectedCustomer) {
+                  console.log('🎯 Atribuindo cliente ao ticket:', {
+                    selectedCustomer: selectedCustomer.name,
+                    customerId: selectedCustomer.id,
+                    currentTicket: currentTicket?.id,
+                    originalId: currentTicket?.originalId
+                  });
+
                   // Atualizar estado local
                   setCurrentTicket((prev: any) => ({ 
                     ...prev, 
@@ -498,23 +540,49 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
                     customerPhone: selectedCustomer.phone
                   }));
                   
-                  // Persistir no banco de dados se o ticket tem originalId (UUID)
-                  if (currentTicket?.originalId) {
-                    assignCustomerToTicket(currentTicket.originalId, {
-                      customer_id: selectedCustomer.id
-                    }).catch((error) => {
-                      console.error('Erro ao atribuir cliente no banco:', error);
+                  // Persistir no banco de dados
+                  let persistenceSuccess = false;
+                  const ticketId = currentTicket?.originalId || currentTicket?.id;
+                  
+                  if (ticketId) {
+                    try {
+                      console.log('💾 Salvando no banco de dados:', {
+                        ticketId,
+                        customer_id: selectedCustomer.id
+                      });
+                      
+                      await assignCustomerToTicket(ticketId, {
+                        customer_id: selectedCustomer.id
+                      });
+                      
+                      persistenceSuccess = true;
+                      console.log('✅ Cliente salvo no banco com sucesso');
+                      
+                    } catch (error) {
+                      console.error('❌ Erro ao atribuir cliente no banco:', error);
                       toast({
                         title: "⚠️ Aviso",
                         description: "Cliente atribuído localmente, mas não foi salvo no banco de dados",
                         variant: "destructive"
                       });
+                    }
+                  } else {
+                    console.warn('⚠️ Ticket não tem ID válido para persistência:', {
+                      currentTicket: currentTicket?.id,
+                      originalId: currentTicket?.originalId
+                    });
+                    toast({
+                      title: "⚠️ Aviso", 
+                      description: "Ticket não tem ID válido - alteração apenas local",
+                      variant: "destructive"
                     });
                   }
                   
                   toast({
-                    title: "✅ Cliente atribuído",
-                    description: `Ticket atribuído para ${selectedCustomer.name}`,
+                    title: persistenceSuccess ? "✅ Cliente atribuído" : "⚠️ Cliente atribuído (apenas local)",
+                    description: persistenceSuccess 
+                      ? `Ticket atribuído para ${selectedCustomer.name} e salvo no banco`
+                      : `Ticket atribuído para ${selectedCustomer.name} apenas localmente`,
                   });
                 }
                 setShowCustomerModal(false);

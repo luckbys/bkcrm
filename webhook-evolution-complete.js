@@ -388,19 +388,62 @@ async function processNewMessage(payload) {
       instance: instanceName
     });
 
-    // MODO SIMULADO - sem verificar banco
-    console.log('🧪 [MODO SIMULADO] Simulando instância encontrada:', instanceName);
+    // 🆕 VERIFICAR OU CRIAR CLIENTE AUTOMATICAMENTE
+    let customerId = null;
+    try {
+      customerId = await findOrCreateCustomer({
+        phone: clientPhone,
+        name: senderName,
+        instanceName: instanceName
+      });
+      
+      if (customerId) {
+        console.log('✅ Cliente encontrado/criado:', customerId);
+      }
+    } catch (error) {
+      console.warn('⚠️ Erro ao verificar/criar cliente, continuando com cliente anônimo:', error.message);
+    }
+
+    // Buscar instância Evolution no banco para obter departamento
+    const { data: evolutionInstance, error: instanceError } = await supabase
+      .from('evolution_instances')
+      .select('id, department_id, instance_name')
+      .eq('instance_name', instanceName)
+      .eq('status', 'active')
+      .single();
+
+    let departmentId = null;
+    if (instanceError || !evolutionInstance) {
+      console.warn('⚠️ Instância Evolution não encontrada, usando departamento padrão:', instanceName);
+      // Buscar departamento padrão
+      const { data: defaultDept } = await supabase
+        .from('departments')
+        .select('id')
+        .or('name.eq.Geral,name.eq.Atendimento Geral')
+        .limit(1);
+      
+      if (defaultDept && defaultDept.length > 0) {
+        departmentId = defaultDept[0].id;
+      }
+    } else {
+      departmentId = evolutionInstance.department_id;
+    }
     
     // Buscar ticket existente ou criar novo
-    let ticketId = await findExistingTicket(clientPhone);
+    let ticketId = await findExistingTicket(clientPhone, departmentId);
     
     if (!ticketId) {
       ticketId = await createTicketAutomatically({
         clientName: senderName,
         clientPhone: clientPhone,
         instanceName: instanceName,
+        departmentId: departmentId,
+        customerId: customerId, // 🆕 Vincular cliente ao ticket
         firstMessage: messageContent
       });
+    } else if (customerId) {
+      // 🆕 Se ticket existe mas não tem cliente vinculado, vincular agora
+      await vinculateCustomerToTicket(ticketId, customerId);
     }
 
     if (!ticketId) {
@@ -408,7 +451,7 @@ async function processNewMessage(payload) {
       return { success: false, message: 'Erro ao criar ticket' };
     }
 
-    // Salvar mensagem no banco (simulado)
+    // Salvar mensagem no banco
     const saveResult = await saveMessageToDatabase({
       ticketId,
       content: messageContent,
@@ -424,7 +467,8 @@ async function processNewMessage(payload) {
       return {
         success: true,
         message: 'Mensagem processada e ticket atualizado',
-        ticketId
+        ticketId,
+        customerId
       };
     } else {
       return { success: false, message: 'Erro ao salvar mensagem' };
@@ -436,21 +480,163 @@ async function processNewMessage(payload) {
   }
 }
 
-// Função para buscar ticket existente
-async function findExistingTicket(clientPhone) {
+// 🆕 NOVA FUNÇÃO: Verificar se cliente existe ou criar automaticamente
+async function findOrCreateCustomer({ phone, name, instanceName }) {
   try {
-    console.log('🔍 [SIMULADO] Buscando ticket existente para:', clientPhone);
+    console.log('🔍 Verificando se cliente existe:', { phone, name });
     
-    // Buscar ticket existente por telefone
+    // Buscar cliente por telefone
+    const { data: existingCustomers, error: searchError } = await supabase
+      .from('customers')
+      .select('id, name, phone, email, status')
+      .eq('phone', phone)
+      .eq('is_active', true)
+      .limit(1);
+
+    if (searchError) {
+      console.error('❌ Erro ao buscar cliente:', searchError);
+      throw new Error(`Erro ao buscar cliente: ${searchError.message}`);
+    }
+
+    // Se cliente já existe, retornar ID
+    if (existingCustomers && existingCustomers.length > 0) {
+      const customer = existingCustomers[0];
+      console.log('✅ Cliente já cadastrado:', { 
+        id: customer.id, 
+        name: customer.name, 
+        phone: customer.phone 
+      });
+      
+      // Atualizar última interação
+      await supabase
+        .from('customers')
+        .update({ 
+          last_interaction: new Date().toISOString(),
+          // Atualizar nome se veio do WhatsApp e está vazio/diferente
+          ...(name && name !== customer.name && customer.name.includes('Cliente') && { name })
+        })
+        .eq('id', customer.id);
+      
+      return customer.id;
+    }
+
+    console.log('🆕 Cliente não encontrado, criando automaticamente...');
+    
+    // Buscar agente responsável padrão (admin/agent)
+    const { data: defaultAgent } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('role', ['admin', 'agent'])
+      .limit(1);
+
+    // Criar novo cliente
+    const customerData = {
+      name: name || `Cliente WhatsApp ${phone.slice(-4)}`,
+      email: `whatsapp-${phone}@auto-generated.com`, // Email temporário único
+      phone: phone,
+      status: 'prospect',
+      category: 'bronze',
+      channel: 'whatsapp',
+      tags: ['auto-criado', 'whatsapp'],
+      notes: `Cliente criado automaticamente via WhatsApp (${instanceName})`,
+      last_interaction: new Date().toISOString(),
+      responsible_agent_id: defaultAgent?.[0]?.id || null,
+      metadata: {
+        auto_created: true,
+        created_via: 'webhook_evolution',
+        instance_name: instanceName,
+        original_contact: phone,
+        creation_source: 'whatsapp_message'
+      }
+    };
+
+    const { data: newCustomer, error: createError } = await supabase
+      .from('customers')
+      .insert([customerData])
+      .select('id, name, phone, email')
+      .single();
+
+    if (createError) {
+      console.error('❌ Erro ao criar cliente:', createError);
+      // Se falhar por email duplicado, tentar com timestamp
+      if (createError.code === '23505' && createError.message.includes('email')) {
+        const timestampEmail = `whatsapp-${phone}-${Date.now()}@auto-generated.com`;
+        customerData.email = timestampEmail;
+        
+        const { data: retryCustomer, error: retryError } = await supabase
+          .from('customers')
+          .insert([customerData])
+          .select('id, name, phone, email')
+          .single();
+          
+        if (retryError) {
+          throw new Error(`Erro ao criar cliente (retry): ${retryError.message}`);
+        }
+        
+        console.log('✅ Cliente criado com email alternativo:', retryCustomer);
+        return retryCustomer.id;
+      }
+      throw new Error(`Erro ao criar cliente: ${createError.message}`);
+    }
+
+    console.log('✅ Novo cliente criado automaticamente:', {
+      id: newCustomer.id,
+      name: newCustomer.name,
+      phone: newCustomer.phone,
+      email: newCustomer.email
+    });
+
+    return newCustomer.id;
+
+  } catch (error) {
+    console.error('❌ Erro na verificação/criação de cliente:', error);
+    throw error;
+  }
+}
+
+// 🆕 NOVA FUNÇÃO: Vincular cliente a ticket existente
+async function vinculateCustomerToTicket(ticketId, customerId) {
+  try {
+    console.log('🔗 Vinculando cliente ao ticket:', { ticketId, customerId });
+    
+    const { error } = await supabase
+      .from('tickets')
+      .update({ 
+        customer_id: customerId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ticketId);
+
+    if (error) {
+      console.error('❌ Erro ao vincular cliente ao ticket:', error);
+      throw new Error(`Erro ao vincular cliente: ${error.message}`);
+    }
+
+    console.log('✅ Cliente vinculado ao ticket com sucesso');
+    return true;
+
+  } catch (error) {
+    console.error('❌ Erro ao vincular cliente ao ticket:', error);
+    throw error;
+  }
+}
+
+// Função para buscar ticket existente
+async function findExistingTicket(clientPhone, departmentId) {
+  try {
+    console.log('🔍 Buscando ticket existente para:', { clientPhone, departmentId });
+    
+    // Buscar ticket existente por telefone e status aberto
     const { data: tickets, error } = await supabase
       .from('tickets')
-      .select('id')
-      .eq('metadata->>whatsapp_phone', clientPhone)
-      .eq('status', 'open')
+      .select('id, customer_id')
+      .or(`metadata->>whatsapp_phone.eq.${clientPhone},metadata->>client_phone.eq.${clientPhone}`)
+      .in('status', ['open', 'pendente', 'atendimento'])
+      .order('created_at', { ascending: false })
       .limit(1);
     
     if (error) {
-      console.error('Erro ao buscar ticket:', error);
+      console.error('❌ Erro ao buscar ticket:', error);
       return null;
     }
     
@@ -459,9 +645,10 @@ async function findExistingTicket(clientPhone) {
       return tickets[0].id;
     }
     
+    console.log('ℹ️ Nenhum ticket aberto encontrado para o telefone');
     return null;
   } catch (error) {
-    console.error('Erro ao buscar ticket:', error);
+    console.error('❌ Erro ao buscar ticket:', error);
     return null;
   }
 }
@@ -469,41 +656,43 @@ async function findExistingTicket(clientPhone) {
 // Função para criar ticket automaticamente
 async function createTicketAutomatically(data) {
   try {
-    console.log('🎫 Criando ticket real:', {
+    console.log('🎫 Criando ticket automaticamente:', {
       cliente: data.clientName,
       telefone: data.clientPhone,
+      customerId: data.customerId,
+      departmentId: data.departmentId,
       mensagem: data.firstMessage?.substring(0, 50) + '...',
       instancia: data.instanceName
     });
     
-    // Buscar departamento padrão (UUID válido)
-    let departmentId = null;
-    
-    // Tentar buscar departamento no banco
-    const { data: departments } = await supabase
-      .from('departments')
-      .select('id')
-      .or('name.eq.Geral,name.eq.Atendimento Geral')
-      .limit(1);
-    
-    if (departments && departments.length > 0) {
-      departmentId = departments[0].id;
-    } else {
-      // Se não encontrar, criar departamento padrão
-      const { data: newDept, error: deptError } = await supabase
+    // Se não tem departmentId, buscar/criar departamento padrão
+    let departmentId = data.departmentId;
+    if (!departmentId) {
+      const { data: departments } = await supabase
         .from('departments')
-        .insert([{
-          name: 'Geral',
-          description: 'Departamento geral para tickets automáticos',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
         .select('id')
-        .single();
+        .or('name.eq.Geral,name.eq.Atendimento Geral')
+        .limit(1);
       
-      if (!deptError && newDept) {
-        departmentId = newDept.id;
-        console.log('✅ Departamento criado:', departmentId);
+      if (departments && departments.length > 0) {
+        departmentId = departments[0].id;
+      } else {
+        // Criar departamento padrão se não existir
+        const { data: newDept, error: deptError } = await supabase
+          .from('departments')
+          .insert([{
+            name: 'Geral',
+            description: 'Departamento geral para tickets automáticos',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }])
+          .select('id')
+          .single();
+        
+        if (!deptError && newDept) {
+          departmentId = newDept.id;
+          console.log('✅ Departamento criado:', departmentId);
+        }
       }
     }
     
@@ -515,18 +704,22 @@ async function createTicketAutomatically(data) {
       priority: 'medium',
       channel: 'whatsapp',
       department_id: departmentId,
-      customer_id: null, // Cliente anônimo
+      customer_id: data.customerId || null, // 🆕 Vincular cliente se existir
       metadata: {
         whatsapp_phone: data.clientPhone,
         whatsapp_name: data.clientName,
+        client_phone: data.clientPhone, // Para compatibilidade
         instance_name: data.instanceName,
         first_message: data.firstMessage,
         created_via: 'webhook_auto',
         source: 'evolution_api',
-        anonymous_contact: {
-          name: data.clientName,
-          phone: data.clientPhone
-        }
+        // Se não tem cliente vinculado, manter info anônima
+        ...(data.customerId ? {} : {
+          anonymous_contact: {
+            name: data.clientName,
+            phone: data.clientPhone
+          }
+        })
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -547,15 +740,22 @@ async function createTicketAutomatically(data) {
       return mockTicketId;
     }
     
-    console.log('✅ Ticket criado com sucesso:', ticket.id);
+    console.log('✅ Ticket criado no banco:', {
+      id: ticket.id,
+      title: ticket.title,
+      customer_id: ticket.customer_id,
+      status: ticket.status,
+      channel: ticket.channel
+    });
+    
     return ticket.id;
     
   } catch (error) {
     console.error('❌ Erro ao criar ticket:', error);
     
-    // Fallback: criar ticket simulado
+    // Fallback: criar ticket simulado se falhar
     const mockTicketId = `ticket-error-${Date.now()}`;
-    console.log('🔄 Criando ticket fallback devido a erro:', mockTicketId);
+    console.log('🔄 Criando ticket error fallback:', mockTicketId);
     return mockTicketId;
   }
 }
