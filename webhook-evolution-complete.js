@@ -267,15 +267,14 @@ async function processNewMessage(payload) {
     // MODO SIMULADO - sem verificar banco
     console.log('🧪 [MODO SIMULADO] Simulando instância encontrada:', instanceName);
     
-    // Buscar ticket existente ou criar novo (simulado)
-    let ticketId = await findExistingTicket(clientPhone, 'dept-simulado');
+    // Buscar ticket existente ou criar novo
+    let ticketId = await findExistingTicket(clientPhone);
     
     if (!ticketId) {
       ticketId = await createTicketAutomatically({
         clientName: senderName,
         clientPhone: clientPhone,
         instanceName: instanceName,
-        departmentId: 'dept-simulado',
         firstMessage: messageContent
       });
     }
@@ -314,10 +313,28 @@ async function processNewMessage(payload) {
 }
 
 // Função para buscar ticket existente
-async function findExistingTicket(clientPhone, departmentId) {
+async function findExistingTicket(clientPhone) {
   try {
     console.log('🔍 [SIMULADO] Buscando ticket existente para:', clientPhone);
-    // Por enquanto, simular que não há tickets existentes
+    
+    // Buscar ticket existente por telefone
+    const { data: tickets, error } = await supabase
+      .from('tickets')
+      .select('id')
+      .eq('metadata->>whatsapp_phone', clientPhone)
+      .eq('status', 'open')
+      .limit(1);
+    
+    if (error) {
+      console.error('Erro ao buscar ticket:', error);
+      return null;
+    }
+    
+    if (tickets && tickets.length > 0) {
+      console.log('✅ Ticket existente encontrado:', tickets[0].id);
+      return tickets[0].id;
+    }
+    
     return null;
   } catch (error) {
     console.error('Erro ao buscar ticket:', error);
@@ -335,37 +352,60 @@ async function createTicketAutomatically(data) {
       instancia: data.instanceName
     });
     
-    // Buscar departamento padrão ou criar um
-    let departmentId = 'dept-geral';
+    // Buscar departamento padrão (UUID válido)
+    let departmentId = null;
     
     // Tentar buscar departamento no banco
     const { data: departments } = await supabase
       .from('departments')
       .select('id')
-      .eq('name', 'Atendimento Geral')
+      .or('name.eq.Geral,name.eq.Atendimento Geral')
       .limit(1);
     
     if (departments && departments.length > 0) {
       departmentId = departments[0].id;
+    } else {
+      // Se não encontrar, criar departamento padrão
+      const { data: newDept, error: deptError } = await supabase
+        .from('departments')
+        .insert([{
+          name: 'Geral',
+          description: 'Departamento geral para tickets automáticos',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select('id')
+        .single();
+      
+      if (!deptError && newDept) {
+        departmentId = newDept.id;
+        console.log('✅ Departamento criado:', departmentId);
+      }
     }
     
     // Criar ticket no banco
     const ticketData = {
       title: `Mensagem de ${data.clientName}`,
       description: data.firstMessage,
-      status: 'novo',
-      priority: 'media',
+      status: 'open',
+      priority: 'medium',
       channel: 'whatsapp',
       department_id: departmentId,
+      customer_id: null, // Cliente anônimo
       metadata: {
         whatsapp_phone: data.clientPhone,
         whatsapp_name: data.clientName,
         instance_name: data.instanceName,
         first_message: data.firstMessage,
         created_via: 'webhook_auto',
-        source: 'evolution_api'
+        source: 'evolution_api',
+        anonymous_contact: {
+          name: data.clientName,
+          phone: data.clientPhone
+        }
       },
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     
     const { data: ticket, error } = await supabase
@@ -410,10 +450,12 @@ async function saveMessageToDatabase(data) {
     const messageData = {
       ticket_id: data.ticketId,
       content: data.content,
+      sender_id: null, // Cliente anônimo
       sender_type: 'customer',
-      sender_name: data.senderName,
+      message_type: 'text',
       metadata: {
         whatsapp_phone: data.senderPhone,
+        sender_name: data.senderName,
         instance_name: data.instanceName,
         message_id: data.messageId,
         timestamp: data.timestamp,
