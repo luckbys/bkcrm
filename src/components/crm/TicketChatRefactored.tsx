@@ -8,10 +8,12 @@ import { TicketChatInput } from './ticket-chat/TicketChatInput';
 import { TicketChatSidebar } from './ticket-chat/TicketChatSidebar';
 import { TicketChatModals } from './ticket-chat/TicketChatModals';
 import TicketChatMinimized from './ticket-chat/TicketChatMinimized';
+import { ChatAnimations, ResponsiveAnimations } from './ticket-chat/chatAnimations';
 
 interface TicketChatProps {
   ticket: any;
   onClose: () => void;
+  onMinimize?: () => void;
 }
 
 const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMinimize }) => {
@@ -24,29 +26,40 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
     lastSentMessage
   } = chatState;
 
-  // Chat sempre maximizado no modal
-
   return (
-    <div className="flex h-full w-full overflow-hidden bg-white">
-      {/* Success notification */}
+    <div className={cn(
+      "flex h-full w-full overflow-hidden bg-white",
+      ResponsiveAnimations.prefersReducedMotion.disable
+    )}>
+      {/* Success notification - Animação mais suave e minimalista */}
       {lastSentMessage && (
-        <div className="absolute top-4 right-4 z-60 animate-in slide-in-from-top-4 duration-500">
-          <div className="bg-emerald-500 text-white px-4 py-3 rounded-lg shadow-xl flex items-center space-x-3">
+        <div className={cn(
+          "absolute top-4 right-4 z-50",
+          ChatAnimations.enter.slideRight,
+          ResponsiveAnimations.prefersReducedMotion.minimal
+        )}>
+          <div className={cn(
+            "bg-emerald-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3",
+            ChatAnimations.transition.smooth,
+            ChatAnimations.interactive.card
+          )}>
             <CheckCircle2 className="w-5 h-5" />
             <div>
-              <p className="font-semibold text-sm">Mensagem enviada!</p>
+              <p className="font-medium text-sm">Mensagem enviada</p>
               <p className="text-xs opacity-90">Entregue com sucesso</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Chat Area */}
+      {/* Main Chat Area - Transições mais fluidas */}
       <div className={cn(
-        "flex flex-col transition-all duration-300",
+        "flex flex-col",
+        ChatAnimations.chat.sidebarToggle,
         showSidebar 
           ? "flex-1 min-w-[400px]" 
-          : "w-full"
+          : "w-full",
+        ResponsiveAnimations.prefersReducedMotion.disable
       )}>
         {/* Enhanced Header */}
         <TicketChatHeader
@@ -71,7 +84,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
         />
       </div>
 
-      {/* Enhanced Right Sidebar */}
+      {/* Enhanced Right Sidebar - Entrada suave */}
       <TicketChatSidebar
         showSidebar={showSidebar}
         chatState={chatState}

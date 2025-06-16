@@ -112,9 +112,16 @@ const TicketChatMinimized: React.FC<TicketChatMinimizedProps> = ({
               <h4 className="text-sm font-semibold text-gray-900 truncate">
                 {currentTicket?.client || 'Cliente'}
               </h4>
-              <p className="text-xs text-gray-500 truncate">
-                Chat #{currentTicket?.id || 'N/A'}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-500 truncate">
+                  Chat #{currentTicket?.id || 'N/A'}
+                </p>
+                {currentTicket?.isWhatsApp && (
+                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+                    📱
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           

@@ -492,13 +492,29 @@ export function useTicketsDB() {
       const hashNumber = parseInt(ticketHash.substring(0, 8), 16);
       const uniqueId = Math.abs(hashNumber % 2147483647) + index + 1; // Garantir número positivo único
       
+      // Extrair nome do cliente de forma segura
+      let clientName = ticket.metadata?.client_name || 
+                      (ticket as any).customer?.name || 
+                      (ticket as any).profiles?.name || 
+                      'Cliente Anônimo';
+      
+      // Lidar com anonymous_contact que pode ser objeto ou string
+      if (!clientName || clientName === 'Cliente Anônimo') {
+        if (typeof ticket.metadata?.anonymous_contact === 'object') {
+          clientName = ticket.metadata?.anonymous_contact?.name || 'Cliente Anônimo';
+        } else if (typeof ticket.metadata?.anonymous_contact === 'string') {
+          clientName = ticket.metadata?.anonymous_contact;
+        }
+      }
+      
+      // Garantir que sempre seja uma string válida
+      if (typeof clientName !== 'string' || !clientName.trim()) {
+        clientName = 'Cliente Anônimo';
+      }
+      
       return {
         id: uniqueId,
-        client: ticket.metadata?.client_name || 
-                (ticket as any).customer?.name || 
-                (ticket as any).profiles?.name || 
-                ticket.metadata?.anonymous_contact || 
-                'Cliente Anônimo',
+        client: clientName,
         subject: ticket.subject || ticket.title,
         status: ticket.status as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
         channel: ticket.channel,

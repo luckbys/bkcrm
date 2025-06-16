@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { UseTicketChatReturn } from '../../../types/ticketChat';
+import { ChatAnimations, ResponsiveAnimations } from './chatAnimations';
 
 interface TicketChatSidebarProps {
   showSidebar: boolean;
@@ -42,279 +43,344 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
   const {
     currentTicket,
     realTimeMessages,
+    favoriteMessages,
     whatsappStatus,
-    whatsappInstance,
+    soundEnabled,
+    compactMode,
+    showAssignModal,
     setShowAssignModal,
+    showStatusModal,
     setShowStatusModal,
-    setShowTagModal
+    showTagModal,
+    setShowTagModal,
+    toggleSidebar,
+    setSoundEnabled,
+    setCompactMode
   } = chatState;
 
-  if (!showSidebar) return null;
+  // Calcular contadores de mensagens
+  const messageCounts = {
+    total: realTimeMessages.length,
+    public: realTimeMessages.filter(m => !m.isInternal).length,
+    internal: realTimeMessages.filter(m => m.isInternal).length
+  };
+
+  // Simular função de verificação de status
+  const checkWhatsAppStatus = () => {
+    console.log('Verificando status do WhatsApp...');
+  };
+
+  // Simular última atividade
+  const lastActivity = currentTicket?.lastActivity || 'Nunca';
+
+  // Funções de modal - usar as disponíveis no chatState
+  const openChangeStatusModal = () => {
+    setShowStatusModal(true);
+  };
+
+  const openAssignAgentModal = () => {
+    setShowAssignModal(true);
+  };
+
+  const openTransferModal = () => {
+    setShowTagModal(true);
+  };
+
+  if (!showSidebar) {
+    return null;
+  }
 
   return (
     <div className={cn(
-      "bg-gray-50 border-l border-gray-200 flex flex-col overflow-hidden transition-all duration-300",
-      "w-72 sm:w-80 md:w-80 lg:w-96 xl:w-[400px]",
-      "flex-shrink-0 max-w-[30vw]"
+      "bg-gray-50 border-l border-gray-200 flex flex-col overflow-hidden",
+      ChatAnimations.chat.sidebarToggle,
+      ResponsiveAnimations.prefersReducedMotion.disable,
+      "w-72 sm:w-80 md:w-80 lg:w-96 xl:w-[400px] max-w-[30vw]"
     )}>
-      <div className="p-6 border-b border-gray-200 bg-white">
-        <h3 className="text-lg font-bold text-gray-800 flex items-center">
-          <MessageSquare className="w-5 h-5 mr-2 text-blue-600" />
-          Detalhes do Ticket
+      {/* Header do Sidebar */}
+      <div className="p-4 border-b border-gray-200 bg-white">
+        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+          <FileText className="w-5 h-5 mr-2 text-blue-600" />
+          Informações do Ticket
         </h3>
       </div>
-      
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Client Info Card */}
-        <Card className="border-0 shadow-sm bg-white">
+
+      {/* Conteúdo Scrollável */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Informações do Cliente */}
+        <Card className={cn(
+          "border border-gray-200 shadow-sm",
+          ChatAnimations.transition.hoverGlow
+        )}>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-gray-800 flex items-center">
-              <User className="w-4 h-4 mr-2 text-blue-600" />
-              Informações do Cliente
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
+              <User className="w-4 h-4 mr-2" />
+              Cliente
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <User className="w-4 h-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">{currentTicket?.client || 'Nome não informado'}</span>
+          <CardContent className="pt-0 space-y-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-gray-900">{currentTicket?.client || 'Cliente Anônimo'}</p>
+                {currentTicket?.isWhatsApp && (
+                  <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200">
+                    WhatsApp
+                  </Badge>
+                )}
               </div>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <Copy className="w-3 h-3" />
-              </Button>
+              <p className="text-sm text-gray-500">ID: #{currentTicket?.id || currentTicket?.customerId || 'N/A'}</p>
             </div>
             
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <Mail className="w-4 h-4 text-gray-500" />
-                <span className="text-sm text-gray-600 truncate">{currentTicket?.customer_email || currentTicket?.client_email || 'Email não informado'}</span>
+            <div className="space-y-2">
+              <div className="flex items-center text-sm">
+                <Mail className="w-4 h-4 mr-2 text-gray-400" />
+                <span className="text-gray-600 flex-1">{currentTicket?.customerEmail || 'Email não informado'}</span>
+                {currentTicket?.customerEmail && currentTicket.customerEmail !== 'Email não informado' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "ml-auto h-6 w-6 p-0 text-gray-400 hover:text-gray-600",
+                      ChatAnimations.interactive.icon
+                    )}
+                    onClick={() => navigator.clipboard.writeText(currentTicket?.customerEmail || '')}
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <Copy className="w-3 h-3" />
-              </Button>
-            </div>
-            
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <Phone className="w-4 h-4 text-gray-500" />
-                <span className="text-sm text-gray-600">{currentTicket?.client_phone || currentTicket?.metadata?.client_phone || '(11) 99999-9999'}</span>
+              
+              <div className="flex items-center text-sm">
+                <Phone className="w-4 h-4 mr-2 text-gray-400" />
+                <span className={cn(
+                  "text-gray-600 flex-1",
+                  currentTicket?.customerPhone && currentTicket.customerPhone !== 'Telefone não informado' 
+                    ? "font-medium text-blue-600" 
+                    : ""
+                )}>{currentTicket?.customerPhone || 'Telefone não informado'}</span>
+                {currentTicket?.customerPhone && currentTicket.customerPhone !== 'Telefone não informado' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "ml-auto h-6 w-6 p-0 text-gray-400 hover:text-gray-600",
+                      ChatAnimations.interactive.icon
+                    )}
+                    onClick={() => navigator.clipboard.writeText(currentTicket?.customerPhone || '')}
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <Phone className="w-3 h-3" />
-              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Ticket Details Card */}
-        <Card className="border-0 shadow-sm bg-white">
+        {/* Informações do Ticket */}
+        <Card className={cn(
+          "border border-gray-200 shadow-sm",
+          ChatAnimations.transition.hoverGlow
+        )}>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-gray-800 flex items-center">
-              <FileText className="w-4 h-4 mr-2 text-blue-600" />
-              Detalhes do Ticket
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Ticket
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="pt-0 space-y-3">
+            <div>
+              <p className="font-medium text-gray-900">{currentTicket?.subject || 'Assunto não definido'}</p>
+              <p className="text-sm text-gray-500 mt-1">{currentTicket?.description || 'Descrição não informada'}</p>
+            </div>
+            
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2 mb-1">
-                  <MessageSquare className="w-3 h-3 text-gray-500" />
-                  <span className="text-xs font-medium text-gray-500 uppercase">Canal</span>
-                </div>
-                <span className="text-sm font-semibold text-gray-700">{currentTicket?.channel || 'chat'}</span>
-              </div>
-              
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2 mb-1">
-                  <Building className="w-3 h-3 text-gray-500" />
-                  <span className="text-xs font-medium text-gray-500 uppercase">Depto</span>
-                </div>
-                <span className="text-sm font-semibold text-gray-700">{currentTicket?.department || 'Geral'}</span>
-              </div>
-            </div>
-            
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="w-3 h-3 text-gray-500" />
-                <span className="text-xs font-medium text-gray-500 uppercase">Criado em</span>
-              </div>
-              <span className="text-sm font-semibold text-gray-700">
-                {currentTicket?.created_at ? new Date(currentTicket.created_at).toLocaleDateString('pt-BR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                }) : 'Data não disponível'}
-              </span>
-            </div>
-
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <UserCheck className="w-3 h-3 text-gray-500" />
-                <span className="text-xs font-medium text-gray-500 uppercase">Responsável</span>
-              </div>
-              <span className="text-sm font-semibold text-gray-700">
-                {currentTicket?.assignee || 'Não atribuído'}
-              </span>
-            </div>
-
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <Tag className="w-3 h-3 text-gray-500" />
-                <span className="text-xs font-medium text-gray-500 uppercase">Prioridade</span>
-              </div>
-              <Badge className={cn(
-                "text-xs px-2 py-1",
-                currentTicket?.priority === 'alta' ? "bg-red-100 text-red-800 border-red-200" :
-                currentTicket?.priority === 'baixa' ? "bg-green-100 text-green-800 border-green-200" :
-                "bg-blue-100 text-blue-800 border-blue-200"
-              )}>
-                {currentTicket?.priority || 'normal'}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* WhatsApp Status Card */}
-        {whatsappInstance && (
-          <Card className="border-0 shadow-sm bg-white">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold text-gray-800 flex items-center">
-                <Smartphone className="w-4 h-4 mr-2 text-green-600" />
-                Status WhatsApp
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  {whatsappStatus === 'connected' ? (
-                    <Wifi className="w-4 h-4 text-green-600" />
-                  ) : (
-                    <WifiOff className="w-4 h-4 text-red-600" />
-                  )}
-                  <span className="text-sm font-medium text-gray-700">Instância:</span>
-                </div>
-                <span className="text-sm text-gray-600">{whatsappInstance}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm font-medium text-gray-700">Status:</span>
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Status</label>
                 <Badge 
+                  variant={currentTicket?.status === 'open' ? 'default' : 'secondary'}
                   className={cn(
-                    "text-xs",
-                    whatsappStatus === 'connected' 
-                      ? "bg-green-100 text-green-800 border-green-200" 
-                      : "bg-red-100 text-red-800 border-red-200"
+                    "mt-1 block w-fit",
+                    ChatAnimations.transition.colors
                   )}
                 >
-                  {whatsappStatus === 'connected' ? 'Conectado' : 'Desconectado'}
+                  {currentTicket?.status || 'Indefinido'}
                 </Badge>
               </div>
               
-              <div className="mt-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-blue-600 border-blue-200 hover:bg-blue-50"
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridade</label>
+                <Badge 
+                  variant={currentTicket?.priority === 'high' ? 'destructive' : 'outline'}
+                  className={cn(
+                    "mt-1 block w-fit",
+                    ChatAnimations.transition.colors
+                  )}
                 >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Verificar Status
-                </Button>
+                  {currentTicket?.priority || 'Normal'}
+                </Badge>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Stats Card */}
-        <Card className="border-0 shadow-sm bg-white">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-gray-800 flex items-center">
-              <Eye className="w-4 h-4 mr-2 text-blue-600" />
-              Estatísticas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 bg-blue-50 rounded-lg">
-                <div className="text-lg font-bold text-blue-600">{realTimeMessages.length}</div>
-                <div className="text-xs text-blue-600 font-medium">Total</div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center text-sm">
+                <Clock className="w-4 h-4 mr-2 text-gray-400" />
+                <span className="text-gray-600">
+                  Criado em {currentTicket?.createdAt ? new Date(currentTicket.createdAt).toLocaleDateString('pt-BR') : 'Data não informada'}
+                </span>
               </div>
-              <div className="text-center p-3 bg-green-50 rounded-lg">
-                <div className="text-lg font-bold text-green-600">{realTimeMessages.filter(m => !m.isInternal).length}</div>
-                <div className="text-xs text-green-600 font-medium">Públicas</div>
+              
+              <div className="flex items-center text-sm">
+                <UserCheck className="w-4 h-4 mr-2 text-gray-400" />
+                <span className="text-gray-600">Agente: {currentTicket?.assignedAgent || 'Não atribuído'}</span>
               </div>
-              <div className="text-center p-3 bg-orange-50 rounded-lg">
-                <div className="text-lg font-bold text-orange-600">{realTimeMessages.filter(m => m.isInternal).length}</div>
-                <div className="text-xs text-orange-600 font-medium">Internas</div>
+              
+              <div className="flex items-center text-sm">
+                <Building className="w-4 h-4 mr-2 text-gray-400" />
+                <span className="text-gray-600">Departamento: {currentTicket?.department || 'Geral'}</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Quick Actions Card */}
-        <Card className="border-0 shadow-sm bg-white">
+        {/* WhatsApp Status */}
+        <Card className={cn(
+          "border border-gray-200 shadow-sm",
+          ChatAnimations.transition.hoverGlow
+        )}>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-gray-800 flex items-center justify-between">
-              <div className="flex items-center">
-                <Zap className="w-4 h-4 mr-2 text-blue-600" />
-                Ações Rápidas
-              </div>
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
+              <Smartphone className="w-4 h-4 mr-2" />
+              WhatsApp
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <Button 
-              variant="outline" 
-              className="w-full justify-start h-12 hover:bg-blue-50 hover:border-blue-300 transition-all"
-              onClick={() => setShowStatusModal(true)}
+          <CardContent className="pt-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {whatsappStatus === 'connected' ? (
+                  <Wifi className={cn(
+                    "w-4 h-4 text-green-500",
+                    ChatAnimations.indicators.online
+                  )} />
+                ) : (
+                  <WifiOff className={cn(
+                    "w-4 h-4 text-red-500",
+                    ChatAnimations.indicators.offline
+                  )} />
+                )}
+                <span className={cn(
+                  "text-sm font-medium",
+                  whatsappStatus === 'connected' ? "text-green-600" : "text-red-600"
+                )}>
+                  {whatsappStatus === 'connected' ? 'Conectado' : 'Desconectado'}
+                </span>
+              </div>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-8 w-8 p-0 text-gray-400 hover:text-blue-600",
+                  ChatAnimations.interactive.icon
+                )}
+                onClick={checkWhatsAppStatus}
+                title="Atualizar status"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </Button>
+            </div>
+            
+            <div className="mt-3 text-xs text-gray-500">
+              <p>Instância: {currentTicket?.whatsappInstance || 'Não definida'}</p>
+              <p>Última atividade: {lastActivity || 'Nunca'}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Ações Rápidas */}
+        <Card className={cn(
+          "border border-gray-200 shadow-sm",
+          ChatAnimations.transition.hoverGlow
+        )}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
+              <Zap className="w-4 h-4 mr-2" />
+              Ações Rápidas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openChangeStatusModal()}
+              className={cn(
+                "w-full justify-start h-12 hover:bg-blue-50 hover:border-blue-300",
+                ChatAnimations.transition.colors
+              )}
             >
-              <Settings className="w-4 h-4 mr-3" />
+              <Tag className="w-4 h-4 mr-2" />
               Alterar Status
             </Button>
-            <Button 
-              variant="outline" 
-              className="w-full justify-start h-12 hover:bg-green-50 hover:border-green-300 transition-all"
-              onClick={() => setShowAssignModal(true)}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openAssignAgentModal()}
+              className={cn(
+                "w-full justify-start h-12 hover:bg-green-50 hover:border-green-300",
+                ChatAnimations.transition.colors
+              )}
             >
-              <UserCheck className="w-4 h-4 mr-3" />
+              <UserCheck className="w-4 h-4 mr-2" />
               Atribuir Agente
             </Button>
-            <Button 
-              variant="outline" 
-              className="w-full justify-start h-12 hover:bg-purple-50 hover:border-purple-300 transition-all"
-              onClick={() => setShowTagModal(true)}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openTransferModal()}
+              className={cn(
+                "w-full justify-start h-12 hover:bg-purple-50 hover:border-purple-300",
+                ChatAnimations.transition.colors
+              )}
             >
-              <Tag className="w-4 h-4 mr-3" />
-              Adicionar Tag
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Transferir Ticket
             </Button>
           </CardContent>
         </Card>
 
-        {/* Tags Card */}
-        {currentTicket?.tags && currentTicket.tags.length > 0 && (
-          <Card className="border-0 shadow-sm bg-white">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold text-gray-800 flex items-center">
-                <Tag className="w-4 h-4 mr-2 text-purple-600" />
-                Tags
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {currentTicket.tags.map((tag: string, index: number) => (
-                  <Badge 
-                    key={index} 
-                    variant="secondary" 
-                    className="text-xs px-2 py-1 bg-purple-100 text-purple-800 border border-purple-200"
-                  >
-                    <Tag className="w-3 h-3 mr-1" />
-                    {tag}
-                  </Badge>
-                ))}
+        {/* Estatísticas */}
+        <Card className={cn(
+          "border border-gray-200 shadow-sm",
+          ChatAnimations.transition.hoverGlow
+        )}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
+              <Eye className="w-4 h-4 mr-2" />
+              Estatísticas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div>
+                <p className="text-lg font-bold text-blue-600">{messageCounts.total}</p>
+                <p className="text-xs text-gray-500">Total</p>
               </div>
-            </CardContent>
-          </Card>
-        )}
+              <div>
+                <p className="text-lg font-bold text-green-600">{messageCounts.public}</p>
+                <p className="text-xs text-gray-500">Públicas</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold text-orange-600">{messageCounts.internal}</p>
+                <p className="text-xs text-gray-500">Internas</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold text-purple-600">{favoriteMessages.size}</p>
+                <p className="text-xs text-gray-500">Favoritas</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

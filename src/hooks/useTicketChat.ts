@@ -6,14 +6,92 @@ import { useToast } from './use-toast';
 // import { useMinimizedState } from './useMinimizedState'; // Temporariamente removido
 import { supabase } from '../lib/supabase';
 import { LocalMessage, QuickTemplate, UseTicketChatReturn } from '../types/ticketChat';
+import { useEvolutionSender } from './useEvolutionSender';
+
+// Função helper para extrair informações do cliente do ticket
+const extractClientInfo = (ticket: any) => {
+  if (!ticket) {
+    return {
+      clientName: 'Cliente Anônimo',
+      clientPhone: 'Telefone não informado',
+      isWhatsApp: false
+    };
+  }
+
+  // Verificar se é ticket do WhatsApp via metadata
+  const metadata = ticket.metadata || {};
+  const isWhatsApp = metadata.created_from_whatsapp || 
+                    metadata.whatsapp_phone || 
+                    metadata.anonymous_contact || 
+                    ticket.channel === 'whatsapp';
+
+  let clientName = 'Cliente Anônimo';
+  let clientPhone = 'Telefone não informado';
+
+  if (isWhatsApp) {
+    // Extrair nome do WhatsApp
+    clientName = metadata.client_name || 
+                metadata.whatsapp_name || 
+                (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.name : metadata.anonymous_contact) ||
+                ticket.client ||
+                ticket.whatsapp_contact_name ||
+                'Cliente WhatsApp';
+
+    // Extrair telefone do WhatsApp
+    clientPhone = metadata.client_phone || 
+                 metadata.whatsapp_phone || 
+                 (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.phone : null) ||
+                 ticket.client_phone ||
+                 'Telefone não informado';
+
+    // Formatar telefone brasileiro se necessário
+    if (clientPhone && clientPhone !== 'Telefone não informado' && !clientPhone.includes('+')) {
+      if (clientPhone.length >= 10) {
+        // Formatar como +55 (11) 99999-9999
+        const clean = clientPhone.replace(/\D/g, '');
+        if (clean.length === 13 && clean.startsWith('55')) {
+          const formatted = `+55 (${clean.substring(2, 4)}) ${clean.substring(4, 9)}-${clean.substring(9)}`;
+          clientPhone = formatted;
+        }
+      }
+    }
+  } else {
+    // Ticket normal (não WhatsApp)
+    clientName = ticket.client || ticket.customer_name || 'Cliente';
+    clientPhone = ticket.customerPhone || ticket.customer_phone || 'Telefone não informado';
+  }
+
+  // Garantir que os valores sejam sempre strings válidas
+  const validClientName = typeof clientName === 'string' ? clientName : 'Cliente Anônimo';
+  const validClientPhone = typeof clientPhone === 'string' ? clientPhone : 'Telefone não informado';
+
+  return {
+    clientName: validClientName,
+    clientPhone: validClientPhone,
+    isWhatsApp
+  };
+};
 
 export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { sendMessage, createTicket, fetchMessages } = useTicketsDB();
+  const { sendMessage: sendEvolutionMessage, validateMessageData } = useEvolutionSender();
 
   // Estados do ticket – precisa vir antes do hook de mensagens Evolution
-  const [currentTicket, setCurrentTicket] = useState(ticket || {});
+  const [currentTicket, setCurrentTicket] = useState(() => {
+    if (!ticket) return {};
+    
+    // Extrair informações do cliente e enriquecer o ticket
+    const clientInfo = extractClientInfo(ticket);
+    return {
+      ...ticket,
+      client: clientInfo.clientName,
+      customerPhone: clientInfo.clientPhone,
+      customerEmail: ticket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : ticket.email),
+      isWhatsApp: clientInfo.isWhatsApp
+    };
+  });
 
   // Hook para mensagens Evolution, usando o ID do ticket (que pode mudar após migração)
   const {
@@ -300,11 +378,60 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       setMessage('');
       
       setTimeout(() => setLastSentMessage(null), 2000);
-      
-      toast({
-        title: "✅ Mensagem enviada",
-        description: isInternal ? "Nota interna salva" : "Mensagem salva no histórico",
-      });
+
+      // Enviar via Evolution API se não for mensagem interna e tiver telefone do cliente
+      if (!isInternal && currentTicket?.customerPhone && currentTicket?.isWhatsApp) {
+        try {
+          console.log('📱 Enviando mensagem via WhatsApp:', {
+            phone: currentTicket.customerPhone,
+            message: message.substring(0, 50) + '...',
+            instance: whatsappInstance
+          });
+
+          const evolutionResult = await sendEvolutionMessage({
+            phone: currentTicket.customerPhone,
+            text: message,
+            instance: whatsappInstance || 'atendimento-ao-cliente-sac1',
+            options: {
+              delay: 1000,
+              presence: 'composing'
+            }
+          });
+
+          if (evolutionResult.success) {
+            console.log('✅ Mensagem enviada via WhatsApp:', evolutionResult.messageId);
+            
+            // Atualizar status da mensagem local
+            setRealTimeMessages(prev => 
+              prev.map(msg => 
+                msg.id === localMessage.id 
+                  ? { ...msg, status: 'delivered' as const }
+                  : msg
+              )
+            );
+
+            toast({
+              title: "📱 Enviado via WhatsApp!",
+              description: "Mensagem entregue ao cliente via WhatsApp",
+            });
+          } else {
+            console.warn('⚠️ Falha no envio via WhatsApp:', evolutionResult.error);
+            toast({
+              title: "⚠️ Salvo localmente",
+              description: "Mensagem salva mas não foi possível enviar via WhatsApp",
+              variant: "default"
+            });
+          }
+        } catch (evolutionError) {
+          console.error('❌ Erro no envio via Evolution API:', evolutionError);
+          // Não interrompe o fluxo principal - mensagem já foi salva
+        }
+      } else {
+        toast({
+          title: "✅ Mensagem enviada",
+          description: isInternal ? "Nota interna salva" : "Mensagem salva no histórico",
+        });
+      }
       
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
@@ -390,6 +517,20 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       setWhatsappStatus('connected'); // Para demonstração
     }
   }, [currentTicket]);
+
+  // Effect para reprocessar dados do ticket quando ticket prop mudar
+  useEffect(() => {
+    if (ticket) {
+      const clientInfo = extractClientInfo(ticket);
+      setCurrentTicket({
+        ...ticket,
+        client: clientInfo.clientName,
+        customerPhone: clientInfo.clientPhone,
+        customerEmail: ticket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : ticket.email),
+        isWhatsApp: clientInfo.isWhatsApp
+      });
+    }
+  }, [ticket]);
 
   // Effect para responsividade da sidebar
   useEffect(() => {

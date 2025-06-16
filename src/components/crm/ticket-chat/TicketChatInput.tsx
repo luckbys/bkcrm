@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { QuickTemplate, UseTicketChatReturn } from '../../../types/ticketChat';
+import { ChatAnimations, ResponsiveAnimations } from './chatAnimations';
+import { useEvolutionSender } from '../../../hooks/useEvolutionSender';
 
 interface TicketChatInputProps {
   chatState: UseTicketChatReturn;
@@ -131,7 +133,7 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
                 variant="outline"
                 size="sm"
                 className={cn(
-                  "transition-all",
+                  ChatAnimations.transition.colors,
                   quickReplyVisible 
                     ? "bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-300" 
                     : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"
@@ -154,7 +156,10 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
                   <Button
                     key={template.id}
                     variant="ghost"
-                    className="w-full justify-start text-left h-auto p-4 hover:bg-purple-50"
+                    className={cn(
+                      "w-full justify-start text-left h-auto p-4 hover:bg-purple-50",
+                      ChatAnimations.transition.colors
+                    )}
                     onClick={() => {
                       handleTemplateSelect(template);
                       setQuickReplyVisible(false);
@@ -191,7 +196,10 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
                           setQuickReplyVisible(false);
                           textareaRef.current?.focus();
                         }}
-                        className="h-8 text-xs text-left justify-start bg-white hover:bg-purple-50 border-purple-200"
+                        className={cn(
+                          "h-8 text-xs text-left justify-start bg-white hover:bg-purple-50 border-purple-200",
+                          ChatAnimations.transition.colors
+                        )}
                       >
                         {quickReply}
                       </Button>
@@ -204,9 +212,7 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
         </div>
       </div>
 
-
-
-      {/* Message input */}
+      {/* Message input - Animações mais fluidas */}
       <div className="flex items-end gap-3">
         <div className="flex-1 relative">
           <Textarea
@@ -216,8 +222,10 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={isInternal ? "✏️ Escreva uma nota interna..." : "💬 Digite sua mensagem..."}
             className={cn(
-              "min-h-[60px] max-h-[120px] resize-none border-2 rounded-xl px-4 py-3 text-sm transition-all duration-200 shadow-sm",
-              "focus:ring-2 focus:ring-offset-0 bg-gray-50 hover:bg-white",
+              "min-h-[60px] max-h-[120px] resize-none border-2 rounded-xl px-4 py-3 text-sm shadow-sm",
+              "bg-gray-50 hover:bg-white focus:ring-2 focus:ring-offset-0",
+              ChatAnimations.chat.inputFocus,
+              ResponsiveAnimations.prefersReducedMotion.disable,
               isInternal 
                 ? "border-orange-300 focus:border-orange-500 focus:ring-orange-200" 
                 : "border-gray-300 focus:border-blue-500 focus:ring-blue-200",
@@ -226,12 +234,18 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
             disabled={isSending}
           />
           {message.length > 0 && (
-            <div className="absolute bottom-3 right-3 flex items-center space-x-2">
+            <div className={cn(
+              "absolute bottom-3 right-3 flex items-center space-x-2",
+              ChatAnimations.enter.fade
+            )}>
               <div className="text-xs text-gray-400 bg-white px-2 py-1 rounded-full shadow-sm">
                 {characterCount}/1000
               </div>
               {isLongMessage && (
-                <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                <div className={cn(
+                  "w-2 h-2 bg-amber-400 rounded-full",
+                  ChatAnimations.loading.breathe
+                )} />
               )}
             </div>
           )}
@@ -241,12 +255,14 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
           onClick={handleSendMessage}
           disabled={!message.trim() || isSending}
           className={cn(
-            "h-12 px-6 rounded-xl font-semibold transition-all duration-200 shadow-sm bg-blue-600 hover:bg-blue-700",
-            "disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
+            "h-12 px-6 rounded-xl font-semibold shadow-sm bg-blue-600 hover:bg-blue-700",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            ChatAnimations.interactive.button,
+            ResponsiveAnimations.prefersReducedMotion.disable
           )}
         >
           {isSending ? (
-            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            <Loader2 className={cn("w-5 h-5 mr-2", ChatAnimations.loading.spin)} />
           ) : (
             <Send className="w-5 h-5 mr-2" />
           )}
@@ -276,8 +292,14 @@ export const TicketChatInput: React.FC<TicketChatInputProps> = ({
         </div>
         <div className="flex items-center gap-3">
           {message.trim() && (
-            <div className="flex items-center gap-2 text-blue-500 animate-pulse">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            <div className={cn(
+              "flex items-center gap-2 text-blue-500",
+              ChatAnimations.indicators.typing
+            )}>
+              <div className={cn(
+                "w-2 h-2 bg-blue-500 rounded-full",
+                ChatAnimations.loading.breathe
+              )} />
               <span className="text-xs">Digitando...</span>
             </div>
           )}

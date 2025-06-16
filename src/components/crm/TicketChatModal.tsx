@@ -7,11 +7,12 @@ import {
 } from '@/components/ui/dialog';
 import { VisuallyHidden } from '@/components/ui/visually-hidden';
 import TicketChatRefactored from './TicketChatRefactored';
+import TicketChatMinimized from './ticket-chat/TicketChatMinimized';
 import { useTicketChat } from '../../hooks/useTicketChat';
 import { useMinimizedChatManager } from '../../hooks/useMinimizedChatManager';
 import { TicketChatModalProps } from '../../types/chatModal';
-
-
+import { cn } from '@/lib/utils';
+import { ChatAnimations, ResponsiveAnimations } from './ticket-chat/chatAnimations';
 
 export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClose, isOpen }) => {
   // Early return PRIMEIRO - antes de qualquer hook
@@ -64,7 +65,7 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
     return null;
   }
 
-  // Modal principal
+  // Modal principal com animações suaves
   return (
     <Dialog 
       open={isOpen && !isMinimized} 
@@ -72,7 +73,11 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-[95vw] h-[90vh] p-0 gap-0 overflow-hidden">
+      <DialogContent className={cn(
+        "max-w-[95vw] h-[90vh] p-0 gap-0 overflow-hidden",
+        ChatAnimations.enter.scale,
+        ResponsiveAnimations.prefersReducedMotion.disable
+      )}>
         <VisuallyHidden>
           <DialogTitle>
             Chat do Ticket - {currentTicket?.title || currentTicket?.subject || 'Conversa'}

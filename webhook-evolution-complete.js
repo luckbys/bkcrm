@@ -1,6 +1,7 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
+import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
 // Configurações via variáveis de ambiente (EasyPanel)
@@ -16,6 +17,14 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cC
 
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Configurar Evolution API para envio de mensagens
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evolution-api.devsible.com.br';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+
+console.log('🚀 Configurações Evolution API:');
+console.log(`📡 URL: ${EVOLUTION_API_URL}`);
+console.log(`🔑 API Key: ${EVOLUTION_API_KEY ? '***configurada***' : '❌ não configurada'}`);
 
 // Middleware
 app.use(cors());
@@ -207,18 +216,129 @@ app.post('/webhook/evolution/chats-update', async (req, res) => {
   }
 });
 
+// Endpoint para envio de mensagens do CRM para WhatsApp
+app.post('/webhook/send-message', async (req, res) => {
+  try {
+    const { phone, text, instance, options = {} } = req.body;
+    
+    console.log('📤 [SEND] Solicitação de envio de mensagem:', {
+      phone,
+      text: text?.substring(0, 50) + '...',
+      instance,
+      hasOptions: Object.keys(options).length > 0
+    });
+
+    if (!phone || !text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Telefone e texto são obrigatórios',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await sendWhatsAppMessage({
+      phone,
+      text,
+      instance: instance || 'atendimento-ao-cliente-sac1',
+      options
+    });
+
+    console.log('📤 [SEND] Resultado do envio:', {
+      success: result.success,
+      messageId: result.messageId,
+      error: result.error
+    });
+
+    res.status(result.success ? 200 : 500).json({
+      success: result.success,
+      messageId: result.messageId,
+      status: result.status,
+      error: result.error,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ [SEND] Erro ao enviar mensagem:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Endpoint para responder a uma mensagem específica
+app.post('/webhook/reply-message', async (req, res) => {
+  try {
+    const { phone, text, instance, quotedMessage, options = {} } = req.body;
+    
+    console.log('💬 [REPLY] Solicitação de resposta:', {
+      phone,
+      text: text?.substring(0, 50) + '...',
+      instance,
+      quotedMessageId: quotedMessage?.id
+    });
+
+    if (!phone || !text || !quotedMessage) {
+      return res.status(400).json({
+        success: false,
+        error: 'Telefone, texto e mensagem citada são obrigatórios',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await sendReplyMessage({
+      phone,
+      text,
+      instance: instance || 'atendimento-ao-cliente-sac1',
+      options
+    }, quotedMessage);
+
+    console.log('💬 [REPLY] Resultado da resposta:', {
+      success: result.success,
+      messageId: result.messageId,
+      error: result.error
+    });
+
+    res.status(result.success ? 200 : 500).json({
+      success: result.success,
+      messageId: result.messageId,
+      status: result.status,
+      error: result.error,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ [REPLY] Erro ao responder mensagem:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Endpoint de health check
 app.get('/webhook/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     server: 'Webhook Evolution API',
+    features: {
+      receiving: true,
+      sending: true,
+      replying: true
+    },
     endpoints: [
       '/webhook/evolution',
       '/webhook/evolution/messages-upsert',
       '/webhook/evolution/contacts-update', 
       '/webhook/evolution/chats-update',
-      '/webhook/messages-upsert'
+      '/webhook/messages-upsert',
+      '/webhook/send-message',
+      '/webhook/reply-message'
     ]
   });
 });
@@ -662,6 +782,161 @@ function extractMessageContent(message) {
   return null;
 }
 
+// ====== FUNÇÕES DE ENVIO DE MENSAGENS VIA EVOLUTION API ======
+
+/**
+ * Enviar mensagem de texto via Evolution API
+ * Baseado na documentação: https://doc.evolution-api.com/v1/api-reference/message-controller/send-text
+ */
+async function sendWhatsAppMessage(messageData) {
+  try {
+    const { phone, text, instance = 'atendimento-ao-cliente-sac1', options = {} } = messageData;
+
+    if (!phone || !text) {
+      throw new Error('Telefone e texto são obrigatórios');
+    }
+
+    // Formatar número para o padrão WhatsApp
+    const formattedPhone = formatPhoneNumber(phone);
+    
+    console.log('📤 Enviando mensagem via Evolution API:', {
+      instance,
+      phone: formattedPhone,
+      text: text.substring(0, 50) + '...',
+      hasOptions: Object.keys(options).length > 0
+    });
+
+    // Payload conforme documentação da Evolution API
+    const payload = {
+      number: formattedPhone,
+      options: {
+        delay: options.delay || 1000, // 1 segundo de delay padrão
+        presence: options.presence || 'composing', // Mostrar "digitando..."
+        linkPreview: options.linkPreview !== false, // True por padrão
+        ...options
+      },
+      textMessage: {
+        text: text
+      }
+    };
+
+    // Fazer requisição para a Evolution API
+    const response = await axios.post(
+      `${EVOLUTION_API_URL}/message/sendText/${instance}`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY
+        },
+        timeout: 30000 // 30 segundos
+      }
+    );
+
+    console.log('✅ Mensagem enviada com sucesso:', {
+      messageId: response.data.key?.id,
+      status: response.data.status,
+      timestamp: response.data.messageTimestamp
+    });
+
+    return {
+      success: true,
+      data: response.data,
+      messageId: response.data.key?.id,
+      status: response.data.status
+    };
+
+  } catch (error) {
+    console.error('❌ Erro ao enviar mensagem:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+
+    return {
+      success: false,
+      error: error.message,
+      details: error.response?.data
+    };
+  }
+}
+
+/**
+ * Enviar mensagem com citação (reply)
+ */
+async function sendReplyMessage(messageData, quotedMessage) {
+  const options = {
+    ...messageData.options,
+    quoted: {
+      key: {
+        remoteJid: quotedMessage.remoteJid,
+        fromMe: quotedMessage.fromMe || false,
+        id: quotedMessage.id,
+        participant: quotedMessage.participant
+      },
+      message: {
+        conversation: quotedMessage.text || quotedMessage.conversation
+      }
+    }
+  };
+
+  return sendWhatsAppMessage({
+    ...messageData,
+    options
+  });
+}
+
+/**
+ * Formatar número de telefone para o padrão WhatsApp
+ */
+function formatPhoneNumber(phone) {
+  // Remover caracteres não numéricos
+  let cleaned = phone.replace(/\D/g, '');
+  
+  // Se não começar com código do país, adicionar +55 (Brasil)
+  if (!cleaned.startsWith('55') && cleaned.length >= 10) {
+    cleaned = '55' + cleaned;
+  }
+  
+  // Remover sufixo @s.whatsapp.net se existir (será enviado apenas o número)
+  cleaned = cleaned.replace('@s.whatsapp.net', '');
+  
+  return cleaned;
+}
+
+/**
+ * Verificar status da instância Evolution API
+ */
+async function checkInstanceStatus(instanceName = 'atendimento-ao-cliente-sac1') {
+  try {
+    const response = await axios.get(
+      `${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`,
+      {
+        headers: {
+          'apikey': EVOLUTION_API_KEY
+        },
+        timeout: 10000
+      }
+    );
+    
+    console.log(`📊 Status da instância ${instanceName}:`, response.data);
+    
+    return {
+      success: true,
+      data: response.data,
+      isConnected: response.data.state === 'open'
+    };
+  } catch (error) {
+    console.error(`❌ Erro ao verificar status da instância ${instanceName}:`, error.message);
+    
+    return {
+      success: false,
+      error: error.message,
+      isConnected: false
+    };
+  }
+}
+
 // Endpoints auxiliares
 app.get('/', (req, res) => {
   res.json({
@@ -672,7 +947,9 @@ app.get('/', (req, res) => {
     endpoints: {
       webhook: `${BASE_URL}/webhook/evolution`,
       health: `${BASE_URL}/health`,
-      test: `${BASE_URL}/test`
+      test: `${BASE_URL}/test`,
+      sendMessage: `${BASE_URL}/webhook/send-message`,
+      replyMessage: `${BASE_URL}/webhook/reply-message`
     }
   });
 });
