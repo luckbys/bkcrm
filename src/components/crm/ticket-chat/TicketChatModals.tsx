@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
@@ -22,11 +22,19 @@ import {
   UserCheck,
   Tag,
   Loader2,
-  X
+  X,
+  User,
+  Search,
+  Phone,
+  Mail,
+  Building
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { UseTicketChatReturn } from '../../../types/ticketChat';
 import { useToast } from '../../../hooks/use-toast';
+import { useCustomers } from '../../../hooks/useCustomers';
+import { useTicketsDB } from '../../../hooks/useTicketsDB';
+import { Customer } from '../../../types/customer';
 
 interface TicketChatModalsProps {
   chatState: UseTicketChatReturn;
@@ -36,10 +44,14 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
   chatState
 }) => {
   const { toast } = useToast();
+  const { customers, loading: loadingCustomers } = useCustomers();
+  const { assignCustomerToTicket } = useTicketsDB();
   const [newAssignee, setNewAssignee] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [newTag, setNewTag] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
 
   const {
     currentTicket,
@@ -49,8 +61,26 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
     showStatusModal,
     setShowStatusModal,
     showTagModal,
-    setShowTagModal
+    setShowTagModal,
+    showCustomerModal,
+    setShowCustomerModal
   } = chatState;
+
+  // Filtrar clientes baseado na busca
+  const filteredCustomers = customers.filter(customer =>
+    customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+    customer.email.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+    customer.phone.includes(customerSearchTerm) ||
+    (customer.company && customer.company.toLowerCase().includes(customerSearchTerm.toLowerCase()))
+  );
+
+  // Resetar busca quando modal fecha
+  useEffect(() => {
+    if (!showCustomerModal) {
+      setCustomerSearchTerm('');
+      setSelectedCustomer(null);
+    }
+  }, [showCustomerModal]);
 
   return (
     <>
@@ -304,6 +334,198 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
             >
               <Tag className="w-4 h-4 mr-2" />
               Adicionar Tag
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Assignment Modal */}
+      <Dialog open={showCustomerModal} onOpenChange={setShowCustomerModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5 text-blue-600" />
+              Atribuir Cliente ao Ticket
+            </DialogTitle>
+            <DialogDescription>
+              Selecione um cliente para associar a este ticket
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Campo de busca */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Buscar por nome, email, telefone ou empresa..."
+                value={customerSearchTerm}
+                onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {/* Cliente atualmente atribuído */}
+            {currentTicket?.customer_id && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-blue-800 mb-1">Cliente atual:</p>
+                <p className="text-sm text-blue-700">{currentTicket?.client || 'Cliente não identificado'}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setCurrentTicket((prev: any) => ({ 
+                      ...prev, 
+                      customer_id: null,
+                      client: 'Cliente Anônimo'
+                    }));
+                    toast({
+                      title: "✅ Cliente removido",
+                      description: "Cliente foi desassociado do ticket",
+                    });
+                  }}
+                  className="mt-2 text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  <X className="w-3 h-3 mr-1" />
+                  Remover Cliente
+                </Button>
+              </div>
+            )}
+
+            {/* Lista de clientes */}
+            <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+              {loadingCustomers ? (
+                <div className="p-4 text-center">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Carregando clientes...</p>
+                </div>
+              ) : filteredCustomers.length === 0 ? (
+                <div className="p-4 text-center">
+                  <User className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">
+                    {customerSearchTerm ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {filteredCustomers.slice(0, 10).map((customer) => (
+                    <div
+                      key={customer.id}
+                      className={cn(
+                        "p-3 cursor-pointer hover:bg-gray-50 transition-colors",
+                        selectedCustomer?.id === customer.id && "bg-blue-50 border-l-4 border-blue-500"
+                      )}
+                      onClick={() => setSelectedCustomer(customer)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium text-gray-900">{customer.name}</h4>
+                            <Badge 
+                              variant="outline" 
+                              className={cn(
+                                "text-xs",
+                                customer.category === 'gold' && "border-yellow-300 text-yellow-700",
+                                customer.category === 'silver' && "border-gray-300 text-gray-700",
+                                customer.category === 'bronze' && "border-orange-300 text-orange-700",
+                                customer.category === 'platinum' && "border-purple-300 text-purple-700"
+                              )}
+                            >
+                              {customer.category}
+                            </Badge>
+                          </div>
+                          
+                          <div className="space-y-1 text-sm text-gray-600">
+                            <div className="flex items-center gap-2">
+                              <Mail className="w-3 h-3" />
+                              <span>{customer.email}</span>
+                            </div>
+                            {customer.phone && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="w-3 h-3" />
+                                <span>{customer.phone}</span>
+                              </div>
+                            )}
+                            {customer.company && (
+                              <div className="flex items-center gap-2">
+                                <Building className="w-3 h-3" />
+                                <span>{customer.company}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {selectedCustomer?.id === customer.id && (
+                          <div className="ml-2">
+                            <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                              <div className="w-2 h-2 bg-white rounded-full"></div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {filteredCustomers.length > 10 && (
+                    <div className="p-3 text-center text-sm text-gray-500 bg-gray-50">
+                      Mostrando 10 de {filteredCustomers.length} clientes. Use a busca para refinar.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowCustomerModal(false);
+                setSelectedCustomer(null);
+                setCustomerSearchTerm('');
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => {
+                if (selectedCustomer) {
+                  // Atualizar estado local
+                  setCurrentTicket((prev: any) => ({ 
+                    ...prev, 
+                    customer_id: selectedCustomer.id,
+                    client: selectedCustomer.name,
+                    customerEmail: selectedCustomer.email,
+                    customerPhone: selectedCustomer.phone
+                  }));
+                  
+                  // Persistir no banco de dados se o ticket tem originalId (UUID)
+                  if (currentTicket?.originalId) {
+                    assignCustomerToTicket(currentTicket.originalId, {
+                      customer_id: selectedCustomer.id
+                    }).catch((error) => {
+                      console.error('Erro ao atribuir cliente no banco:', error);
+                      toast({
+                        title: "⚠️ Aviso",
+                        description: "Cliente atribuído localmente, mas não foi salvo no banco de dados",
+                        variant: "destructive"
+                      });
+                    });
+                  }
+                  
+                  toast({
+                    title: "✅ Cliente atribuído",
+                    description: `Ticket atribuído para ${selectedCustomer.name}`,
+                  });
+                }
+                setShowCustomerModal(false);
+                setSelectedCustomer(null);
+                setCustomerSearchTerm('');
+              }}
+              disabled={!selectedCustomer}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <User className="w-4 h-4 mr-2" />
+              Atribuir Cliente
             </Button>
           </DialogFooter>
         </DialogContent>

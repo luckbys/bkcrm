@@ -584,6 +584,7 @@ export function useTicketsDB() {
     deleteTicket,
     fetchMessages,
     sendMessage,
+    assignCustomerToTicket: updateTicket, // Alias para atribuir cliente
     
     // Utilidades
     formatLastMessage,

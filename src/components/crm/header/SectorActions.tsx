@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Filter, BarChart3, Smartphone } from 'lucide-react';
+import { MessageSquare, Filter, BarChart3, Smartphone, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SectorActionsProps {
@@ -22,6 +22,12 @@ export const SectorActions = ({ currentView, onViewChange }: SectorActionsProps)
       color: 'emerald'
     },
     {
+      id: 'clientes',
+      label: 'Clientes',
+      icon: Users,
+      color: 'orange'
+    },
+    {
       id: 'funil',
       label: 'Funil',
       icon: Filter,
@@ -42,6 +48,8 @@ export const SectorActions = ({ currentView, onViewChange }: SectorActionsProps)
           return "bg-blue-50/80 hover:bg-blue-100/80 border-blue-200/60 text-blue-700 shadow-sm";
         case 'emerald':
           return "bg-emerald-50/80 hover:bg-emerald-100/80 border-emerald-200/60 text-emerald-700 shadow-sm";
+        case 'orange':
+          return "bg-orange-50/80 hover:bg-orange-100/80 border-orange-200/60 text-orange-700 shadow-sm";
         case 'purple':
           return "bg-purple-50/80 hover:bg-purple-100/80 border-purple-200/60 text-purple-700 shadow-sm";
         case 'green':

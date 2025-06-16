@@ -134,6 +134,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
   
   // Mensagens
   const [realTimeMessages, setRealTimeMessages] = useState<LocalMessage[]>([]);
@@ -730,6 +731,8 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     setShowStatusModal,
     showTagModal,
     setShowTagModal,
+    showCustomerModal,
+    setShowCustomerModal,
     
     // Mensagens
     realTimeMessages,

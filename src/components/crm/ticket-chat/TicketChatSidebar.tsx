@@ -53,6 +53,8 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
     setShowStatusModal,
     showTagModal,
     setShowTagModal,
+    showCustomerModal,
+    setShowCustomerModal,
     toggleSidebar,
     setSoundEnabled,
     setCompactMode
@@ -84,6 +86,10 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
 
   const openTransferModal = () => {
     setShowTagModal(true);
+  };
+
+  const openCustomerModal = () => {
+    setShowCustomerModal(true);
   };
 
   if (!showSidebar) {
@@ -332,6 +338,19 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
             >
               <UserCheck className="w-4 h-4 mr-2" />
               Atribuir Agente
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openCustomerModal()}
+              className={cn(
+                "w-full justify-start h-12 hover:bg-orange-50 hover:border-orange-300",
+                ChatAnimations.transition.colors
+              )}
+            >
+              <User className="w-4 h-4 mr-2" />
+              Atribuir Cliente
             </Button>
             
             <Button

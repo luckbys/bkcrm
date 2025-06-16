@@ -70,6 +70,8 @@ export interface UseTicketChatReturn {
   setShowStatusModal: (show: boolean) => void;
   showTagModal: boolean;
   setShowTagModal: (show: boolean) => void;
+  showCustomerModal: boolean;
+  setShowCustomerModal: (show: boolean) => void;
   
   // Mensagens
   realTimeMessages: LocalMessage[];
