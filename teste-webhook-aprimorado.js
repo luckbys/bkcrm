@@ -1,440 +1,545 @@
-// ========================================
-// TESTE DO WEBHOOK APRIMORADO
-// ========================================
-// Este script testa todas as funcionalidades do webhook aprimorado
+/**
+ * 🧪 SCRIPT DE TESTE COMPLETO
+ * Webhook Evolution API - Versão Aprimorada
+ * 
+ * Este script testa todas as funcionalidades do webhook aprimorado
+ */
 
-const axios = require('axios');
+import axios from 'axios';
 
-console.log('🧪 INICIANDO TESTES DO WEBHOOK APRIMORADO');
-console.log('=' + '='.repeat(50));
+// Configurações de teste
+const WEBHOOK_BASE_URL = 'http://localhost:4000'; // ou 'https://bkcrm.devsible.com.br'
+const TEST_PHONE = '5511999887766'; // Número para testes
+const TEST_INSTANCE = 'atendimento-ao-cliente-sac1';
 
-// Configurações
-const WEBHOOK_URL = 'http://localhost:4000';
+console.log('🧪 Iniciando testes do Webhook Evolution API Aprimorado');
+console.log(`📡 Base URL: ${WEBHOOK_BASE_URL}`);
+console.log(`📱 Telefone de teste: ${TEST_PHONE}`);
+console.log(`🏢 Instância: ${TEST_INSTANCE}`);
+console.log('═'.repeat(80));
 
-// Função utilitária para fazer requisições
-async function makeRequest(url, method = 'GET', data = null) {
-  try {
-    const options = {
-      method: method,
-      url: url,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      timeout: 10000
-    };
-    
-    if (data) {
-      options.data = data;
-    }
-    
-    const response = await axios(options);
-    
-    return {
-      success: true,
-      status: response.status,
-      data: response.data
-    };
-  } catch (error) {
-    return {
-      success: false,
-      status: error.response?.status || 0,
-      error: error.message,
-      data: error.response?.data
-    };
-  }
-}
-
-// ====== TESTE 1: HEALTH CHECK ======
+/**
+ * 1. TESTE DE HEALTH CHECK
+ */
 async function testHealthCheck() {
-  console.log('\n🏥 TESTE 1: Health Check');
-  console.log('-'.repeat(30));
+  console.log('\n🏥 1. TESTE DE HEALTH CHECK');
+  console.log('-'.repeat(50));
   
-  const result = await makeRequest(`${WEBHOOK_URL}/webhook/health`);
-  
-  if (result.success) {
+  try {
+    const response = await axios.get(`${WEBHOOK_BASE_URL}/webhook/health`);
+    
     console.log('✅ Health check passou');
-    console.log('📊 Versão:', result.data.version);
-    console.log('🎯 Funcionalidades:', result.data.features?.length || 0);
-    console.log('📋 Cache de contatos:', result.data.cache?.contacts || 0);
-    console.log('📝 Templates:', result.data.cache?.templates || 0);
-  } else {
-    console.log('❌ Health check falhou:', result.error);
-    console.log('🔗 Verifique se o webhook está rodando em:', WEBHOOK_URL);
-  }
-  
-  return result.success;
-}
-
-// ====== TESTE 2: CACHE DE CONTATOS ======
-async function testContactCache() {
-  console.log('\n📋 TESTE 2: Cache de Contatos');
-  console.log('-'.repeat(30));
-  
-  const result = await makeRequest(`${WEBHOOK_URL}/webhook/cache`);
-  
-  if (result.success) {
-    console.log('✅ Cache acessível');
-    console.log('📊 Total de contatos em cache:', result.data.size);
+    console.log('📊 Status:', response.data.status);
+    console.log('🗄️ Supabase:', response.data.supabase);
+    console.log('📡 Evolution API:', response.data.evolutionApi);
+    console.log('💾 Cache:', response.data.cache);
     
-    if (result.data.contacts && result.data.contacts.length > 0) {
-      console.log('👥 Contatos encontrados:');
-      result.data.contacts.slice(0, 3).forEach((contact, index) => {
-        console.log(`   ${index + 1}. ${contact.contact.name} (${contact.contact.phone})`);
-        console.log(`      Idioma: ${contact.contact.language}, Mensagens: ${contact.contact.messageCount}`);
-      });
-    } else {
-      console.log('📭 Cache vazio (normal se servidor foi reiniciado recentemente)');
-    }
-  } else {
-    console.log('❌ Erro ao acessar cache:', result.error);
+    return true;
+  } catch (error) {
+    console.error('❌ Health check falhou:', error.message);
+    return false;
   }
-  
-  return result.success;
 }
 
-// ====== TESTE 3: SIMULAÇÃO DE WEBHOOK ======
-async function testWebhookSimulation() {
-  console.log('\n📥 TESTE 3: Simulação de Webhook');
-  console.log('-'.repeat(30));
+/**
+ * 2. TESTE DE INFORMAÇÕES DO SERVIÇO
+ */
+async function testServiceInfo() {
+  console.log('\n📋 2. TESTE DE INFORMAÇÕES DO SERVIÇO');
+  console.log('-'.repeat(50));
   
-  // Simular recebimento de mensagem
-  const webhookPayload = {
-    event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
-    data: {
-      key: {
-        remoteJid: '5511999000001@s.whatsapp.net',
-        fromMe: false,
-        id: 'test_message_' + Date.now(),
-        participant: null
-      },
-      message: {
-        conversation: 'Olá! Esta é uma mensagem de teste para verificar a extração de dados do webhook aprimorado.'
-      },
-      pushName: 'Cliente Teste Avançado',
-      messageTimestamp: Math.floor(Date.now() / 1000)
-    }
-  };
-  
-  console.log('📤 Enviando payload de teste...');
-  console.log('👤 Contato:', webhookPayload.data.pushName);
-  console.log('📱 Telefone:', webhookPayload.data.key.remoteJid);
-  console.log('💬 Mensagem:', webhookPayload.data.message.conversation.substring(0, 50) + '...');
-  
-  const result = await makeRequest(`${WEBHOOK_URL}/webhook/evolution`, 'POST', webhookPayload);
-  
-  if (result.success) {
-    console.log('✅ Webhook processou mensagem com sucesso');
+  try {
+    const response = await axios.get(`${WEBHOOK_BASE_URL}/`);
     
-    if (result.data.contactData) {
-      console.log('👤 Dados do contato extraídos:');
-      console.log(`   Nome: ${result.data.contactData.name}`);
-      console.log(`   Telefone: ${result.data.contactData.phone}`);
-      console.log(`   Idioma: ${result.data.contactData.language}`);
-      console.log(`   É grupo: ${result.data.contactData.isGroup ? 'Sim' : 'Não'}`);
-      console.log(`   Foto de perfil: ${result.data.contactData.profilePictureUrl ? 'Sim' : 'Não'}`);
-    }
+    console.log('✅ Informações obtidas com sucesso');
+    console.log('🔧 Serviço:', response.data.service);
+    console.log('📦 Versão:', response.data.version);
+    console.log('🚀 Funcionalidades:', response.data.features.length);
     
-    if (result.data.messageInfo) {
-      console.log('📨 Informações da mensagem:');
-      console.log(`   Tipo: ${result.data.messageInfo.type}`);
-      console.log(`   Conteúdo: ${result.data.messageInfo.content?.substring(0, 50)}...`);
-      console.log(`   Tem mídia: ${result.data.messageInfo.media ? 'Sim' : 'Não'}`);
-    }
-  } else {
-    console.log('❌ Erro no webhook:', result.error);
-    if (result.data) {
-      console.log('📝 Detalhes:', result.data);
-    }
-  }
-  
-  return result.success;
-}
-
-// ====== TESTE 4: ENVIO DE MENSAGEM ======
-async function testMessageSending() {
-  console.log('\n📤 TESTE 4: Envio de Mensagem');
-  console.log('-'.repeat(30));
-  
-  const messagePayload = {
-    phone: '5512981022013', // Número real que funcionou nos testes anteriores
-    text: '🤖 Teste do webhook APRIMORADO! Funcionalidades: ✅ Extração avançada de dados, ✅ Resposta automática inteligente, ✅ Cache de contatos, ✅ Processamento de mídias.',
-    instance: 'atendimento-ao-cliente-sac1',
-    options: {
-      delay: 1000,
-      presence: 'composing'
-    }
-  };
-  
-  console.log('📤 Tentando enviar mensagem...');
-  console.log('📱 Para:', messagePayload.phone);
-  console.log('💬 Texto:', messagePayload.text.substring(0, 50) + '...');
-  
-  const result = await makeRequest(`${WEBHOOK_URL}/webhook/send-message`, 'POST', messagePayload);
-  
-  if (result.success && result.data.success) {
-    console.log('✅ Mensagem enviada com sucesso!');
-    console.log('🆔 Message ID:', result.data.messageId);
-    console.log('📊 Status:', result.data.status);
-  } else if (result.success && !result.data.success) {
-    console.log('⚠️ Webhook funcionando, mas erro no envio:', result.data.error);
-    if (result.data.details?.response?.message) {
-      console.log('📝 Detalhes:', result.data.details.response.message);
-    }
-  } else {
-    console.log('❌ Erro no endpoint de envio:', result.error);
-  }
-  
-  return result.success;
-}
-
-// ====== TESTE 5: LIMPAR CACHE ======
-async function testClearCache() {
-  console.log('\n🧹 TESTE 5: Limpar Cache');
-  console.log('-'.repeat(30));
-  
-  const result = await makeRequest(`${WEBHOOK_URL}/webhook/clear-cache`, 'POST');
-  
-  if (result.success) {
-    console.log('✅ Cache limpo com sucesso');
-    console.log('📝 Mensagem:', result.data.message);
-  } else {
-    console.log('❌ Erro ao limpar cache:', result.error);
-  }
-  
-  return result.success;
-}
-
-// ====== TESTE 6: SIMULAÇÃO DE MENSAGEM COM MÍDIA ======
-async function testMediaMessage() {
-  console.log('\n📷 TESTE 6: Simulação de Mensagem com Mídia');
-  console.log('-'.repeat(30));
-  
-  const mediaPayload = {
-    event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
-    data: {
-      key: {
-        remoteJid: '5511999000002@s.whatsapp.net',
-        fromMe: false,
-        id: 'test_media_' + Date.now(),
-        participant: null
-      },
-      message: {
-        imageMessage: {
-          caption: 'Esta é uma imagem de teste do webhook aprimorado 📷',
-          mimetype: 'image/jpeg',
-          url: 'https://exemplo.com/imagem.jpg',
-          fileLength: 1024000,
-          width: 1920,
-          height: 1080
-        }
-      },
-      pushName: 'Cliente Mídia Teste',
-      messageTimestamp: Math.floor(Date.now() / 1000)
-    }
-  };
-  
-  console.log('📤 Enviando mensagem com imagem...');
-  
-  const result = await makeRequest(`${WEBHOOK_URL}/webhook/evolution`, 'POST', mediaPayload);
-  
-  if (result.success && result.data.messageInfo) {
-    console.log('✅ Mensagem com mídia processada');
-    console.log('🎯 Tipo:', result.data.messageInfo.type);
-    console.log('📝 Caption:', result.data.messageInfo.content);
+    response.data.features.forEach((feature, index) => {
+      console.log(`   ${index + 1}. ${feature}`);
+    });
     
-    if (result.data.messageInfo.media) {
-      console.log('📊 Dados da mídia:');
-      console.log(`   Mimetype: ${result.data.messageInfo.media.mimetype}`);
-      console.log(`   Tamanho: ${result.data.messageInfo.media.size} bytes`);
-      console.log(`   Dimensões: ${result.data.messageInfo.media.width}x${result.data.messageInfo.media.height}`);
-    }
-  } else {
-    console.log('❌ Erro ao processar mensagem com mídia');
+    console.log('🔗 Endpoints disponíveis:', Object.keys(response.data.endpoints).length);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao obter informações:', error.message);
+    return false;
   }
-  
-  return result.success;
 }
 
-// ====== TESTE 7: FUNCIONALIDADES ESPECÍFICAS ======
-async function testSpecificFeatures() {
-  console.log('\n🎯 TESTE 7: Funcionalidades Específicas');
-  console.log('-'.repeat(30));
+/**
+ * 3. TESTE DE VERIFICAÇÃO DE INSTÂNCIA
+ */
+async function testInstanceCheck() {
+  console.log('\n🔌 3. TESTE DE VERIFICAÇÃO DE INSTÂNCIA');
+  console.log('-'.repeat(50));
   
-  let passed = 0;
+  try {
+    const response = await axios.post(`${WEBHOOK_BASE_URL}/webhook/check-instance`, {
+      instance: TEST_INSTANCE
+    });
+    
+    console.log('✅ Verificação de instância passou');
+    console.log('📊 Conectada:', response.data.isConnected);
+    console.log('🏢 Estado:', response.data.instance?.state);
+    console.log('📱 Instância:', response.data.instance?.instanceName);
+    
+    return response.data.isConnected;
+  } catch (error) {
+    console.error('❌ Erro ao verificar instância:', error.message);
+    console.error('📄 Detalhes:', error.response?.data);
+    return false;
+  }
+}
+
+/**
+ * 4. TESTE DE ENVIO DE MENSAGEM SIMPLES
+ */
+async function testSimpleMessage() {
+  console.log('\n📤 4. TESTE DE ENVIO DE MENSAGEM SIMPLES');
+  console.log('-'.repeat(50));
   
-  // Teste detecção de idioma
-  const testMessages = [
-    { text: 'Hello, I need help with my order', expectedLang: 'en' },
-    { text: 'Hola, necesito ayuda con mi pedido', expectedLang: 'es' },
-    { text: 'Olá, preciso de ajuda com meu pedido', expectedLang: 'pt' }
-  ];
+  try {
+    const messageData = {
+      phone: TEST_PHONE,
+      text: 'Teste de mensagem simples do webhook aprimorado! 🚀',
+      instance: TEST_INSTANCE
+    };
+    
+    console.log('📨 Enviando mensagem...', messageData);
+    
+    const response = await axios.post(`${WEBHOOK_BASE_URL}/webhook/send-message`, messageData);
+    
+    console.log('✅ Mensagem enviada com sucesso');
+    console.log('🆔 Message ID:', response.data.messageId);
+    console.log('📊 Status:', response.data.status);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao enviar mensagem:', error.message);
+    console.error('📄 Detalhes:', error.response?.data);
+    return false;
+  }
+}
+
+/**
+ * 5. TESTE DE ENVIO DE MENSAGEM AVANÇADA
+ */
+async function testAdvancedMessage() {
+  console.log('\n📤 5. TESTE DE ENVIO DE MENSAGEM AVANÇADA');
+  console.log('-'.repeat(50));
   
-  for (const testMsg of testMessages) {
-    const payload = {
-      event: 'MESSAGES_UPSERT',
-      instance: 'atendimento-ao-cliente-sac1',
-      data: {
-        key: {
-          remoteJid: `55119990000${Math.floor(Math.random() * 100)}@s.whatsapp.net`,
-          fromMe: false,
-          id: 'lang_test_' + Date.now() + '_' + Math.random(),
-          participant: null
-        },
-        message: {
-          conversation: testMsg.text
-        },
-        pushName: 'Cliente Teste Idioma',
-        messageTimestamp: Math.floor(Date.now() / 1000)
+  try {
+    const messageData = {
+      phone: TEST_PHONE,
+      text: 'Teste de mensagem avançada com opções especiais! ⚡\n\nEsta mensagem tem:\n• Delay personalizado\n• Preview de link\n• Presença de digitação',
+      instance: TEST_INSTANCE,
+      options: {
+        delay: 3000,
+        presence: 'composing',
+        linkPreview: true
       }
     };
     
-    const result = await makeRequest(`${WEBHOOK_URL}/webhook/evolution`, 'POST', payload);
+    console.log('📨 Enviando mensagem avançada...', {
+      phone: messageData.phone,
+      textLength: messageData.text.length,
+      options: messageData.options
+    });
     
-    if (result.success && result.data.contactData) {
-      const detectedLang = result.data.contactData.language;
-      console.log(`🗣️ Idioma detectado: ${detectedLang} (esperado: ${testMsg.expectedLang}) - ${detectedLang === testMsg.expectedLang ? '✅' : '⚠️'}`);
-      if (detectedLang === testMsg.expectedLang) passed++;
-    }
+    const response = await axios.post(`${WEBHOOK_BASE_URL}/webhook/send-message`, messageData);
     
-    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('✅ Mensagem avançada enviada');
+    console.log('🆔 Message ID:', response.data.messageId);
+    console.log('📊 Status:', response.data.status);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao enviar mensagem avançada:', error.message);
+    console.error('📄 Detalhes:', error.response?.data);
+    return false;
   }
-  
-  console.log(`📊 Detecção de idioma: ${passed}/${testMessages.length} testes corretos`);
-  
-  return passed === testMessages.length;
 }
 
-// ====== EXECUTAR TODOS OS TESTES ======
+/**
+ * 6. TESTE DE SIMULAÇÃO DE WEBHOOK RECEBIDO
+ */
+async function testWebhookSimulation() {
+  console.log('\n🔔 6. TESTE DE SIMULAÇÃO DE WEBHOOK');
+  console.log('-'.repeat(50));
+  
+  try {
+    // Simular webhook de mensagem recebida
+    const webhookPayload = {
+      event: 'MESSAGES_UPSERT',
+      instance: TEST_INSTANCE,
+      data: {
+        key: {
+          remoteJid: `${TEST_PHONE}@s.whatsapp.net`,
+          fromMe: false,
+          id: `test_${Date.now()}`
+        },
+        message: {
+          conversation: 'Teste de mensagem recebida do webhook aprimorado! Olá, preciso de ajuda com meu pedido.'
+        },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+        pushName: 'Cliente Teste Aprimorado'
+      }
+    };
+    
+    console.log('📥 Simulando webhook recebido...', {
+      event: webhookPayload.event,
+      instance: webhookPayload.instance,
+      pushName: webhookPayload.data.pushName
+    });
+    
+    const response = await axios.post(`${WEBHOOK_BASE_URL}/webhook/evolution`, webhookPayload);
+    
+    console.log('✅ Webhook simulado processado');
+    console.log('📊 Processado:', response.data.processed);
+    console.log('💬 Mensagem:', response.data.message);
+    console.log('🎫 Ticket ID:', response.data.ticketId);
+    console.log('👤 Contact ID:', response.data.contactId);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro na simulação de webhook:', error.message);
+    console.error('📄 Detalhes:', error.response?.data);
+    return false;
+  }
+}
+
+/**
+ * 7. TESTE DE SIMULAÇÃO DE MÍDIA
+ */
+async function testMediaWebhook() {
+  console.log('\n🖼️ 7. TESTE DE SIMULAÇÃO DE MÍDIA');
+  console.log('-'.repeat(50));
+  
+  try {
+    // Simular webhook de imagem recebida
+    const webhookPayload = {
+      event: 'MESSAGES_UPSERT',
+      instance: TEST_INSTANCE,
+      data: {
+        key: {
+          remoteJid: `${TEST_PHONE}@s.whatsapp.net`,
+          fromMe: false,
+          id: `test_image_${Date.now()}`
+        },
+        message: {
+          imageMessage: {
+            caption: 'Aqui está a foto do problema que estou enfrentando!',
+            url: 'https://example.com/image.jpg',
+            mimetype: 'image/jpeg',
+            fileLength: 1048576
+          }
+        },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+        pushName: 'Cliente Com Imagem'
+      }
+    };
+    
+    console.log('📸 Simulando webhook de imagem...', {
+      caption: webhookPayload.data.message.imageMessage.caption,
+      mimetype: webhookPayload.data.message.imageMessage.mimetype
+    });
+    
+    const response = await axios.post(`${WEBHOOK_BASE_URL}/webhook/evolution`, webhookPayload);
+    
+    console.log('✅ Webhook de mídia processado');
+    console.log('📊 Processado:', response.data.processed);
+    console.log('🎫 Ticket ID:', response.data.ticketId);
+    console.log('📄 Metadata:', response.data.metadata);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro na simulação de mídia:', error.message);
+    return false;
+  }
+}
+
+/**
+ * 8. TESTE DO CACHE DE CONTATOS
+ */
+async function testContactCache() {
+  console.log('\n💾 8. TESTE DO CACHE DE CONTATOS');
+  console.log('-'.repeat(50));
+  
+  try {
+    // Verificar cache atual
+    const cacheResponse = await axios.get(`${WEBHOOK_BASE_URL}/webhook/cache`);
+    
+    console.log('✅ Cache acessado com sucesso');
+    console.log('📊 Entradas no cache:', cacheResponse.data.size);
+    
+    if (cacheResponse.data.entries.length > 0) {
+      console.log('👤 Contatos em cache:');
+      cacheResponse.data.entries.forEach((entry, index) => {
+        console.log(`   ${index + 1}. ${entry.name} (${entry.phone}) - ${entry.language}`);
+      });
+    } else {
+      console.log('📝 Cache vazio');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao acessar cache:', error.message);
+    return false;
+  }
+}
+
+/**
+ * 9. TESTE DE LIMPEZA DE CACHE
+ */
+async function testCacheClear() {
+  console.log('\n🧹 9. TESTE DE LIMPEZA DE CACHE');
+  console.log('-'.repeat(50));
+  
+  try {
+    const response = await axios.post(`${WEBHOOK_BASE_URL}/webhook/clear-cache`);
+    
+    console.log('✅ Cache limpo com sucesso');
+    console.log('🗑️ Entradas removidas:', response.data.entriesCleared);
+    console.log('⏰ Timestamp:', response.data.timestamp);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao limpar cache:', error.message);
+    return false;
+  }
+}
+
+/**
+ * 10. TESTE DE MÚLTIPLOS IDIOMAS
+ */
+async function testMultiLanguage() {
+  console.log('\n🌍 10. TESTE DE MÚLTIPLOS IDIOMAS');
+  console.log('-'.repeat(50));
+  
+  const languages = [
+    {
+      lang: 'pt-BR',
+      phone: '5511111111111',
+      message: 'Olá! Bom dia, preciso de ajuda com meu pedido. Obrigado!',
+      pushName: 'Cliente Português'
+    },
+    {
+      lang: 'en-US',
+      phone: '5511222222222',
+      message: 'Hello! Good morning, I need help with my order. Thank you!',
+      pushName: 'English Customer'
+    },
+    {
+      lang: 'es-ES',
+      phone: '5511333333333',
+      message: 'Hola! Buenos días, necesito ayuda con mi pedido. Gracias!',
+      pushName: 'Cliente Español'
+    }
+  ];
+  
+  try {
+    for (const test of languages) {
+      console.log(`🌐 Testando idioma: ${test.lang}`);
+      
+      const webhookPayload = {
+        event: 'MESSAGES_UPSERT',
+        instance: TEST_INSTANCE,
+        data: {
+          key: {
+            remoteJid: `${test.phone}@s.whatsapp.net`,
+            fromMe: false,
+            id: `test_${test.lang}_${Date.now()}`
+          },
+          message: {
+            conversation: test.message
+          },
+          messageTimestamp: Math.floor(Date.now() / 1000),
+          pushName: test.pushName
+        }
+      };
+      
+      const response = await axios.post(`${WEBHOOK_BASE_URL}/webhook/evolution`, webhookPayload);
+      
+      console.log(`   ✅ ${test.lang}: Processado com sucesso`);
+      console.log(`   🎫 Ticket: ${response.data.ticketId}`);
+      
+      // Pequeno delay entre testes
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Erro no teste multi-idioma:', error.message);
+    return false;
+  }
+}
+
+/**
+ * EXECUTAR TODOS OS TESTES
+ */
 async function runAllTests() {
-  console.log('🚀 Iniciando bateria completa de testes...\n');
+  console.log('🚀 EXECUTANDO BATERIA COMPLETA DE TESTES');
+  console.log('═'.repeat(80));
   
   const tests = [
     { name: 'Health Check', fn: testHealthCheck },
-    { name: 'Cache de Contatos', fn: testContactCache },
-    { name: 'Simulação de Webhook', fn: testWebhookSimulation },
-    { name: 'Envio de Mensagem', fn: testMessageSending },
-    { name: 'Mensagem com Mídia', fn: testMediaMessage },
-    { name: 'Funcionalidades Específicas', fn: testSpecificFeatures },
-    { name: 'Limpar Cache', fn: testClearCache }
+    { name: 'Service Info', fn: testServiceInfo },
+    { name: 'Instance Check', fn: testInstanceCheck },
+    { name: 'Simple Message', fn: testSimpleMessage },
+    { name: 'Advanced Message', fn: testAdvancedMessage },
+    { name: 'Webhook Simulation', fn: testWebhookSimulation },
+    { name: 'Media Webhook', fn: testMediaWebhook },
+    { name: 'Contact Cache', fn: testContactCache },
+    { name: 'Cache Clear', fn: testCacheClear },
+    { name: 'Multi Language', fn: testMultiLanguage }
   ];
   
+  const results = [];
   let passed = 0;
   let failed = 0;
   
   for (const test of tests) {
     try {
+      console.log(`\n⏳ Executando: ${test.name}...`);
+      const startTime = Date.now();
+      
       const result = await test.fn();
+      
+      const duration = Date.now() - startTime;
+      
       if (result) {
         passed++;
+        console.log(`✅ ${test.name} - PASSOU (${duration}ms)`);
       } else {
         failed++;
+        console.log(`❌ ${test.name} - FALHOU (${duration}ms)`);
       }
+      
+      results.push({
+        name: test.name,
+        passed: result,
+        duration: duration
+      });
+      
+      // Delay entre testes
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
     } catch (error) {
-      console.log(`❌ Erro no teste ${test.name}:`, error.message);
       failed++;
+      console.error(`💥 ${test.name} - ERRO:`, error.message);
+      results.push({
+        name: test.name,
+        passed: false,
+        duration: 0,
+        error: error.message
+      });
     }
-    
-    // Delay entre testes
-    await new Promise(resolve => setTimeout(resolve, 1000));
   }
   
-  console.log('\n' + '='.repeat(50));
-  console.log('📊 RESUMO DOS TESTES');
-  console.log('='.repeat(50));
-  console.log(`✅ Testes aprovados: ${passed}`);
+  // Relatório final
+  console.log('\n' + '═'.repeat(80));
+  console.log('📊 RELATÓRIO FINAL DOS TESTES');
+  console.log('═'.repeat(80));
+  
+  console.log(`✅ Testes passaram: ${passed}`);
   console.log(`❌ Testes falharam: ${failed}`);
-  console.log(`📈 Taxa de sucesso: ${Math.round((passed / (passed + failed)) * 100)}%`);
+  console.log(`📊 Taxa de sucesso: ${((passed / tests.length) * 100).toFixed(1)}%`);
   
-  if (failed === 0) {
-    console.log('\n🎉 TODOS OS TESTES PASSARAM! Webhook aprimorado funcionando perfeitamente.');
-    console.log('🚀 O sistema está pronto para receber e processar mensagens com dados completos.');
-  } else if (passed > failed) {
-    console.log('\n⚠️ Maioria dos testes passou. Verifique os testes que falharam.');
+  console.log('\n📋 Detalhes dos testes:');
+  results.forEach((result, index) => {
+    const status = result.passed ? '✅' : '❌';
+    const duration = result.duration ? `${result.duration}ms` : 'N/A';
+    console.log(`${index + 1}. ${status} ${result.name} (${duration})`);
+    if (result.error) {
+      console.log(`   💬 Erro: ${result.error}`);
+    }
+  });
+  
+  if (passed === tests.length) {
+    console.log('\n🎉 TODOS OS TESTES PASSARAM! Webhook está funcionando perfeitamente.');
   } else {
-    console.log('\n❌ Muitos testes falharam. Verifique se o webhook está rodando e as configurações estão corretas.');
+    console.log(`\n⚠️ ${failed} teste(s) falharam. Verifique os logs para mais detalhes.`);
   }
   
-  console.log('\n🔧 Para executar testes individuais:');
-  console.log('- node teste-webhook-aprimorado.js health');
-  console.log('- node teste-webhook-aprimorado.js cache');
-  console.log('- node teste-webhook-aprimorado.js webhook');
-  console.log('- node teste-webhook-aprimorado.js send');
-  console.log('- node teste-webhook-aprimorado.js media');
+  console.log('\n📝 Próximos passos:');
+  console.log('1. Se algum teste falhou, verifique a configuração do webhook');
+  console.log('2. Confirme que a Evolution API está rodando e conectada');
+  console.log('3. Verifique as credenciais no arquivo webhook.env');
+  console.log('4. Teste o envio real de mensagens para um número WhatsApp');
   
-  return { passed, failed, total: passed + failed };
+  return passed === tests.length;
 }
 
-// ====== EXECUTAR BASEADO EM ARGUMENTOS ======
-async function main() {
+/**
+ * TESTE RÁPIDO INDIVIDUAL
+ */
+async function quickTest() {
+  console.log('⚡ TESTE RÁPIDO - Health Check + Envio de Mensagem');
+  console.log('-'.repeat(60));
+  
+  try {
+    // Health check
+    const health = await testHealthCheck();
+    if (!health) {
+      console.log('❌ Health check falhou, parando teste');
+      return false;
+    }
+    
+    // Envio de mensagem
+    const message = await testSimpleMessage();
+    if (!message) {
+      console.log('❌ Envio de mensagem falhou');
+      return false;
+    }
+    
+    console.log('\n🎉 TESTE RÁPIDO PASSOU! Webhook está funcionando.');
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Erro no teste rápido:', error.message);
+    return false;
+  }
+}
+
+// Detectar se foi chamado diretamente ou importado
+if (import.meta.url === `file://${process.argv[1]}`) {
+  // Verificar argumentos da linha de comando
   const args = process.argv.slice(2);
   
-  if (args.length === 0) {
-    // Executar todos os testes
-    await runAllTests();
+  if (args.includes('--quick') || args.includes('-q')) {
+    quickTest();
+  } else if (args.includes('--help') || args.includes('-h')) {
+    console.log('🧪 Script de Teste do Webhook Evolution API Aprimorado');
+    console.log('');
+    console.log('Uso:');
+    console.log('  node teste-webhook-aprimorado.js           # Executar todos os testes');
+    console.log('  node teste-webhook-aprimorado.js --quick   # Teste rápido');
+    console.log('  node teste-webhook-aprimorado.js --help    # Mostrar esta ajuda');
+    console.log('');
+    console.log('Variáveis de ambiente:');
+    console.log('  WEBHOOK_BASE_URL  # URL base do webhook (padrão: http://localhost:4000)');
+    console.log('  TEST_PHONE        # Telefone para teste (padrão: 5511999887766)');
+    console.log('  TEST_INSTANCE     # Instância para teste (padrão: atendimento-ao-cliente-sac1)');
   } else {
-    // Executar teste específico
-    const testType = args[0].toLowerCase();
-    
-    switch (testType) {
-      case 'health':
-        await testHealthCheck();
-        break;
-      case 'cache':
-        await testContactCache();
-        break;
-      case 'webhook':
-        await testWebhookSimulation();
-        break;
-      case 'send':
-        await testMessageSending();
-        break;
-      case 'media':
-        await testMediaMessage();
-        break;
-      case 'features':
-        await testSpecificFeatures();
-        break;
-      case 'clear':
-        await testClearCache();
-        break;
-      case 'all':
-        await runAllTests();
-        break;
-      default:
-        console.log('❌ Teste não reconhecido:', testType);
-        console.log('🔧 Testes disponíveis: health, cache, webhook, send, media, features, clear, all');
-    }
+    runAllTests();
   }
 }
 
-// ====== INSTRUÇÕES ======
-console.log('\n📝 INSTRUÇÕES DE USO:');
-console.log('1. Certifique-se de que o webhook aprimorado está rodando na porta 4000');
-console.log('2. Execute: node teste-webhook-aprimorado.js');
-console.log('3. Ou teste específico: node teste-webhook-aprimorado.js health');
-console.log('\n🎯 REQUISITOS:');
-console.log('- Webhook rodando em http://localhost:4000');
-console.log('- Evolution API configurada');
-console.log('- Variáveis de ambiente configuradas');
-console.log('- Axios instalado: npm install axios');
-
-// Executar se chamado diretamente
-if (require.main === module) {
-  main().catch(error => {
-    console.error('❌ Erro fatal nos testes:', error.message);
-    process.exit(1);
-  });
-}
-
-module.exports = {
+// Exportar funções para uso em outros scripts
+export {
   testHealthCheck,
-  testContactCache,
+  testServiceInfo,
+  testInstanceCheck,
+  testSimpleMessage,
+  testAdvancedMessage,
   testWebhookSimulation,
-  testMessageSending,
-  testMediaMessage,
-  testSpecificFeatures,
-  testClearCache,
-  runAllTests
+  testMediaWebhook,
+  testContactCache,
+  testCacheClear,
+  testMultiLanguage,
+  runAllTests,
+  quickTest
 }; 

@@ -11,615 +11,825 @@
 // 7. Busca de informações do contato via Evolution API
 
 import express from 'express';
+import bodyParser from 'body-parser';
 import cors from 'cors';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
 
-// ====== CONFIGURAÇÕES ======
-const app = express();
-const PORT = process.env.WEBHOOK_PORT || 4000;
-
-// Configurações Evolution API
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
-
-// Configurações Supabase
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://ajlgjjjvuglwgfnyqqvb.supabase.co';
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY;
-
-// Configurações Base
-const BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://bkcrm.devsible.com.br' 
-  : 'http://localhost:3000';
+// Carregar variáveis de ambiente
+config({ path: './webhook.env' });
 
 console.log('🔧 Carregando configurações das variáveis de ambiente...');
-console.log('🚀 Configurações Evolution API APRIMORADA:');
-console.log('📡 URL:', EVOLUTION_API_URL);
-console.log('🔑 API Key:', EVOLUTION_API_KEY ? '***configurada***' : '❌ NÃO CONFIGURADA');
 
-// Inicializar cliente Supabase
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const app = express();
+const PORT = process.env.WEBHOOK_PORT || 4000;
+const BASE_URL = process.env.BASE_URL || 'https://bkcrm.devsible.com.br';
 
-// ====== MIDDLEWARES ======
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(cors({
-  origin: ['http://localhost:3000', 'https://bkcrm.devsible.com.br'],
-  credentials: true
-}));
+// Configurar Supabase
+const supabaseUrl = process.env.SUPABASE_URL || 'https://ajlgjjjvuglwgfnyqqvb.supabase.co';
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ====== CACHE DE CONTATOS ======
-const contactsCache = new Map();
-const CACHE_DURATION = 1000 * 60 * 30; // 30 minutos
+// Configurar Evolution API
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
 
-// ====== SISTEMA DE TEMPLATES DE RESPOSTA ======
-const responseTemplates = {
-  welcome: {
-    pt: "Olá! 👋 Obrigado por entrar em contato. Em breve um de nossos atendentes irá te responder.",
-    en: "Hello! 👋 Thank you for contacting us. One of our agents will respond to you soon.",
-    es: "¡Hola! 👋 Gracias por contactarnos. Pronto uno de nuestros agentes te responderá."
-  },
-  businessHours: {
-    pt: "📅 Nosso horário de atendimento é de Segunda a Sexta, das 9h às 18h. Retornaremos assim que possível!",
-    en: "📅 Our business hours are Monday to Friday, 9am to 6pm. We'll get back to you as soon as possible!",
-    es: "📅 Nuestro horario de atención es de Lunes a Viernes, de 9h a 18h. ¡Te responderemos lo antes posible!"
-  },
-  autoReply: {
-    pt: "🤖 Esta é uma resposta automática. Sua mensagem foi recebida e será respondida em breve.",
-    en: "🤖 This is an automatic reply. Your message has been received and will be answered soon.",
-    es: "🤖 Esta es una respuesta automática. Su mensaje ha sido recibido y será respondido pronto."
-  }
-};
+console.log('🚀 Configurações Evolution API:');
+console.log(`📡 URL: ${EVOLUTION_API_URL}`);
+console.log(`🔑 API Key: ${EVOLUTION_API_KEY ? '***configurada***' : '❌ não configurada'}`);
 
-// ====== CLASSE DE DADOS DE CONTATO APRIMORADA ======
+// Cache em memória para contatos (30 minutos)
+const contactCache = new Map();
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutos
+
+// Classe para gerenciar dados de contato
 class ContactData {
-  constructor(data) {
-    this.id = data.id;
-    this.phone = data.phone;
-    this.name = data.name;
-    this.pushName = data.pushName;
-    this.profilePictureUrl = data.profilePictureUrl;
-    this.isGroup = data.isGroup || false;
-    this.language = data.language || 'pt';
-    this.status = data.status || 'active';
-    this.lastSeen = data.lastSeen;
+  constructor(data = {}) {
+    this.phone = data.phone || '';
+    this.name = data.name || '';
+    this.profilePicUrl = data.profilePicUrl || '';
+    this.status = data.status || '';
     this.isOnline = data.isOnline || false;
+    this.lastSeen = data.lastSeen || null;
+    this.pushName = data.pushName || '';
+    this.language = data.language || 'pt-BR';
     this.metadata = data.metadata || {};
-    this.lastInteraction = new Date();
-    this.messageCount = data.messageCount || 0;
-    this.tags = data.tags || [];
+    this.lastCacheUpdate = Date.now();
   }
 
-  // Detectar idioma baseado na mensagem
-  detectLanguage(message) {
-    const ptWords = ['olá', 'oi', 'bom dia', 'boa tarde', 'obrigado', 'por favor', 'sim', 'não'];
-    const enWords = ['hello', 'hi', 'good morning', 'good afternoon', 'thank you', 'please', 'yes', 'no'];
-    const esWords = ['hola', 'buenos días', 'buenas tardes', 'gracias', 'por favor', 'sí', 'no'];
+  isCacheValid() {
+    return (Date.now() - this.lastCacheUpdate) < CACHE_DURATION;
+  }
 
+  detectLanguage(message) {
+    const portuguese = ['olá', 'oi', 'bom dia', 'boa tarde', 'boa noite', 'obrigado', 'por favor'];
+    const english = ['hello', 'hi', 'good morning', 'good afternoon', 'good evening', 'thank you', 'please'];
+    const spanish = ['hola', 'buenos días', 'buenas tardes', 'buenas noches', 'gracias', 'por favor'];
+    
     const lowerMessage = message.toLowerCase();
     
-    let ptScore = ptWords.filter(word => lowerMessage.includes(word)).length;
-    let enScore = enWords.filter(word => lowerMessage.includes(word)).length;
-    let esScore = esWords.filter(word => lowerMessage.includes(word)).length;
-
-    if (ptScore > enScore && ptScore > esScore) return 'pt';
-    if (enScore > ptScore && enScore > esScore) return 'en';
-    if (esScore > ptScore && esScore > enScore) return 'es';
+    const ptCount = portuguese.filter(word => lowerMessage.includes(word)).length;
+    const enCount = english.filter(word => lowerMessage.includes(word)).length;
+    const esCount = spanish.filter(word => lowerMessage.includes(word)).length;
     
-    return this.language; // Manter idioma atual se não detectar
+    if (ptCount > enCount && ptCount > esCount) return 'pt-BR';
+    if (enCount > ptCount && enCount > esCount) return 'en-US';
+    if (esCount > ptCount && esCount > enCount) return 'es-ES';
+    
+    return this.language || 'pt-BR';
   }
 
-  // Atualizar dados do contato
-  update(newData) {
-    Object.assign(this, newData);
-    this.lastInteraction = new Date();
-    this.messageCount++;
-  }
-
-  // Verificar se dados estão atualizados
-  isStale() {
-    return Date.now() - this.lastInteraction.getTime() > CACHE_DURATION;
+  updateMetadata(messageData) {
+    this.metadata = {
+      ...this.metadata,
+      lastMessage: messageData.content?.substring(0, 100),
+      lastMessageTime: new Date().toISOString(),
+      messageCount: (this.metadata.messageCount || 0) + 1
+    };
   }
 }
 
-// ====== FUNÇÕES DE EXTRAÇÃO APRIMORADAS ======
+// Middleware
+app.use(cors());
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 
-/**
- * 🎯 FUNÇÃO PRINCIPAL: Extrair dados completos do contato
- */
-async function extractContactData(messageData, instanceName) {
+// Log de requisições avançado
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const userAgent = req.headers['user-agent'] || 'Unknown';
+  const ip = req.ip || req.connection.remoteAddress;
+  
+  console.log(`📥 [${timestamp}] ${req.method} ${req.path} | IP: ${ip} | UA: ${userAgent.substring(0, 50)}`);
+  next();
+});
+
+// ENDPOINT PRINCIPAL - Webhook Evolution API
+app.post('/webhook/evolution', async (req, res) => {
   try {
-    const remoteJid = messageData.key?.remoteJid;
-    const participant = messageData.key?.participant;
-    const pushName = messageData.pushName;
+    const payload = req.body;
+    const timestamp = new Date().toISOString();
     
-    console.log('👤 Extraindo dados COMPLETOS do contato:', {
-      remoteJid,
-      participant,
-      pushName,
-      instance: instanceName
+    console.log(`🔔 [${timestamp}] Webhook Evolution API:`, {
+      event: payload.event,
+      instance: payload.instance,
+      dataKeys: Object.keys(payload.data || {}),
+      hasMedia: !!(payload.data?.message?.imageMessage || payload.data?.message?.videoMessage || payload.data?.message?.audioMessage)
     });
 
-    // 📋 Verificar cache primeiro
-    const cacheKey = `${instanceName}:${remoteJid}`;
-    if (contactsCache.has(cacheKey)) {
-      const cachedContact = contactsCache.get(cacheKey);
-      if (!cachedContact.isStale()) {
-        console.log('📋 ✅ Dados do contato encontrados no cache');
-        return cachedContact;
-      }
+    let result = { success: false, message: 'Evento não processado' };
+
+    // Processar diferentes tipos de eventos
+    switch (payload.event) {
+      case 'MESSAGES_UPSERT':
+        result = await processAdvancedMessage(payload);
+        break;
+      
+      case 'QRCODE_UPDATED':
+        result = await processQRCodeUpdate(payload);
+        break;
+      
+      case 'CONNECTION_UPDATE':
+        result = await processConnectionUpdate(payload);
+        break;
+      
+      case 'SEND_MESSAGE':
+        result = await processSentMessage(payload);
+        break;
+        
+      case 'CONTACTS_SET':
+      case 'CONTACTS_UPSERT':
+      case 'CONTACTS_UPDATE':
+        result = await processContactUpdate(payload);
+        break;
+        
+      case 'CHATS_SET':
+      case 'CHATS_UPSERT':
+      case 'CHATS_UPDATE':
+        result = await processChatUpdate(payload);
+        break;
+        
+      case 'PRESENCE_UPDATE':
+        result = await processPresenceUpdate(payload);
+        break;
+        
+      case 'GROUPS_UPSERT':
+      case 'GROUP_UPDATE':
+      case 'GROUP_PARTICIPANTS_UPDATE':
+        result = await processGroupUpdate(payload);
+        break;
+        
+      default:
+        console.log(`📋 Evento não processado: ${payload.event}`);
+        result = { success: true, message: `Evento ${payload.event} recebido` };
     }
 
-    // 📱 Extrair telefone
-    let phone = extractPhoneFromJid(remoteJid);
-    
-    // Se for grupo, tentar extrair do participant
-    if (!phone && participant) {
-      phone = extractPhoneFromJid(participant);
-    }
-
-    // 👥 Detectar se é grupo
-    const isGroup = remoteJid?.includes('@g.us') || false;
-    
-    // 🔍 Buscar informações adicionais via Evolution API
-    let additionalInfo = {};
-    try {
-      additionalInfo = await fetchContactInfoFromEvolution(phone, instanceName);
-    } catch (error) {
-      console.warn('⚠️ Não foi possível buscar informações adicionais do contato:', error.message);
-    }
-
-    // 📝 Criar objeto de dados do contato com informações completas
-    const contactData = new ContactData({
-      id: phone || remoteJid,
-      phone: phone,
-      name: additionalInfo.name || pushName || `Cliente ${phone?.slice(-4) || 'Desconhecido'}`,
-      pushName: pushName,
-      profilePictureUrl: additionalInfo.profilePictureUrl,
-      isGroup: isGroup,
-      language: 'pt', // Será detectado dinamicamente
-      status: 'active',
-      lastSeen: additionalInfo.lastSeen,
-      isOnline: additionalInfo.isOnline || false,
-      metadata: {
-        remoteJid: remoteJid,
-        participant: participant,
-        instance: instanceName,
-        firstContact: new Date().toISOString(),
-        source: 'webhook',
-        evolutionData: additionalInfo
-      }
+    // Resposta aprimorada
+    res.status(200).json({ 
+      received: true, 
+      timestamp,
+      event: payload.event || 'unknown',
+      instance: payload.instance,
+      processed: result.success,
+      message: result.message,
+      ticketId: result.ticketId,
+      contactId: result.contactId,
+      metadata: result.metadata || {}
     });
-
-    // 💾 Salvar no cache para próximas consultas
-    contactsCache.set(cacheKey, contactData);
-
-    console.log('✅ Dados COMPLETOS do contato extraídos:', {
-      id: contactData.id,
-      name: contactData.name,
-      phone: contactData.phone,
-      isGroup: contactData.isGroup,
-      hasProfilePicture: !!contactData.profilePictureUrl,
-      language: contactData.language
-    });
-
-    return contactData;
 
   } catch (error) {
-    console.error('❌ Erro ao extrair dados do contato:', error);
-    // Retornar dados mínimos em caso de erro
-    return new ContactData({
-      id: extractPhoneFromJid(messageData.key?.remoteJid) || 'unknown',
-      phone: extractPhoneFromJid(messageData.key?.remoteJid),
-      name: messageData.pushName || 'Cliente Desconhecido',
-      pushName: messageData.pushName
+    console.error('❌ Erro ao processar webhook:', error);
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      timestamp: new Date().toISOString(),
+      details: error.message
     });
+  }
+});
+
+// PROCESSAMENTO AVANÇADO DE MENSAGENS
+async function processAdvancedMessage(payload) {
+  try {
+    const messageData = payload.data;
+    const instanceName = payload.instance;
+
+    // Validar dados da mensagem
+    if (!messageData?.key?.remoteJid) {
+      throw new Error('Dados de mensagem inválidos');
+    }
+
+    // Extrair informações básicas
+    const remoteJid = messageData.key.remoteJid;
+    const fromMe = messageData.key.fromMe || false;
+    const isGroup = remoteJid.includes('@g.us');
+    
+    // Ignorar mensagens enviadas por nós ou de grupos (opcional)
+    if (fromMe) {
+      console.log('🔄 Ignorando mensagem enviada por nós');
+      return { success: true, message: 'Mensagem própria ignorada' };
+    }
+
+    if (isGroup) {
+      console.log('👥 Mensagem de grupo recebida, processamento opcional');
+      // Aqui você pode decidir se quer processar mensagens de grupos
+    }
+
+    // Extrair telefone
+    const clientPhone = extractPhoneFromJid(remoteJid);
+    console.log(`📱 Telefone extraído: ${clientPhone}`);
+
+    // Extrair conteúdo da mensagem com suporte a mídia
+    const messageContent = extractAdvancedMessageContent(messageData.message);
+    console.log(`📨 Conteúdo extraído:`, {
+      type: messageContent.type,
+      hasText: !!messageContent.text,
+      hasMedia: !!messageContent.mediaUrl,
+      hasLocation: !!messageContent.location
+    });
+
+    // Buscar/criar dados do contato com informações enriquecidas
+    const contactData = await extractContactData(clientPhone, messageData.pushName, instanceName, messageContent);
+    
+    // Atualizar metadados do contato
+    contactData.updateMetadata(messageContent);
+    
+    // Detectar idioma da mensagem
+    if (messageContent.text) {
+      contactData.language = contactData.detectLanguage(messageContent.text);
+    }
+
+    console.log(`👤 Dados do contato:`, {
+      name: contactData.name,
+      phone: contactData.phone,
+      language: contactData.language,
+      isOnline: contactData.isOnline,
+      messageCount: contactData.metadata.messageCount
+    });
+
+    // Verificar se deve enviar resposta automática
+    const shouldAutoReply = await shouldSendAutoReply(clientPhone, contactData, messageContent);
+    
+    if (shouldAutoReply) {
+      await sendIntelligentAutoReply(clientPhone, contactData, instanceName);
+    }
+
+    // Buscar departamento baseado na instância
+    const departmentId = await findDepartmentByInstance(instanceName);
+    
+    // Buscar ticket existente ou criar novo
+    let ticket = await findExistingTicket(clientPhone, departmentId);
+    
+    if (!ticket) {
+      console.log('🎫 Criando novo ticket automaticamente...');
+      
+      const ticketData = {
+        cliente: contactData.name,
+        telefone: clientPhone,
+        customerId: contactData.customerId,
+        departmentId: departmentId,
+        mensagem: messageContent.text || messageContent.caption || 'Mídia enviada',
+        instancia: instanceName,
+        contactData: contactData,
+        messageType: messageContent.type
+      };
+      
+      ticket = await createAdvancedTicket(ticketData);
+    }
+
+    // Salvar mensagem no banco com dados enriquecidos
+    if (ticket) {
+      const messageId = await saveAdvancedMessage({
+        ticketId: ticket.id,
+        content: messageContent.text || messageContent.caption || `[${messageContent.type.toUpperCase()}]`,
+        sender: contactData.name,
+        timestamp: new Date(messageData.messageTimestamp * 1000).toISOString(),
+        metadata: {
+          messageType: messageContent.type,
+          mediaUrl: messageContent.mediaUrl,
+          location: messageContent.location,
+          quotedMessage: messageContent.quotedMessage,
+          contactLanguage: contactData.language,
+          contactStatus: contactData.status,
+          isOnline: contactData.isOnline
+        }
+      });
+      
+      console.log('✅ Mensagem avançada processada com sucesso');
+      
+      return {
+        success: true,
+        message: 'Mensagem processada com dados enriquecidos',
+        ticketId: ticket.id,
+        messageId: messageId,
+        contactId: contactData.customerId,
+        metadata: {
+          messageType: messageContent.type,
+          language: contactData.language,
+          hasMedia: !!messageContent.mediaUrl
+        }
+      };
+    }
+
+    return { success: false, message: 'Erro ao processar mensagem' };
+
+  } catch (error) {
+    console.error('❌ Erro no processamento avançado:', error);
+    return { success: false, message: `Erro: ${error.message}` };
   }
 }
 
-/**
- * 🔍 Buscar informações detalhadas do contato via Evolution API
- */
+// EXTRAÇÃO AVANÇADA DE DADOS DE CONTATO
+async function extractContactData(phone, pushName, instanceName, messageContent) {
+  const cacheKey = `contact_${phone}`;
+  
+  // Verificar cache primeiro
+  if (contactCache.has(cacheKey)) {
+    const cached = contactCache.get(cacheKey);
+    if (cached.isCacheValid()) {
+      console.log(`📋 Usando dados em cache para ${phone}`);
+      return cached;
+    } else {
+      contactCache.delete(cacheKey);
+    }
+  }
+
+  console.log(`🔍 Extraindo dados completos do contato: ${phone}`);
+  
+  // Criar objeto de dados do contato
+  let contactData = new ContactData({
+    phone: phone,
+    name: pushName || 'Cliente Anônimo',
+    pushName: pushName
+  });
+
+  try {
+    // Buscar informações detalhadas via Evolution API
+    const evolutionContact = await fetchContactInfoFromEvolution(phone, instanceName);
+    
+    if (evolutionContact) {
+      contactData.name = evolutionContact.name || pushName || 'Cliente Anônimo';
+      contactData.profilePicUrl = evolutionContact.profilePicUrl || '';
+      contactData.status = evolutionContact.status || '';
+      contactData.isOnline = evolutionContact.isOnline || false;
+      contactData.lastSeen = evolutionContact.lastSeen || null;
+    }
+
+    // Buscar/criar cliente no banco de dados
+    const customer = await findOrCreateAdvancedCustomer({
+      phone: phone,
+      name: contactData.name,
+      profilePicUrl: contactData.profilePicUrl,
+      status: contactData.status,
+      language: contactData.language,
+      instanceName: instanceName
+    });
+
+    if (customer) {
+      contactData.customerId = customer.id;
+    }
+
+    // Armazenar no cache
+    contactCache.set(cacheKey, contactData);
+    console.log(`✅ Dados do contato extraídos e armazenados em cache`);
+
+  } catch (error) {
+    console.error(`⚠️ Erro ao extrair dados do contato ${phone}:`, error.message);
+    // Continuar com dados básicos mesmo se houver erro
+  }
+
+  return contactData;
+}
+
+// BUSCAR INFORMAÇÕES DETALHADAS VIA EVOLUTION API
 async function fetchContactInfoFromEvolution(phone, instanceName) {
   try {
-    if (!phone) return {};
-
-    console.log('🔍 Buscando informações detalhadas do contato:', { phone, instance: instanceName });
-
-    // Buscar contato específico
-    const contactResponse = await axios.get(
-      `${EVOLUTION_API_URL}/chat/findContacts/${instanceName}`,
+    console.log(`🔎 Buscando informações detalhadas do contato ${phone} via Evolution API`);
+    
+    // Endpoint para buscar contato
+    const response = await axios.get(
+      `${EVOLUTION_API_URL}/chat/findContact/${instanceName}`,
       {
-        headers: {
-          'apikey': EVOLUTION_API_KEY
-        },
         params: {
-          where: {
-            remoteJid: `${phone}@s.whatsapp.net`
-          }
+          number: formatPhoneNumber(phone)
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY
         },
         timeout: 10000
       }
     );
 
-    let contactInfo = {};
-    
-    if (contactResponse.data && contactResponse.data.length > 0) {
-      const contact = contactResponse.data[0];
-      contactInfo = {
-        name: contact.pushName || contact.name,
-        lastSeen: contact.lastSeen,
-        isOnline: contact.isOnline || false
-      };
+    if (response.data && response.data.length > 0) {
+      const contact = response.data[0];
       
-      console.log('📋 Informações básicas do contato encontradas:', contactInfo);
-    }
-
-    // Buscar foto de perfil separadamente
-    try {
-      const profilePicResponse = await axios.get(
-        `${EVOLUTION_API_URL}/chat/fetchProfilePictureUrl/${instanceName}`,
-        {
-          headers: {
-            'apikey': EVOLUTION_API_KEY
-          },
-          params: {
-            number: phone
-          },
-          timeout: 5000
-        }
-      );
-
-      if (profilePicResponse.data && profilePicResponse.data.profilePictureUrl) {
-        contactInfo.profilePictureUrl = profilePicResponse.data.profilePictureUrl;
-        console.log('📸 Foto de perfil encontrada');
+      // Buscar foto do perfil se disponível
+      let profilePicUrl = '';
+      try {
+        const picResponse = await axios.get(
+          `${EVOLUTION_API_URL}/chat/getProfilePicUrl/${instanceName}`,
+          {
+            params: {
+              number: formatPhoneNumber(phone)
+            },
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EVOLUTION_API_KEY
+            },
+            timeout: 5000
+          }
+        );
+        profilePicUrl = picResponse.data?.profilePicUrl || '';
+      } catch (picError) {
+        console.log(`📷 Não foi possível obter foto do perfil para ${phone}`);
       }
-    } catch (profileError) {
-      console.warn('⚠️ Não foi possível buscar foto de perfil:', profileError.message);
+
+      console.log(`✅ Informações detalhadas obtidas para ${phone}`);
+      
+      return {
+        name: contact.name || contact.pushName || '',
+        profilePicUrl: profilePicUrl,
+        status: contact.status || '',
+        isOnline: contact.presence === 'available',
+        lastSeen: contact.lastSeen || null
+      };
     }
 
-    return contactInfo;
+    return null;
 
   } catch (error) {
-    console.warn('⚠️ Erro ao buscar dados do contato na Evolution API:', error.message);
-    return {};
+    console.error(`❌ Erro ao buscar informações via Evolution API para ${phone}:`, error.message);
+    return null;
   }
 }
 
-/**
- * 📱 Extrair telefone do JID (versão aprimorada)
- */
-function extractPhoneFromJid(jid) {
-  console.log('📱 Extraindo telefone de JID:', jid);
-  
-  if (!jid) {
-    console.log('❌ JID vazio ou nulo');
-    return null;
-  }
-  
-  // Detectar se é mensagem de grupo
-  if (jid.includes('@g.us')) {
-    console.log('👥 JID de grupo detectado - não extrair telefone individual');
-    return null;
-  }
-  
-  // Remover sufixos do WhatsApp
-  let cleanJid = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
-  console.log('🧹 JID limpo:', cleanJid);
-  
-  // Verificar se é um número válido (apenas dígitos)
-  if (!/^\d+$/.test(cleanJid)) {
-    console.log('❌ JID não contém apenas números:', cleanJid);
-    return null;
-  }
-  
-  // Verificar tamanho mínimo
-  if (cleanJid.length < 10) {
-    console.log('❌ Número muito curto (mínimo 10 dígitos):', cleanJid);
-    return null;
-  }
-  
-  // Adicionar código do país se necessário (Brasil = 55)
-  if (cleanJid.length >= 10 && !cleanJid.startsWith('55')) {
-    console.log('🇧🇷 Adicionando código do país (55) ao número:', cleanJid);
-    cleanJid = '55' + cleanJid;
-  }
-  
-  console.log('✅ Número de telefone extraído:', cleanJid);
-  return cleanJid;
-}
+// EXTRAIR CONTEÚDO AVANÇADO DA MENSAGEM (SUPORTE A MÍDIA)
+function extractAdvancedMessageContent(message) {
+  if (!message) return { type: 'unknown', text: '' };
 
-/**
- * 📨 Extrair conteúdo da mensagem com suporte a mídias
- */
-function extractMessageContent(message) {
-  if (!message) return { content: null, type: 'unknown', media: null };
-  
-  let content = null;
-  let type = 'text';
-  let media = null;
-  
   // Mensagem de texto simples
   if (message.conversation) {
-    content = message.conversation;
-    type = 'text';
-  }
-  // Mensagem de texto estendida
-  else if (message.extendedTextMessage?.text) {
-    content = message.extendedTextMessage.text;
-    type = 'text';
-  }
-  // Imagem com legenda
-  else if (message.imageMessage) {
-    content = message.imageMessage.caption || '[📷 Imagem]';
-    type = 'image';
-    media = {
-      mimetype: message.imageMessage.mimetype,
-      url: message.imageMessage.url,
-      size: message.imageMessage.fileLength,
-      width: message.imageMessage.width,
-      height: message.imageMessage.height
+    return {
+      type: 'text',
+      text: message.conversation,
+      timestamp: Date.now()
     };
   }
-  // Vídeo com legenda
-  else if (message.videoMessage) {
-    content = message.videoMessage.caption || '[🎥 Vídeo]';
-    type = 'video';
-    media = {
-      mimetype: message.videoMessage.mimetype,
-      url: message.videoMessage.url,
-      size: message.videoMessage.fileLength,
-      duration: message.videoMessage.seconds,
-      width: message.videoMessage.width,
-      height: message.videoMessage.height
+
+  // Mensagem com texto estendido
+  if (message.extendedTextMessage) {
+    return {
+      type: 'text',
+      text: message.extendedTextMessage.text,
+      quotedMessage: message.extendedTextMessage.contextInfo?.quotedMessage,
+      timestamp: Date.now()
     };
   }
-  // Documento
-  else if (message.documentMessage) {
-    content = message.documentMessage.caption || `[📄 Documento: ${message.documentMessage.fileName || 'arquivo'}]`;
-    type = 'document';
-    media = {
-      mimetype: message.documentMessage.mimetype,
-      fileName: message.documentMessage.fileName,
-      url: message.documentMessage.url,
-      size: message.documentMessage.fileLength
+
+  // Imagem
+  if (message.imageMessage) {
+    return {
+      type: 'image',
+      caption: message.imageMessage.caption || '',
+      mediaUrl: message.imageMessage.url || '',
+      mimetype: message.imageMessage.mimetype || '',
+      filesize: message.imageMessage.fileLength || 0,
+      timestamp: Date.now()
     };
   }
+
+  // Vídeo
+  if (message.videoMessage) {
+    return {
+      type: 'video',
+      caption: message.videoMessage.caption || '',
+      mediaUrl: message.videoMessage.url || '',
+      mimetype: message.videoMessage.mimetype || '',
+      filesize: message.videoMessage.fileLength || 0,
+      duration: message.videoMessage.seconds || 0,
+      timestamp: Date.now()
+    };
+  }
+
   // Áudio/Nota de voz
-  else if (message.audioMessage) {
-    content = message.audioMessage.ptt ? '[🎤 Nota de Voz]' : '[🎵 Áudio]';
-    type = 'audio';
-    media = {
-      mimetype: message.audioMessage.mimetype,
-      url: message.audioMessage.url,
-      size: message.audioMessage.fileLength,
-      duration: message.audioMessage.seconds,
-      isVoiceMessage: message.audioMessage.ptt || false
+  if (message.audioMessage) {
+    return {
+      type: message.audioMessage.ptt ? 'voice' : 'audio',
+      mediaUrl: message.audioMessage.url || '',
+      mimetype: message.audioMessage.mimetype || '',
+      filesize: message.audioMessage.fileLength || 0,
+      duration: message.audioMessage.seconds || 0,
+      timestamp: Date.now()
     };
   }
-  // Sticker
-  else if (message.stickerMessage) {
-    content = '[😀 Sticker]';
-    type = 'sticker';
-    media = {
-      url: message.stickerMessage.url,
-      size: message.stickerMessage.fileLength
+
+  // Documento
+  if (message.documentMessage) {
+    return {
+      type: 'document',
+      filename: message.documentMessage.fileName || 'documento',
+      mediaUrl: message.documentMessage.url || '',
+      mimetype: message.documentMessage.mimetype || '',
+      filesize: message.documentMessage.fileLength || 0,
+      timestamp: Date.now()
     };
   }
+
   // Localização
-  else if (message.locationMessage) {
-    content = `[📍 Localização: ${message.locationMessage.degreesLatitude}, ${message.locationMessage.degreesLongitude}]`;
-    type = 'location';
-    media = {
+  if (message.locationMessage) {
+    return {
+      type: 'location',
       latitude: message.locationMessage.degreesLatitude,
       longitude: message.locationMessage.degreesLongitude,
-      name: message.locationMessage.name || 'Localização'
+      location: {
+        lat: message.locationMessage.degreesLatitude,
+        lng: message.locationMessage.degreesLongitude,
+        name: message.locationMessage.name || '',
+        address: message.locationMessage.address || ''
+      },
+      timestamp: Date.now()
     };
   }
-  // Contato compartilhado
-  else if (message.contactMessage) {
-    content = `[👤 Contato: ${message.contactMessage.displayName}]`;
-    type = 'contact';
-    media = {
-      displayName: message.contactMessage.displayName,
-      vcard: message.contactMessage.vcard
+
+  // Contato
+  if (message.contactMessage) {
+    return {
+      type: 'contact',
+      displayName: message.contactMessage.displayName || '',
+      vcard: message.contactMessage.vcard || '',
+      timestamp: Date.now()
     };
   }
-  
-  return { content, type, media };
+
+  // Sticker
+  if (message.stickerMessage) {
+    return {
+      type: 'sticker',
+      mediaUrl: message.stickerMessage.url || '',
+      mimetype: message.stickerMessage.mimetype || '',
+      timestamp: Date.now()
+    };
+  }
+
+  // Tipo não reconhecido
+  console.log('⚠️ Tipo de mensagem não reconhecido:', Object.keys(message));
+  return {
+    type: 'unknown',
+    text: '',
+    rawMessage: message,
+    timestamp: Date.now()
+  };
 }
 
-// ====== SISTEMA DE RESPOSTA AUTOMÁTICA ======
-
-/**
- * ✅ Verificar se deve enviar resposta automática
- */
-async function shouldSendAutoReply(contactData, messageContent) {
+// LÓGICA DE RESPOSTA AUTOMÁTICA INTELIGENTE
+async function shouldSendAutoReply(phone, contactData, messageContent) {
   try {
-    // Não enviar resposta automática para grupos
-    if (contactData.isGroup) {
-      console.log('👥 Grupo detectado - não enviar resposta automática');
-      return false;
-    }
-
-    // Verificar se é a primeira mensagem do contato nas últimas 24h
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
-    const { data: recentMessages, error } = await supabase
+    // Verificar se é a primeira mensagem nas últimas 24 horas
+    const { data: recentMessages } = await supabase
       .from('messages')
       .select('id, created_at')
-      .ilike('metadata->>sender_phone', contactData.phone)
-      .gte('created_at', yesterday)
+      .ilike('metadata->>whatsapp_phone', `%${phone}%`)
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
       .limit(1);
 
-    if (error) {
-      console.warn('⚠️ Erro ao verificar mensagens recentes:', error);
-      return false;
-    }
-
-    const shouldSend = !recentMessages || recentMessages.length === 0;
-    console.log(`🤖 Decisão resposta automática: ${shouldSend ? 'ENVIAR' : 'NÃO ENVIAR'} (mensagens recentes: ${recentMessages?.length || 0})`);
+    const isFirstMessageToday = !recentMessages || recentMessages.length === 0;
     
-    return shouldSend;
+    // Verificar horário comercial (9h às 18h, segunda a sexta)
+    const now = new Date();
+    const hour = now.getHours();
+    const day = now.getDay(); // 0 = domingo, 6 = sábado
+    const isBusinessHours = (day >= 1 && day <= 5) && (hour >= 9 && hour <= 18);
+
+    console.log(`🤖 Verificação de resposta automática:`, {
+      phone,
+      isFirstMessageToday,
+      isBusinessHours,
+      messageType: messageContent.type
+    });
+
+    // Enviar resposta automática apenas se:
+    // 1. É a primeira mensagem do dia
+    // 2. Não é mídia (evitar responder a stickers, etc.)
+    // 3. Dentro ou fora do horário comercial (mensagens diferentes)
+    return isFirstMessageToday && ['text', 'voice'].includes(messageContent.type);
 
   } catch (error) {
-    console.error('❌ Erro ao verificar se deve enviar resposta automática:', error);
+    console.error('❌ Erro ao verificar necessidade de resposta automática:', error);
     return false;
   }
 }
 
-/**
- * 🤖 Enviar resposta automática personalizada
- */
-async function sendAutoReply(contactData, instanceName, messageType = 'welcome') {
+// ENVIAR RESPOSTA AUTOMÁTICA INTELIGENTE
+async function sendIntelligentAutoReply(phone, contactData, instanceName) {
   try {
-    console.log('🤖 Enviando resposta automática:', {
-      contact: contactData.name,
-      phone: contactData.phone,
-      language: contactData.language,
-      type: messageType
-    });
+    console.log(`🤖 Enviando resposta automática inteligente para ${phone}`);
 
-    const template = responseTemplates[messageType];
-    if (!template) {
-      console.warn('⚠️ Template de resposta não encontrado:', messageType);
-      return false;
-    }
-
-    const message = template[contactData.language] || template.pt;
-
-    // Verificar se estamos em horário comercial
+    // Detectar horário comercial
     const now = new Date();
     const hour = now.getHours();
-    const isBusinessHours = hour >= 9 && hour <= 18 && now.getDay() >= 1 && now.getDay() <= 5;
+    const day = now.getDay();
+    const isBusinessHours = (day >= 1 && day <= 5) && (hour >= 9 && hour <= 18);
 
-    let finalMessage = message;
-    if (!isBusinessHours && messageType === 'welcome') {
-      const businessHoursMsg = responseTemplates.businessHours[contactData.language] || responseTemplates.businessHours.pt;
-      finalMessage = `${message}\n\n${businessHoursMsg}`;
-    }
+    // Templates de resposta baseados no idioma detectado
+    const templates = {
+      'pt-BR': {
+        business: `Olá ${contactData.name}! 👋\n\nObrigado por entrar em contato conosco. Recebemos sua mensagem e um de nossos atendentes irá responder em breve.\n\n⏰ Horário de atendimento: Segunda a Sexta, 9h às 18h\n\nEm caso de urgência, digite *URGENTE* que priorizaremos seu atendimento.`,
+        afterHours: `Olá ${contactData.name}! 👋\n\nRecebemos sua mensagem fora do nosso horário de atendimento.\n\n⏰ Retornaremos na próxima segunda-feira às 9h\n🌙 Para urgências, nossa equipe de plantão está disponível.\n\nDigite *PLANTÃO* se precisar de atendimento imediato.`
+      },
+      'en-US': {
+        business: `Hello ${contactData.name}! 👋\n\nThank you for contacting us. We received your message and one of our agents will respond shortly.\n\n⏰ Business hours: Monday to Friday, 9 AM to 6 PM\n\nFor urgent matters, type *URGENT* and we'll prioritize your request.`,
+        afterHours: `Hello ${contactData.name}! 👋\n\nWe received your message outside our business hours.\n\n⏰ We'll get back to you on Monday at 9 AM\n🌙 For emergencies, our on-call team is available.\n\nType *EMERGENCY* if you need immediate assistance.`
+      },
+      'es-ES': {
+        business: `¡Hola ${contactData.name}! 👋\n\nGracias por contactarnos. Hemos recibido tu mensaje y uno de nuestros agentes responderá pronto.\n\n⏰ Horario de atención: Lunes a Viernes, 9h a 18h\n\nPara asuntos urgentes, escribe *URGENTE* y priorizaremos tu solicitud.`,
+        afterHours: `¡Hola ${contactData.name}! 👋\n\nRecibimos tu mensaje fuera de nuestro horario de atención.\n\n⏰ Te responderemos el lunes a las 9h\n🌙 Para emergencias, nuestro equipo de guardia está disponible.\n\nEscribe *EMERGENCIA* si necesitas asistencia inmediata.`
+      }
+    };
 
-    // Personalizar mensagem com nome se disponível
-    if (contactData.name && contactData.name !== 'Cliente Desconhecido') {
-      finalMessage = finalMessage.replace('Olá!', `Olá, ${contactData.name}!`);
-      finalMessage = finalMessage.replace('Hello!', `Hello, ${contactData.name}!`);
-      finalMessage = finalMessage.replace('¡Hola!', `¡Hola, ${contactData.name}!`);
-    }
+    const language = contactData.language || 'pt-BR';
+    const template = templates[language] || templates['pt-BR'];
+    const message = isBusinessHours ? template.business : template.afterHours;
 
-    // Enviar mensagem
-    const result = await sendWhatsAppMessage({
-      phone: contactData.phone,
-      text: finalMessage,
+    // Enviar resposta automática
+    const result = await sendAdvancedWhatsAppMessage({
+      phone: phone,
+      text: message,
       instance: instanceName,
       options: {
         delay: 2000, // 2 segundos de delay
-        presence: 'composing' // Mostrar "digitando..."
+        presence: 'composing'
       }
     });
 
     if (result.success) {
-      console.log('✅ Resposta automática enviada com sucesso');
-      return true;
+      console.log(`✅ Resposta automática enviada com sucesso para ${phone}`);
     } else {
-      console.warn('⚠️ Falha ao enviar resposta automática:', result.error);
+      console.error(`❌ Erro ao enviar resposta automática para ${phone}:`, result.error);
     }
 
-    return false;
-
   } catch (error) {
-    console.error('❌ Erro ao enviar resposta automática:', error);
-    return false;
+    console.error('❌ Erro na resposta automática inteligente:', error);
   }
 }
 
-// ====== FUNÇÃO PRINCIPAL DE PROCESSAMENTO ======
-
-/**
- * 🎯 FUNÇÃO PRINCIPAL: Processar nova mensagem com dados aprimorados
- */
-async function processNewMessage(payload) {
+// BUSCAR/CRIAR CLIENTE COM DADOS ENRIQUECIDOS
+async function findOrCreateAdvancedCustomer({ phone, name, profilePicUrl, status, language, instanceName }) {
   try {
-    const messageData = payload.data;
-    const instanceName = payload.instance;
+    console.log(`🔍 Buscando/criando cliente avançado: ${phone}`);
+
+    // Buscar cliente existente primeiro por telefone
+    const { data: existingCustomer, error: searchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .or(`phone.eq.${phone},metadata->>phone.eq.${phone}`)
+      .eq('role', 'customer')
+      .single();
+
+    if (existingCustomer && !searchError) {
+      console.log(`✅ Cliente existente encontrado: ${existingCustomer.id}`);
+      
+      // Atualizar dados se necessário
+      const updatedMetadata = {
+        ...existingCustomer.metadata,
+        phone: phone,
+        whatsapp_phone: phone,
+        profile_pic_url: profilePicUrl || existingCustomer.metadata?.profile_pic_url,
+        status: status || existingCustomer.metadata?.status,
+        language: language || existingCustomer.metadata?.language || 'pt-BR',
+        last_seen: new Date().toISOString(),
+        instance_name: instanceName
+      };
+
+      const { data: updatedCustomer, error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          name: name || existingCustomer.name,
+          metadata: updatedMetadata
+        })
+        .eq('id', existingCustomer.id)
+        .select()
+        .single();
+
+      if (!updateError) {
+        console.log(`🔄 Dados do cliente atualizados: ${updatedCustomer.id}`);
+        return updatedCustomer;
+      }
+    }
+
+    // Criar novo cliente com dados enriquecidos
+    console.log(`🆕 Criando novo cliente avançado...`);
     
-    console.log('📥 Processando mensagem com DADOS APRIMORADOS:', {
-      instance: instanceName,
-      messageId: messageData.key?.id,
-      fromMe: messageData.key?.fromMe
+    const { data: newCustomer, error: createError } = await supabase
+      .from('profiles')
+      .insert({
+        id: crypto.randomUUID(),
+        name: name || 'Cliente WhatsApp',
+        email: `whatsapp-${phone}@auto-generated.com`,
+        role: 'customer',
+        phone: phone,
+        metadata: {
+          phone: phone,
+          whatsapp_phone: phone,
+          profile_pic_url: profilePicUrl || '',
+          status: status || '',
+          language: language || 'pt-BR',
+          source: 'whatsapp_webhook',
+          instance_name: instanceName,
+          created_via: 'evolution_api',
+          first_contact: new Date().toISOString(),
+          category: 'standard',
+          tags: ['whatsapp', 'auto-created']
+        }
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('❌ Erro ao criar cliente:', createError);
+      return null;
+    }
+
+    console.log(`✅ Novo cliente criado: ${newCustomer.id}`);
+    return newCustomer;
+
+  } catch (error) {
+    console.error('❌ Erro na busca/criação de cliente avançado:', error);
+    return null;
+  }
+}
+
+// CRIAR TICKET COM DADOS AVANÇADOS
+async function createAdvancedTicket(data) {
+  try {
+    console.log('🎫 Criando ticket avançado:', {
+      cliente: data.cliente,
+      telefone: data.telefone,
+      messageType: data.messageType
     });
 
-    // Verificar se é uma mensagem válida
-    if (!messageData || !messageData.key) {
-      console.warn('⚠️ Dados de mensagem inválidos');
-      return { success: false, message: 'Dados inválidos' };
-    }
-
-    // 👤 Extrair dados COMPLETOS do contato
-    const contactData = await extractContactData(messageData, instanceName);
-    
-    // 📨 Extrair conteúdo da mensagem com suporte a mídias
-    const messageInfo = extractMessageContent(messageData.message);
-    
-    if (!contactData.phone || !messageInfo.content) {
-      console.warn('⚠️ Telefone ou conteúdo da mensagem inválido');
-      return { success: false, message: 'Dados da mensagem inválidos' };
-    }
-
-    // 🗣️ Detectar idioma se for mensagem de texto
-    if (messageInfo.type === 'text') {
-      contactData.language = contactData.detectLanguage(messageInfo.content);
-    }
-
-    console.log('📨 Dados COMPLETOS da mensagem processados:', {
-      contact: contactData.name,
-      phone: contactData.phone,
-      type: messageInfo.type,
-      content: messageInfo.content?.substring(0, 50) + '...',
-      language: contactData.language,
-      hasMedia: !!messageInfo.media,
-      hasProfilePicture: !!contactData.profilePictureUrl,
-      isGroup: contactData.isGroup
-    });
-
-    // 💾 Atualizar cache do contato
-    const cacheKey = `${instanceName}:${messageData.key.remoteJid}`;
-    contactsCache.set(cacheKey, contactData);
-
-    // 🤖 Verificar se deve enviar resposta automática (apenas para mensagens recebidas)
-    if (!messageData.key.fromMe && await shouldSendAutoReply(contactData, messageInfo.content)) {
-      await sendAutoReply(contactData, instanceName, 'welcome');
-    }
-
-    console.log('✅ Mensagem processada com DADOS APRIMORADOS');
-    return {
-      success: true,
-      message: 'Mensagem processada com dados completos aprimorados',
-      contactData: {
-        phone: contactData.phone,
-        name: contactData.name,
-        pushName: contactData.pushName,
-        language: contactData.language,
-        isGroup: contactData.isGroup,
-        profilePictureUrl: contactData.profilePictureUrl,
-        isOnline: contactData.isOnline,
-        lastSeen: contactData.lastSeen,
-        metadata: contactData.metadata
-      },
-      messageInfo: messageInfo
+    const ticketData = {
+      title: `${data.messageType === 'voice' ? '🎤' : data.messageType === 'image' ? '🖼️' : '💬'} ${data.cliente}`,
+      description: data.mensagem,
+      status: 'open',
+      priority: 'normal',
+      channel: 'whatsapp',
+      customer_id: data.customerId,
+      department_id: data.departmentId,
+      metadata: {
+        whatsapp_phone: data.telefone,
+        client_phone: data.telefone,
+        client_name: data.cliente,
+        instance_name: data.instancia,
+        message_type: data.messageType,
+        contact_language: data.contactData?.language || 'pt-BR',
+        contact_status: data.contactData?.status || '',
+        profile_pic_url: data.contactData?.profilePicUrl || '',
+        first_message: data.mensagem,
+        created_via: 'evolution_webhook',
+        is_whatsapp: true
+      }
     };
 
+    const { data: ticket, error } = await supabase
+      .from('tickets')
+      .insert(ticketData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Erro ao criar ticket avançado:', error);
+      return null;
+    }
+
+    console.log(`✅ Ticket avançado criado: ${ticket.id}`);
+    return ticket;
+
   } catch (error) {
-    console.error('❌ Erro ao processar mensagem:', error);
-    return { success: false, message: error.message };
+    console.error('❌ Erro na criação de ticket avançado:', error);
+    return null;
   }
 }
 
-// ====== FUNÇÕES DE ENVIO DE MENSAGENS ======
+// SALVAR MENSAGEM COM METADADOS AVANÇADOS
+async function saveAdvancedMessage(data) {
+  try {
+    const messageData = {
+      ticket_id: data.ticketId,
+      content: data.content,
+      sender_type: 'customer',
+      sender_name: data.sender,
+      created_at: data.timestamp,
+      metadata: {
+        ...data.metadata,
+        source: 'whatsapp_webhook',
+        processed_at: new Date().toISOString()
+      }
+    };
 
-/**
- * 📤 Enviar mensagem de texto via Evolution API
- */
-async function sendWhatsAppMessage(messageData) {
+    const { data: message, error } = await supabase
+      .from('messages')
+      .insert(messageData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Erro ao salvar mensagem avançada:', error);
+      return null;
+    }
+
+    console.log(`✅ Mensagem avançada salva: ${message.id}`);
+    return message.id;
+
+  } catch (error) {
+    console.error('❌ Erro ao salvar mensagem avançada:', error);
+    return null;
+  }
+}
+
+// ENVIO AVANÇADO DE MENSAGENS VIA EVOLUTION API
+async function sendAdvancedWhatsAppMessage(messageData) {
   try {
     const { phone, text, instance = 'atendimento-ao-cliente-sac1', options = {} } = messageData;
 
@@ -627,29 +837,28 @@ async function sendWhatsAppMessage(messageData) {
       throw new Error('Telefone e texto são obrigatórios');
     }
 
-    // Formatar número para o padrão WhatsApp
     const formattedPhone = formatPhoneNumber(phone);
     
-    console.log('📤 Enviando mensagem via Evolution API:', {
+    console.log('📤 Enviando mensagem avançada via Evolution API:', {
       instance,
       phone: formattedPhone,
       text: text.substring(0, 50) + '...',
       hasOptions: Object.keys(options).length > 0
     });
 
-    // Payload correto conforme teste bem-sucedido
+    // Payload otimizado conforme documentação Evolution API
     const payload = {
       number: formattedPhone,
       text: text,
       options: {
-        delay: options.delay || 1000, // 1 segundo de delay padrão
-        presence: options.presence || 'composing', // Mostrar "digitando..."
-        linkPreview: options.linkPreview !== false, // True por padrão
+        delay: options.delay || 1000,
+        presence: options.presence || 'composing',
+        linkPreview: options.linkPreview !== false,
+        quoted: options.quoted || null,
         ...options
       }
     };
 
-    // Fazer requisição para a Evolution API
     const response = await axios.post(
       `${EVOLUTION_API_URL}/message/sendText/${instance}`,
       payload,
@@ -658,11 +867,11 @@ async function sendWhatsAppMessage(messageData) {
           'Content-Type': 'application/json',
           'apikey': EVOLUTION_API_KEY
         },
-        timeout: 30000 // 30 segundos
+        timeout: 30000
       }
     );
 
-    console.log('✅ Mensagem enviada com sucesso:', {
+    console.log('✅ Mensagem avançada enviada:', {
       messageId: response.data.key?.id,
       status: response.data.status,
       timestamp: response.data.messageTimestamp
@@ -676,7 +885,7 @@ async function sendWhatsAppMessage(messageData) {
     };
 
   } catch (error) {
-    console.error('❌ Erro ao enviar mensagem:', {
+    console.error('❌ Erro ao enviar mensagem avançada:', {
       message: error.message,
       status: error.response?.status,
       data: error.response?.data
@@ -690,130 +899,197 @@ async function sendWhatsAppMessage(messageData) {
   }
 }
 
-/**
- * 📱 Formatar número de telefone para o padrão WhatsApp
- */
+// FUNÇÕES AUXILIARES APRIMORADAS
+function extractPhoneFromJid(jid) {
+  if (!jid) return '';
+  
+  // Remove sufixos WhatsApp (@s.whatsapp.net, @g.us, etc.)
+  let cleaned = jid.split('@')[0];
+  
+  // Remove caracteres não numéricos
+  cleaned = cleaned.replace(/\D/g, '');
+  
+  // Validar se é um número válido (mínimo 10 dígitos)
+  if (cleaned.length < 10) {
+    console.warn(`⚠️ Número de telefone muito curto: ${cleaned}`);
+    return cleaned;
+  }
+  
+  console.log(`📱 Telefone extraído de JID ${jid}: ${cleaned}`);
+  return cleaned;
+}
+
 function formatPhoneNumber(phone) {
-  // Remover caracteres não numéricos
   let cleaned = phone.replace(/\D/g, '');
   
-  // Se não começar com código do país, adicionar +55 (Brasil)
+  // Adicionar código do país Brasil se necessário
   if (!cleaned.startsWith('55') && cleaned.length >= 10) {
     cleaned = '55' + cleaned;
   }
   
-  // Remover sufixo @s.whatsapp.net se existir
+  // Remover sufixo WhatsApp se presente
   cleaned = cleaned.replace('@s.whatsapp.net', '');
   
   return cleaned;
 }
 
-// ====== ENDPOINTS DE API ======
+async function findDepartmentByInstance(instanceName) {
+  try {
+    const { data: instance } = await supabase
+      .from('evolution_instances')
+      .select('department_id')
+      .eq('instance_name', instanceName)
+      .single();
+    
+    return instance?.department_id || null;
+  } catch (error) {
+    console.warn(`⚠️ Departamento não encontrado para instância ${instanceName}`);
+    return null;
+  }
+}
 
-// Health check aprimorado
-app.get('/webhook/health', (req, res) => {
-  console.log('📥', new Date().toISOString(), 'GET /webhook/health');
-  res.json({ 
-    status: 'ok', 
-    version: '2.0 - APRIMORADO',
+async function findExistingTicket(clientPhone, departmentId) {
+  try {
+    const { data: tickets } = await supabase
+      .from('tickets')
+      .select('*')
+      .or(`metadata->>whatsapp_phone.eq.${clientPhone},metadata->>client_phone.eq.${clientPhone}`)
+      .in('status', ['open', 'in_progress'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    return tickets && tickets.length > 0 ? tickets[0] : null;
+  } catch (error) {
+    console.error('❌ Erro ao buscar ticket existente:', error);
+    return null;
+  }
+}
+
+// PROCESSADORES DE EVENTOS ADICIONAIS
+async function processPresenceUpdate(payload) {
+  console.log('👁️ Atualização de presença recebida:', payload.data);
+  return { success: true, message: 'Presença atualizada' };
+}
+
+async function processGroupUpdate(payload) {
+  console.log('👥 Atualização de grupo recebida:', payload.data);
+  return { success: true, message: 'Grupo atualizado' };
+}
+
+async function processQRCodeUpdate(payload) {
+  console.log('📱 QR Code atualizado:', payload.instance);
+  return { success: true, message: 'QR Code processado' };
+}
+
+async function processConnectionUpdate(payload) {
+  console.log('🔌 Status de conexão:', payload.data);
+  return { success: true, message: 'Conexão atualizada' };
+}
+
+async function processSentMessage(payload) {
+  console.log('📤 Mensagem enviada confirmada:', payload.data);
+  return { success: true, message: 'Envio confirmado' };
+}
+
+async function processContactUpdate(payload) {
+  console.log('👤 Contato atualizado:', payload.data);
+  return { success: true, message: 'Contato processado' };
+}
+
+async function processChatUpdate(payload) {
+  console.log('💬 Chat atualizado:', payload.data);
+  return { success: true, message: 'Chat processado' };
+}
+
+// ENDPOINTS AUXILIARES APRIMORADOS
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    service: 'Evolution Webhook Integration - APRIMORADO',
+    version: '2.0.0',
+    baseUrl: BASE_URL,
     timestamp: new Date().toISOString(),
     features: [
       'Extração avançada de dados de contato',
-      'Cache de contatos',
-      'Resposta automática inteligente',
+      'Suporte completo a mídia (imagem, vídeo, áudio, documentos)',
+      'Respostas automáticas inteligentes',
+      'Cache de performance',
       'Detecção de idioma',
-      'Processamento de mídias',
-      'Templates de resposta'
+      'Horário comercial',
+      'Metadados enriquecidos'
     ],
-    cache: {
-      contacts: contactsCache.size,
-      templates: Object.keys(responseTemplates).length
+    endpoints: {
+      webhook: `${BASE_URL}/webhook/evolution`,
+      health: `${BASE_URL}/webhook/health`,
+      cache: `${BASE_URL}/webhook/cache`,
+      clearCache: `${BASE_URL}/webhook/clear-cache`,
+      sendMessage: `${BASE_URL}/webhook/send-message`,
+      sendMedia: `${BASE_URL}/webhook/send-media`,
+      checkInstance: `${BASE_URL}/webhook/check-instance`
     }
   });
 });
 
-// Endpoint principal do webhook
-app.post('/webhook/evolution', async (req, res) => {
-  const timestamp = new Date().toISOString();
-  console.log('📥', `[${timestamp}] POST /webhook/evolution`);
-  
-  try {
-    const payload = req.body;
-    
-    console.log('🔔', `[${timestamp}] Webhook Evolution API APRIMORADO:`, {
-      event: payload.event,
-      instance: payload.instance,
-      dataKeys: payload.data ? Object.keys(payload.data) : []
-    });
-
-    let result = { success: false, message: 'Evento não processado' };
-
-    switch (payload.event) {
-      case 'MESSAGES_UPSERT':
-        result = await processNewMessage(payload);
-        break;
-      
-      default:
-        console.log('❓ Evento não reconhecido:', payload.event);
-        result = { success: true, message: `Evento ${payload.event} ignorado` };
-    }
-
-    res.json(result);
-
-  } catch (error) {
-    console.error('❌ Erro no webhook:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Endpoint para limpar cache
-app.post('/webhook/clear-cache', (req, res) => {
-  contactsCache.clear();
-  console.log('🧹 Cache de contatos limpo');
-  res.json({ success: true, message: 'Cache limpo com sucesso' });
+app.get('/webhook/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'Evolution Webhook Integration - APRIMORADO',
+    supabase: supabaseUrl,
+    evolutionApi: EVOLUTION_API_URL,
+    cache: {
+      size: contactCache.size,
+      entries: Array.from(contactCache.keys())
+    },
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Endpoint para visualizar cache
 app.get('/webhook/cache', (req, res) => {
-  const cacheData = Array.from(contactsCache.entries()).map(([key, contact]) => ({
+  const cacheData = Array.from(contactCache.entries()).map(([key, value]) => ({
     key,
-    contact: {
-      name: contact.name,
-      phone: contact.phone,
-      language: contact.language,
-      messageCount: contact.messageCount,
-      lastInteraction: contact.lastInteraction,
-      hasProfilePicture: !!contact.profilePictureUrl,
-      isGroup: contact.isGroup
-    }
+    name: value.name,
+    phone: value.phone,
+    language: value.language,
+    lastUpdate: new Date(value.lastCacheUpdate).toISOString(),
+    isValid: value.isCacheValid()
   }));
 
   res.json({
-    size: contactsCache.size,
-    contacts: cacheData.slice(0, 20) // Mostrar apenas os primeiros 20
+    size: contactCache.size,
+    entries: cacheData
   });
 });
 
-// Endpoint para envio de mensagens
-app.post('/webhook/send-message', async (req, res) => {
-  const timestamp = new Date().toISOString();
-  console.log('📥', `[${timestamp}] POST /webhook/send-message`);
+// Endpoint para limpar cache
+app.post('/webhook/clear-cache', (req, res) => {
+  const sizeBefore = contactCache.size;
+  contactCache.clear();
   
+  res.json({
+    message: 'Cache limpo com sucesso',
+    entriesCleared: sizeBefore,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Endpoint avançado para envio de mensagens
+app.post('/webhook/send-message', async (req, res) => {
   try {
     const { phone, text, instance, options } = req.body;
     
     console.log('📤 [SEND] Solicitação de envio de mensagem:', {
-      phone: phone,
-      text: text.substring(0, 50) + '...',
-      instance: instance,
+      phone,
+      text: text?.substring(0, 50) + '...',
+      instance,
       hasOptions: !!options
     });
 
-    const result = await sendWhatsAppMessage({
+    const result = await sendAdvancedWhatsAppMessage({
       phone,
       text,
-      instance,
-      options
+      instance: instance || 'atendimento-ao-cliente-sac1',
+      options: options || {}
     });
 
     console.log('📤 [SEND] Resultado do envio:', {
@@ -825,26 +1101,89 @@ app.post('/webhook/send-message', async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error('❌ Erro no endpoint de envio:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    console.error('❌ [SEND] Erro no endpoint de envio:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
 
-// ====== INICIALIZAÇÃO DO SERVIDOR ======
-app.listen(PORT, () => {
-  console.log('🚀 Evolution Webhook Integration APRIMORADO rodando na porta', PORT);
-  console.log('🌟 Versão: 2.0 - Extração avançada de dados de contato');
-  console.log('🌐 Base URL:', BASE_URL);
-  console.log('📡 Webhook URL:', `${BASE_URL}/webhook/evolution`);
-  console.log('🗄️ Supabase:', SUPABASE_URL);
-  console.log('🏥 Health check:', `${BASE_URL}/webhook/health`);
-  console.log('📋 Cache de contatos:', `${BASE_URL}/webhook/cache`);
-  console.log('📤 Envio de mensagens:', `${BASE_URL}/webhook/send-message`);
-  console.log('🤖 Sistema de resposta automática: ATIVO');
-  console.log('🎯 Funcionalidades: Extração completa de dados + Resposta inteligente');
+// Endpoint para verificar status da instância
+app.post('/webhook/check-instance', async (req, res) => {
+  try {
+    const { instance } = req.body;
+    const instanceName = instance || 'atendimento-ao-cliente-sac1';
+    
+    console.log(`🔌 [CHECK] Verificando status da instância: ${instanceName}`);
+
+    const response = await axios.get(
+      `${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`,
+      {
+        headers: {
+          'apikey': EVOLUTION_API_KEY
+        },
+        timeout: 10000
+      }
+    );
+    
+    console.log(`📊 Status da instância ${instanceName}:`, response.data);
+    
+    res.json({
+      success: true,
+      instance: response.data,
+      isConnected: response.data.state === 'open'
+    });
+
+  } catch (error) {
+    console.error('❌ [CHECK] Erro ao verificar instância:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      isConnected: false
+    });
+  }
 });
+
+// Iniciar servidor
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Evolution Webhook Integration APRIMORADO rodando na porta ${PORT}`);
+  console.log(`🌐 Base URL: ${BASE_URL}`);
+  console.log(`📡 Webhook URL: ${BASE_URL}/webhook/evolution`);
+  console.log(`🗄️ Supabase: ${supabaseUrl}`);
+  console.log(`🏥 Health check: ${BASE_URL}/webhook/health`);
+  console.log(`🔧 Cache de contatos: ATIVO (${CACHE_DURATION / 60000} min)`);
+  console.log(`🤖 Respostas automáticas: ATIVAS`);
+  console.log(`📱 Suporte a mídia: COMPLETO`);
+  console.log(`🌍 Detecção de idioma: ATIVA`);
+});
+
+// Tratamento aprimorado de erros
+process.on('uncaughtException', (error) => {
+  console.error('❌ Exceção não capturada:', error);
+  // Não encerrar o processo, apenas logar
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Promise rejeitada:', reason);
+  // Não encerrar o processo, apenas logar
+});
+
+// Limpeza automática do cache a cada hora
+setInterval(() => {
+  const before = contactCache.size;
+  const now = Date.now();
+  
+  for (const [key, contact] of contactCache.entries()) {
+    if (!contact.isCacheValid()) {
+      contactCache.delete(key);
+    }
+  }
+  
+  const after = contactCache.size;
+  if (before > after) {
+    console.log(`🧹 Cache limpo automaticamente: ${before - after} entradas removidas`);
+  }
+}, 60 * 60 * 1000); // 1 hora
 
 export default app; 
