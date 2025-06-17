@@ -131,8 +131,6 @@ app.post('/webhook/messages-upsert', async (req, res) => {
       ticketId: result.ticketId
     });
     
-    console.log('✅ Processamento via endpoint alternativo concluído');
-    
   } catch (error) {
     console.error('❌ Erro no endpoint alternativo:', error);
     res.status(500).json({ 
@@ -317,6 +315,69 @@ app.post('/webhook/reply-message', async (req, res) => {
     console.error('❌ [REPLY] Erro ao responder mensagem:', error);
     res.status(500).json({
       success: false,
+      error: 'Erro interno do servidor',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Endpoint para verificar status da instância Evolution
+app.post('/webhook/check-instance', async (req, res) => {
+  try {
+    const { instance = 'atendimento-ao-cliente-sac1' } = req.body;
+    
+    console.log(`🔌 [CHECK] Verificando status da instância: ${instance}`);
+    
+    const result = await checkInstanceStatus(instance);
+    
+    res.status(result.success ? 200 : 500).json({
+      success: result.success,
+      instance,
+      connected: result.isConnected,
+      data: result.data,
+      error: result.error,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ [CHECK] Erro ao verificar instância:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Endpoint para teste direto de envio (para diagnóstico)
+app.post('/webhook/test-send', async (req, res) => {
+  try {
+    const { phone = '5511999999999', text = 'Teste automático do sistema', instance = 'atendimento-ao-cliente-sac1' } = req.body;
+    
+    console.log('🧪 [TEST] Iniciando teste de envio:', { phone, instance });
+    
+    // Fazer teste direto na Evolution API
+    const result = await sendWhatsAppMessage({ phone, text, instance });
+    
+    console.log('🧪 [TEST] Resultado do teste:', { success: result.success, error: result.error });
+    
+    res.status(result.success ? 200 : 500).json({
+      success: result.success,
+      test: true,
+      messageId: result.messageId,
+      status: result.status,
+      error: result.error,
+      details: result.details,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ [TEST] Erro no teste de envio:', error);
+    res.status(500).json({
+      success: false,
+      test: true,
       error: 'Erro interno do servidor',
       details: error.message,
       timestamp: new Date().toISOString()
