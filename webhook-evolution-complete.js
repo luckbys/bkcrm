@@ -492,69 +492,62 @@ async function processNewMessage(payload) {
   }
 }
 
-// 🆕 NOVA FUNÇÃO: Verificar se cliente existe ou criar automaticamente
+// Função para verificar/criar cliente automaticamente
 async function findOrCreateCustomer({ phone, name, instanceName }) {
   try {
     console.log('🔍 Verificando se cliente existe:', { phone, name });
-    
-    // Buscar cliente por telefone
-    const { data: existingCustomers, error: searchError } = await supabase
-      .from('customers')
-      .select('id, name, phone, email, status')
-      .eq('phone', phone)
-      .eq('is_active', true)
-      .limit(1);
 
-    if (searchError) {
-      console.error('❌ Erro ao buscar cliente:', searchError);
-      throw new Error(`Erro ao buscar cliente: ${searchError.message}`);
+    // ✅ CORREÇÃO: Usar tabela 'profiles' ao invés de 'customers'
+    // Buscar cliente existente na tabela profiles
+    const { data: existingCustomer, error: searchError } = await supabase
+      .from('profiles')
+      .select('id, name, email, metadata')
+      .or(`metadata->>phone.eq.${phone},email.ilike.whatsapp-${phone}%`)
+      .eq('role', 'customer')
+      .limit(1)
+      .single();
+
+    if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = not found
+      console.error('❌ Erro ao buscar cliente existente:', searchError);
     }
 
-    // Se cliente já existe, retornar ID
-    if (existingCustomers && existingCustomers.length > 0) {
-      const customer = existingCustomers[0];
-      console.log('✅ Cliente já cadastrado:', { 
-        id: customer.id, 
-        name: customer.name, 
-        phone: customer.phone 
+    if (existingCustomer) {
+      console.log('✅ Cliente já cadastrado:', {
+        id: existingCustomer.id,
+        name: existingCustomer.name,
+        phone: phone
       });
       
-      // Atualizar última interação
+      // Atualizar último contato
       await supabase
-        .from('customers')
+        .from('profiles')
         .update({ 
-          last_interaction: new Date().toISOString(),
-          // Atualizar nome se veio do WhatsApp e está vazio/diferente
-          ...(name && name !== customer.name && customer.name.includes('Cliente') && { name })
+          metadata: {
+            ...existingCustomer.metadata,
+            last_whatsapp_contact: new Date().toISOString(),
+            phone: phone
+          }
         })
-        .eq('id', customer.id);
-      
-      return customer.id;
+        .eq('id', existingCustomer.id);
+        
+      return existingCustomer.id;
     }
 
     console.log('🆕 Cliente não encontrado, criando automaticamente...');
-    
-    // Buscar agente responsável padrão (admin/agent)
-    const { data: defaultAgent } = await supabase
-      .from('profiles')
-      .select('id')
-      .in('role', ['admin', 'agent'])
-      .limit(1);
 
-    // Criar novo cliente
+    // Preparar dados do cliente para tabela profiles
     const customerData = {
-      name: name || `Cliente WhatsApp ${phone.slice(-4)}`,
-      email: `whatsapp-${phone}@auto-generated.com`, // Email temporário único
-      phone: phone,
-      status: 'prospect',
-      category: 'bronze',
-      channel: 'whatsapp',
-      tags: ['auto-criado', 'whatsapp'],
-      notes: `Cliente criado automaticamente via WhatsApp (${instanceName})`,
-      last_interaction: new Date().toISOString(),
-      responsible_agent_id: defaultAgent?.[0]?.id || null,
+      name: name,
+      email: `whatsapp-${phone}@auto-generated.com`,
+      role: 'customer',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       metadata: {
-        auto_created: true,
+        phone: phone,
+        status: 'prospect',
+        category: 'bronze',
+        tags: ['auto-criado', 'whatsapp'],
         created_via: 'webhook_evolution',
         instance_name: instanceName,
         original_contact: phone,
@@ -562,63 +555,41 @@ async function findOrCreateCustomer({ phone, name, instanceName }) {
       }
     };
 
-    // Tentar criar cliente usando RPC para contornar RLS
-    const { data: rpcResult, error: rpcError } = await supabase
-      .rpc('create_customer_webhook', {
-        customer_name: name,
-        customer_phone: phone,
-        customer_email: customerData.email
-      });
+    // ✅ CORREÇÃO: Criar cliente na tabela 'profiles'
+    const { data: newCustomer, error: createError } = await supabase
+      .from('profiles')
+      .insert([customerData])
+      .select('id, name, email, metadata')
+      .single();
 
-    if (rpcError || (rpcResult && !rpcResult.success)) {
-      console.error('❌ Erro RPC ao criar cliente:', rpcError || rpcResult.error);
+    if (createError) {
+      console.error('❌ Erro ao criar cliente:', createError);
       
-      // Fallback: tentar inserção direta
-      const { data: newCustomer, error: createError } = await supabase
-        .from('customers')
-        .insert([customerData])
-        .select('id, name, phone, email')
-        .single();
-
-      if (createError) {
-        console.error('❌ Erro ao criar cliente (fallback):', createError);
-        // Se falhar por email duplicado, tentar com timestamp
-        if (createError.code === '23505' && createError.message.includes('email')) {
-          const timestampEmail = `whatsapp-${phone}-${Date.now()}@auto-generated.com`;
-          customerData.email = timestampEmail;
+      // Se falhar por email duplicado, tentar com timestamp
+      if (createError.code === '23505' && createError.message.includes('email')) {
+        const timestampEmail = `whatsapp-${phone}-${Date.now()}@auto-generated.com`;
+        customerData.email = timestampEmail;
+        
+        const { data: retryCustomer, error: retryError } = await supabase
+          .from('profiles')
+          .insert([customerData])
+          .select('id, name, email, metadata')
+          .single();
           
-          const { data: retryCustomer, error: retryError } = await supabase
-            .from('customers')
-            .insert([customerData])
-            .select('id, name, phone, email')
-            .single();
-            
-          if (retryError) {
-            throw new Error(`Erro ao criar cliente (retry): ${retryError.message}`);
-          }
-          
-          console.log('✅ Cliente criado com email alternativo:', retryCustomer);
-          return retryCustomer.id;
+        if (retryError) {
+          throw new Error(`Erro ao criar cliente (retry): ${retryError.message}`);
         }
-        throw new Error(`Erro ao criar cliente: ${createError.message}`);
+        
+        console.log('✅ Cliente criado com email alternativo:', retryCustomer);
+        return retryCustomer.id;
       }
-      
-      console.log('✅ Cliente criado via fallback:', newCustomer);
-      return newCustomer.id;
+      throw new Error(`Erro ao criar cliente: ${createError.message}`);
     }
-
-    // Sucesso via RPC
-    const newCustomer = {
-      id: rpcResult.customer_id,
-      name: name,
-      phone: phone,
-      email: customerData.email
-    };
 
     console.log('✅ Novo cliente criado automaticamente:', {
       id: newCustomer.id,
       name: newCustomer.name,
-      phone: newCustomer.phone,
+      phone: phone,
       email: newCustomer.email
     });
 
@@ -664,11 +635,13 @@ async function findExistingTicket(clientPhone, departmentId) {
     
     // ⚡ NOVA LÓGICA: Buscar APENAS tickets abertos (não finalizados)
     // Tickets finalizados NÃO devem ser reabertos - sempre criar novo ticket
+    
+    // ✅ CORREÇÃO: Usar status corretos do banco de dados
     const { data: tickets, error } = await supabase
       .from('tickets')
       .select('id, customer_id, status, created_at')
       .or(`metadata->>whatsapp_phone.eq.${clientPhone},metadata->>client_phone.eq.${clientPhone}`)
-             .in('status', ['open', 'atendimento']) // ✅ Mapeamento correto: open=pendente, atendimento=em atendimento
+      .in('status', ['open', 'in_progress']) // ✅ Usar status do enum correto
       .order('created_at', { ascending: false })
       .limit(1);
     
@@ -687,22 +660,22 @@ async function findExistingTicket(clientPhone, departmentId) {
       return ticket.id;
     }
     
-         // Verificar se existem tickets finalizados para este cliente (apenas para log)
-     const { data: finalizedTickets, error: finalizedError } = await supabase
-       .from('tickets')
-       .select('id, status, created_at')
-       .or(`metadata->>whatsapp_phone.eq.${clientPhone},metadata->>client_phone.eq.${clientPhone}`)
-       .in('status', ['closed', 'finalizado']) // ✅ Mapeamento correto: closed=finalizado
-       .order('created_at', { ascending: false })
-       .limit(1);
+    // Verificar se existem tickets finalizados para este cliente (apenas para log)
+    const { data: finalizedTickets, error: finalizedError } = await supabase
+      .from('tickets')
+      .select('id, status, created_at')
+      .or(`metadata->>whatsapp_phone.eq.${clientPhone},metadata->>client_phone.eq.${clientPhone}`)
+      .in('status', ['resolved', 'closed']) // ✅ Usar status do enum correto
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-     if (!finalizedError && finalizedTickets && finalizedTickets.length > 0) {
-       console.log('ℹ️ Cliente possui tickets finalizados, mas criando novo ticket:', {
-         ultimoTicketFinalizado: finalizedTickets[0].id,
-         status: finalizedTickets[0].status,
-         finalizado_em: finalizedTickets[0].created_at
-       });
-     }
+    if (!finalizedError && finalizedTickets && finalizedTickets.length > 0) {
+      console.log('ℹ️ Cliente possui tickets finalizados, mas criando novo ticket:', {
+        ultimoTicketFinalizado: finalizedTickets[0].id,
+        status: finalizedTickets[0].status,
+        finalizado_em: finalizedTickets[0].created_at
+      });
+    }
     
     console.log('🆕 Nenhum ticket aberto encontrado - novo ticket será criado');
     return null;
@@ -766,18 +739,18 @@ async function createTicketAutomatically(data) {
     let ticketSequence = 1;
     let hasPreviousFinalized = false;
     
-         if (!previousError && previousTickets && previousTickets.length > 0) {
-       ticketSequence = previousTickets.length + 1;
-       hasPreviousFinalized = previousTickets.some(t => ['closed', 'finalizado'].includes(t.status)); // ✅ Valores corretos
-      
-      if (hasPreviousFinalized) {
-        console.log('📋 Cliente possui tickets anteriores finalizados:', {
-          total: previousTickets.length,
-          ultimoStatus: previousTickets[0].status,
-          novoSequencial: ticketSequence
-        });
-      }
-    }
+    if (!previousError && previousTickets && previousTickets.length > 0) {
+      ticketSequence = previousTickets.length + 1;
+      hasPreviousFinalized = previousTickets.some(t => ['resolved', 'closed'].includes(t.status)); // ✅ Status corretos do enum
+     
+     if (hasPreviousFinalized) {
+       console.log('📋 Cliente possui tickets anteriores finalizados:', {
+         total: previousTickets.length,
+         ultimoStatus: previousTickets[0].status,
+         novoSequencial: ticketSequence
+       });
+     }
+   }
 
     // Criar ticket no banco
     const ticketData = {

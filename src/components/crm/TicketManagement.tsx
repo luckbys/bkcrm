@@ -28,7 +28,15 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Loader2
+  Loader2,
+  Plus,
+  MessageSquare,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { TicketChatModal } from './TicketChatModal';
 import { MinimizedChatsDrawer } from './ticket-chat/MinimizedChatsDrawer';
@@ -39,6 +47,7 @@ import { cn } from '@/lib/utils';
 import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useUserDepartment } from '@/hooks/useUserDepartment';
 import { useToast } from '@/hooks/use-toast';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 
 interface TicketManagementProps {
   sector: any;
@@ -193,6 +202,10 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
   const [itemsPerPage] = useState(20);
   const [activeTab, setActiveTab] = useState('todos');
   const [lastUpdate, setLastUpdate] = useState(new Date());
+
+  // Novo estado para controle do filtro colapsável
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isCompactView, setIsCompactView] = useState(false);
 
   // Auto-refresh de tickets a cada 30 segundos
   useEffect(() => {

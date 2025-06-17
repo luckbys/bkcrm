@@ -60,6 +60,7 @@ export function useDepartments(): UseDepartmentsReturn {
       const { data, error: supabaseError } = await supabase
         .from('departments')
         .select('*')
+        .eq('is_active', true)
         .order('name', { ascending: true })
         .returns<DepartmentFromDB[]>();
 
