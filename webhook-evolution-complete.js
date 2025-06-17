@@ -598,6 +598,7 @@ async function findOrCreateCustomer({ phone, name, instanceName }) {
 
     // Preparar dados do cliente para tabela profiles
     const customerData = {
+      // ✅ CORREÇÃO CRÍTICA: Especificar ID explicitamente para evitar erro de constraint
       name: name,
       email: `whatsapp-${phone}@auto-generated.com`,
       role: 'customer',
