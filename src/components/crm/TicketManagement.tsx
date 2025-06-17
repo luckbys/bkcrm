@@ -504,39 +504,7 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
 
   return (
     <div className="space-y-6">
-      {/* Erro do banco de dados */}
-      {dbError && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2 text-amber-700">
-              <AlertTriangle className="w-4 h-4" />
-              <span className="text-sm font-medium">Migração de Tickets Necessária</span>
-            </div>
-            <p className="text-amber-600 text-xs mt-1">{dbError}</p>
-            <div className="mt-3 p-3 bg-amber-100 rounded border border-amber-200">
-              <p className="text-amber-800 text-xs font-medium mb-2">📋 Para resolver este problema:</p>
-              <ol className="text-amber-700 text-xs space-y-1 list-decimal list-inside">
-                <li>Acesse o painel do Supabase (SQL Editor)</li>
-                <li>Execute primeiro a migração de departments (se ainda não fez)</li>
-                <li>Execute a migração de tickets disponível em: <code className="bg-amber-200 px-1 rounded">supabase/migrations/20240321000001_create_tickets_table.sql</code></li>
-                <li>Clique em "Tentar novamente" após executar as migrações</li>
-              </ol>
-            </div>
-            <div className="flex items-center space-x-2 mt-3">
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={refreshTickets} 
-                className="border-amber-300 text-amber-700 hover:bg-amber-100"
-              >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                Tentar novamente
-              </Button>
-              <span className="text-amber-600 text-xs">Usando dados de demonstração enquanto isso</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
 
       {/* Header aprimorado */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
