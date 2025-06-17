@@ -38,6 +38,7 @@ import { TicketsList } from './ticket-management/TicketsList';
 import { cn } from '@/lib/utils';
 import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useUserDepartment } from '@/hooks/useUserDepartment';
+import { useToast } from '@/hooks/use-toast';
 
 interface TicketManagementProps {
   sector: any;
@@ -67,13 +68,16 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
     compatibilityTickets, 
     loading: dbLoading, 
     error: dbError, 
-    refreshTickets 
+    refreshTickets,
+    updateTicket
   } = useTicketsDB();
   
   const { 
     userInfo, 
     canViewAllTickets 
   } = useUserDepartment();
+
+  const { toast } = useToast();
 
   // Mock data expandido - definido logo após os hooks
   const mockTickets: Ticket[] = [
@@ -366,21 +370,109 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
     }
   }, [selectedTickets.length, paginatedTickets]);
 
-  const handleBulkAction = useCallback(async (action: 'assign' | 'status' | 'priority' | 'delete') => {
+  const handleBulkAction = useCallback(async (action: 'assign' | 'status' | 'priority' | 'delete' | 'finalize') => {
     if (selectedTickets.length === 0) return;
     
     setIsLoading(true);
     try {
-      // Simular ação em lote
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log(`Bulk action ${action} on tickets:`, selectedTickets);
+      if (action === 'finalize') {
+        console.log('🎯 Iniciando finalização em massa de tickets:', selectedTickets);
+        
+        // Filtrar apenas tickets que não estão finalizados
+        const ticketsToFinalize = currentTickets.filter(ticket => 
+          selectedTickets.includes(ticket.id) && ticket.status !== 'finalizado'
+        );
+        
+        console.log('📋 Tickets que serão finalizados:', {
+          total: selectedTickets.length,
+          aFinalizarCount: ticketsToFinalize.length,
+          aFinalizar: ticketsToFinalize.map(t => ({ id: t.id, client: t.client, status: t.status }))
+        });
+        
+                 if (ticketsToFinalize.length === 0) {
+           console.log('⚠️ Nenhum ticket precisa ser finalizado');
+           toast({
+             title: "ℹ️ Nenhuma ação necessária",
+             description: "Todos os tickets selecionados já estão finalizados",
+           });
+           return;
+         }
+        
+                 // Usar updateTicket se disponível para tickets reais
+         if (compatibilityTickets.length > 0) {
+           // Finalizar cada ticket no banco de dados
+          const finalizationPromises = ticketsToFinalize.map(async (ticket) => {
+            try {
+              const ticketId = ticket.originalId || ticket.id.toString();
+              console.log(`💾 Finalizando ticket ${ticketId} (${ticket.client})`);
+              
+              await updateTicket(ticketId, { 
+                status: 'finalizado',
+                updated_at: new Date().toISOString() 
+              });
+              
+              console.log(`✅ Ticket ${ticketId} finalizado com sucesso`);
+              return { success: true, ticketId, client: ticket.client };
+            } catch (error) {
+              console.error(`❌ Erro ao finalizar ticket ${ticket.id}:`, error);
+              return { success: false, ticketId: ticket.id, client: ticket.client, error };
+            }
+          });
+          
+          const results = await Promise.all(finalizationPromises);
+          const successful = results.filter(r => r.success);
+          const failed = results.filter(r => !r.success);
+          
+          console.log('📊 Resultado da finalização em massa:', {
+            total: results.length,
+            successful: successful.length,
+            failed: failed.length
+          });
+          
+                     if (successful.length > 0) {
+             // Atualizar tickets localmente também
+             // Note: o updateTicket já deve atualizar a lista automaticamente
+             console.log(`🎉 ${successful.length} tickets finalizados com sucesso!`);
+             toast({
+               title: "✅ Finalização em massa concluída",
+               description: `${successful.length} ticket(s) finalizado(s) com sucesso!`,
+             });
+           }
+           
+           if (failed.length > 0) {
+             console.warn(`⚠️ ${failed.length} tickets falharam na finalização`);
+             toast({
+               title: "⚠️ Alguns tickets falharam",
+               description: `${failed.length} ticket(s) não puderam ser finalizados. Verifique os logs.`,
+               variant: "destructive"
+             });
+           }
+                 } else {
+           // Para dados mock, apenas simular a ação
+           await new Promise(resolve => setTimeout(resolve, 1500));
+           console.log(`🎉 ${ticketsToFinalize.length} tickets finalizados (simulação)`);
+           toast({
+             title: "✅ Finalização em massa (simulação)",
+             description: `${ticketsToFinalize.length} ticket(s) finalizados no modo demonstração`,
+           });
+         }
+        
+        // Refresh da lista
+        await refreshTickets();
+        
+      } else {
+        // Outras ações existentes
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log(`Bulk action ${action} on tickets:`, selectedTickets);
+      }
+      
       setSelectedTickets([]);
     } catch (error) {
       console.error('Erro na ação em lote:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedTickets]);
+  }, [selectedTickets, currentTickets, compatibilityTickets, refreshTickets]);
 
   const handleRefresh = useCallback(async () => {
     setIsLoading(true);
@@ -547,10 +639,32 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
           {selectedTickets.length > 0 && (
             <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-900">
-                  {selectedTickets.length} ticket(s) selecionado(s)
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-blue-900">
+                    {selectedTickets.length} ticket(s) selecionado(s)
+                  </span>
+                  <span className="text-xs text-blue-700">
+                    {(() => {
+                      const finalizableCount = currentTickets.filter(ticket => 
+                        selectedTickets.includes(ticket.id) && ticket.status !== 'finalizado'
+                      ).length;
+                      return finalizableCount > 0 
+                        ? `${finalizableCount} podem ser finalizados`
+                        : 'Todos já estão finalizados';
+                    })()}
+                  </span>
+                </div>
                 <div className="flex items-center space-x-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => handleBulkAction('finalize')}
+                    disabled={isLoading}
+                    className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Finalizar
+                  </Button>
                   <Button 
                     size="sm" 
                     variant="outline"

@@ -125,59 +125,80 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
         updated_at: new Date().toISOString()
       }));
 
-      // Tentar persistir no banco de dados com múltiplas estratégias
+      // Tentar persistir no banco de dados com funções simples (sem notificações)
       let persistenceSuccess = false;
       const ticketId = currentTicket.originalId || currentTicket.id;
 
       if (ticketId) {
         console.log('💾 [SIDEBAR] Tentando salvar no banco:', { ticketId });
         
-        // Estratégia 1: RPC finalize_ticket_safe (nova função que bypassa triggers)
+        // Estratégia 1: RPC finalize_ticket_simple (sem triggers/notificações)
         try {
-          console.log('💾 [SIDEBAR-Estratégia 1] RPC finalize_ticket_safe...');
-          const { data: rpcSafeResult, error: rpcSafeError } = await supabase.rpc('finalize_ticket_safe', {
+          console.log('💾 [SIDEBAR-Estratégia 1] RPC finalize_ticket_simple...');
+          const { data: rpcSimpleResult, error: rpcSimpleError } = await supabase.rpc('finalize_ticket_simple', {
             ticket_uuid: ticketId
           });
           
-          if (!rpcSafeError && rpcSafeResult?.success) {
+          if (!rpcSimpleError && rpcSimpleResult?.success) {
             persistenceSuccess = true;
-            console.log('✅ [SIDEBAR-Estratégia 1] RPC Safe Sucesso!', rpcSafeResult);
+            console.log('✅ [SIDEBAR-Estratégia 1] RPC Simple Sucesso!', rpcSimpleResult);
           } else {
-            console.log('❌ [SIDEBAR-Estratégia 1] RPC Safe falhou:', rpcSafeError || rpcSafeResult);
-            throw new Error(rpcSafeError?.message || rpcSafeResult?.error || 'RPC Safe falhou');
+            console.log('❌ [SIDEBAR-Estratégia 1] RPC Simple falhou:', rpcSimpleError || rpcSimpleResult);
+            throw new Error(rpcSimpleError?.message || rpcSimpleResult?.error || 'RPC Simple falhou');
           }
         } catch (error) {
-          console.log('❌ [SIDEBAR-Estratégia 1] RPC Safe falhou:', error);
+          console.log('❌ [SIDEBAR-Estratégia 1] RPC Simple falhou:', error);
           
-          // Estratégia 2: RPC finalize_ticket original
+          // Estratégia 2: RPC update_ticket_status_simple
           try {
-            console.log('💾 [SIDEBAR-Estratégia 2] RPC finalize_ticket original...');
-            const { data: rpcResult, error: rpcError } = await supabase.rpc('finalize_ticket', {
-              ticket_id: ticketId
+            console.log('💾 [SIDEBAR-Estratégia 2] RPC update_ticket_status_simple...');
+            const { data: rpcStatusResult, error: rpcStatusError } = await supabase.rpc('update_ticket_status_simple', {
+              ticket_uuid: ticketId,
+              new_status: 'closed'
             });
             
-            if (!rpcError && rpcResult?.success) {
+            if (!rpcStatusError && rpcStatusResult?.success) {
               persistenceSuccess = true;
-              console.log('✅ [SIDEBAR-Estratégia 2] RPC Original Sucesso!', rpcResult);
+              console.log('✅ [SIDEBAR-Estratégia 2] RPC Status Simple Sucesso!', rpcStatusResult);
             } else {
-              console.log('❌ [SIDEBAR-Estratégia 2] RPC Original falhou:', rpcError || rpcResult);
-              throw new Error(rpcError?.message || rpcResult?.error || 'RPC Original falhou');
+              console.log('❌ [SIDEBAR-Estratégia 2] RPC Status Simple falhou:', rpcStatusError || rpcStatusResult);
+              throw new Error(rpcStatusError?.message || rpcStatusResult?.error || 'RPC Status Simple falhou');
             }
           } catch (error2) {
-            console.log('❌ [SIDEBAR-Estratégia 2] RPC Original falhou:', error2);
+            console.log('❌ [SIDEBAR-Estratégia 2] RPC Status Simple falhou:', error2);
             
-            // Estratégia 3: UPDATE direto via updateTicket
+            // Estratégia 3: RPC update_ticket_direct (função mais simples)
             try {
-              console.log('💾 [SIDEBAR-Estratégia 3] UPDATE via updateTicket...');
-              await updateTicket(ticketId, {
-                status: 'closed',
-                updated_at: new Date().toISOString(),
-                closed_at: new Date().toISOString()
+              console.log('💾 [SIDEBAR-Estratégia 3] RPC update_ticket_direct...');
+              const { data: rpcDirectResult, error: rpcDirectError } = await supabase.rpc('update_ticket_direct', {
+                ticket_uuid: ticketId,
+                ticket_status: 'closed',
+                close_timestamp: new Date().toISOString()
               });
-              persistenceSuccess = true;
-              console.log('✅ [SIDEBAR-Estratégia 3] UPDATE Sucesso!');
+              
+              if (!rpcDirectError && rpcDirectResult?.success) {
+                persistenceSuccess = true;
+                console.log('✅ [SIDEBAR-Estratégia 3] RPC Direct Sucesso!', rpcDirectResult);
+              } else {
+                console.log('❌ [SIDEBAR-Estratégia 3] RPC Direct falhou:', rpcDirectError || rpcDirectResult);
+                throw new Error(rpcDirectError?.message || rpcDirectResult?.error || 'RPC Direct falhou');
+              }
             } catch (error3) {
-              console.log('❌ [SIDEBAR-Estratégia 3] UPDATE falhou:', error3);
+              console.log('❌ [SIDEBAR-Estratégia 3] RPC Direct falhou:', error3);
+              
+              // Estratégia 4: UPDATE direto via updateTicket
+              try {
+                console.log('💾 [SIDEBAR-Estratégia 4] UPDATE via updateTicket...');
+                await updateTicket(ticketId, {
+                  status: 'closed',
+                  updated_at: new Date().toISOString(),
+                  closed_at: new Date().toISOString()
+                });
+                persistenceSuccess = true;
+                console.log('✅ [SIDEBAR-Estratégia 4] UPDATE Sucesso!');
+              } catch (error4) {
+                console.log('❌ [SIDEBAR-Estratégia 4] UPDATE falhou:', error4);
+              }
             }
           }
         }

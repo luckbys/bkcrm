@@ -379,27 +379,27 @@ export function useTicketsDB() {
     }
   }, [user, fetchTickets]);
 
-  // Atualizar ticket com fallback para RPC
+  // Atualizar ticket com função simples (sem notificações)
   const updateTicket = useCallback(async (ticketId: string, updates: Partial<DatabaseTicket>) => {
     try {
       setLoading(true);
       setError(null);
 
-      // Se é uma tentativa de finalizar ticket, usar RPC seguro primeiro
+      // Se é uma tentativa de finalizar ticket, usar função RPC simples
       if (updates.status === 'closed' || updates.status === 'finalizado') {
-        console.log('🔄 [updateTicket] Finalizando ticket - usando RPC finalize_ticket_safe...');
+        console.log('🔄 [updateTicket] Finalizando ticket - usando RPC finalize_ticket_simple...');
         
-        const { data: rpcSafeData, error: rpcSafeError } = await supabase.rpc('finalize_ticket_safe', {
+        const { data: rpcSimpleData, error: rpcSimpleError } = await supabase.rpc('finalize_ticket_simple', {
           ticket_uuid: ticketId
         });
 
-        if (!rpcSafeError && rpcSafeData?.success) {
-          console.log('✅ [updateTicket] RPC Safe sucesso:', rpcSafeData);
+        if (!rpcSimpleError && rpcSimpleData?.success) {
+          console.log('✅ [updateTicket] RPC Simple sucesso:', rpcSimpleData);
           
           // Simular dados de retorno para compatibilidade
           const mockData = {
             id: ticketId,
-            status: 'closed',
+            status: 'closed' as const,
             updated_at: new Date().toISOString(),
             closed_at: new Date().toISOString()
           };
@@ -414,19 +414,20 @@ export function useTicketsDB() {
           return mockData;
         }
 
-        console.log('⚠️ [updateTicket] RPC Safe falhou, tentando RPC original:', { rpcSafeError, rpcSafeData });
+        console.log('⚠️ [updateTicket] RPC Simple falhou, tentando update_ticket_status_simple:', { rpcSimpleError, rpcSimpleData });
 
-        // Fallback para RPC original
-        const { data: rpcData, error: rpcError } = await supabase.rpc('finalize_ticket', {
-          ticket_id: ticketId
+        // Fallback para função de status simples
+        const { data: rpcStatusData, error: rpcStatusError } = await supabase.rpc('update_ticket_status_simple', {
+          ticket_uuid: ticketId,
+          new_status: 'closed'
         });
 
-        if (!rpcError && rpcData?.success) {
-          console.log('✅ [updateTicket] RPC original sucesso:', rpcData);
+        if (!rpcStatusError && rpcStatusData?.success) {
+          console.log('✅ [updateTicket] RPC Status Simple sucesso:', rpcStatusData);
           
           const mockData = {
             id: ticketId,
-            status: 'closed',
+            status: 'closed' as const,
             updated_at: new Date().toISOString(),
             closed_at: new Date().toISOString()
           };
@@ -440,7 +441,35 @@ export function useTicketsDB() {
           return mockData;
         }
 
-        console.log('⚠️ [updateTicket] RPC original falhou, tentando UPDATE direto:', { rpcError, rpcData });
+        console.log('⚠️ [updateTicket] RPC Status Simple falhou, tentando update_ticket_direct:', { rpcStatusError, rpcStatusData });
+
+        // Fallback para função direta
+        const { data: rpcDirectData, error: rpcDirectError } = await supabase.rpc('update_ticket_direct', {
+          ticket_uuid: ticketId,
+          ticket_status: 'closed',
+          close_timestamp: new Date().toISOString()
+        });
+
+        if (!rpcDirectError && rpcDirectData?.success) {
+          console.log('✅ [updateTicket] RPC Direct sucesso:', rpcDirectData);
+          
+          const mockData = {
+            id: ticketId,
+            status: 'closed' as const,
+            updated_at: new Date().toISOString(),
+            closed_at: new Date().toISOString()
+          };
+
+          setTickets(prev => 
+            prev.map(ticket => 
+              ticket.id === ticketId ? { ...ticket, ...mockData } : ticket
+            )
+          );
+
+          return mockData;
+        }
+
+        console.log('⚠️ [updateTicket] RPC Direct falhou, tentando UPDATE direto:', { rpcDirectError, rpcDirectData });
       }
 
       // Para outros tipos de update ou como último recurso para finalização
