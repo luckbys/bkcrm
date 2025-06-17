@@ -15,12 +15,7 @@ import { cn } from '@/lib/utils';
 import { ChatAnimations, ResponsiveAnimations } from './ticket-chat/chatAnimations';
 
 export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClose, isOpen }) => {
-  // Early return PRIMEIRO - antes de qualquer hook
-  if (!ticket || !isOpen) {
-    return null;
-  }
-
-  // Hook do chat para funcionalidades
+  // Hook do chat para funcionalidades - sempre chamar primeiro
   const chatState = useTicketChat(ticket);
   const { currentTicket } = chatState;
 
@@ -28,7 +23,7 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
   const { addChat, getChat } = useMinimizedChatManager();
 
   // Verificar se este chat está minimizado
-  const chatId = ticket.id?.toString();
+  const chatId = ticket?.id?.toString();
   const minimizedChat = chatId ? getChat(chatId) : null;
   const isMinimized = !!minimizedChat;
 
@@ -51,14 +46,19 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
       }
     };
 
-    if (isOpen && !isMinimized) {
+    if (isOpen && !isMinimized && ticket) {
       document.addEventListener('keydown', handleKeyDown);
     }
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, isMinimized]);
+  }, [isOpen, isMinimized, ticket]);
+
+  // Early return APÓS os hooks - agora é seguro
+  if (!ticket || !isOpen) {
+    return null;
+  }
 
   // Se está minimizado, não renderizar o modal (será renderizado pelo container)
   if (isMinimized) {

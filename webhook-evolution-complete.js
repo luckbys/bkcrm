@@ -367,12 +367,22 @@ async function processNewMessage(payload) {
     // Extrair informações da mensagem
     console.log('📊 Dados recebidos:', {
       remoteJid: messageData.key?.remoteJid,
+      participant: messageData.key?.participant,
       fromMe: messageData.key?.fromMe,
       messageKeys: Object.keys(messageData.message || {}),
       pushName: messageData.pushName,
       instanceName: instanceName
     });
-    const clientPhone = extractPhoneFromJid(messageData.key.remoteJid);
+    
+    // Extrair telefone do cliente (considerar grupos)
+    let clientPhone = extractPhoneFromJid(messageData.key.remoteJid);
+    
+    // Se for mensagem de grupo e não conseguiu extrair do remoteJid, tentar do participant
+    if (!clientPhone && messageData.key.participant) {
+      console.log('👥 Tentando extrair telefone do participant (mensagem de grupo)');
+      clientPhone = extractPhoneFromJid(messageData.key.participant);
+    }
+    
     const messageContent = extractMessageContent(messageData.message);
     const senderName = messageData.pushName || `Cliente ${clientPhone?.slice(-4) || 'Desconhecido'}`;
     
@@ -468,7 +478,9 @@ async function processNewMessage(payload) {
         success: true,
         message: 'Mensagem processada e ticket atualizado',
         ticketId,
-        customerId
+        customerId,
+        clientPhone,
+        senderName
       };
     } else {
       return { success: false, message: 'Erro ao salvar mensagem' };
@@ -550,34 +562,58 @@ async function findOrCreateCustomer({ phone, name, instanceName }) {
       }
     };
 
-    const { data: newCustomer, error: createError } = await supabase
-      .from('customers')
-      .insert([customerData])
-      .select('id, name, phone, email')
-      .single();
+    // Tentar criar cliente usando RPC para contornar RLS
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('create_customer_webhook', {
+        customer_name: name,
+        customer_phone: phone,
+        customer_email: customerData.email
+      });
 
-    if (createError) {
-      console.error('❌ Erro ao criar cliente:', createError);
-      // Se falhar por email duplicado, tentar com timestamp
-      if (createError.code === '23505' && createError.message.includes('email')) {
-        const timestampEmail = `whatsapp-${phone}-${Date.now()}@auto-generated.com`;
-        customerData.email = timestampEmail;
-        
-        const { data: retryCustomer, error: retryError } = await supabase
-          .from('customers')
-          .insert([customerData])
-          .select('id, name, phone, email')
-          .single();
+    if (rpcError || (rpcResult && !rpcResult.success)) {
+      console.error('❌ Erro RPC ao criar cliente:', rpcError || rpcResult.error);
+      
+      // Fallback: tentar inserção direta
+      const { data: newCustomer, error: createError } = await supabase
+        .from('customers')
+        .insert([customerData])
+        .select('id, name, phone, email')
+        .single();
+
+      if (createError) {
+        console.error('❌ Erro ao criar cliente (fallback):', createError);
+        // Se falhar por email duplicado, tentar com timestamp
+        if (createError.code === '23505' && createError.message.includes('email')) {
+          const timestampEmail = `whatsapp-${phone}-${Date.now()}@auto-generated.com`;
+          customerData.email = timestampEmail;
           
-        if (retryError) {
-          throw new Error(`Erro ao criar cliente (retry): ${retryError.message}`);
+          const { data: retryCustomer, error: retryError } = await supabase
+            .from('customers')
+            .insert([customerData])
+            .select('id, name, phone, email')
+            .single();
+            
+          if (retryError) {
+            throw new Error(`Erro ao criar cliente (retry): ${retryError.message}`);
+          }
+          
+          console.log('✅ Cliente criado com email alternativo:', retryCustomer);
+          return retryCustomer.id;
         }
-        
-        console.log('✅ Cliente criado com email alternativo:', retryCustomer);
-        return retryCustomer.id;
+        throw new Error(`Erro ao criar cliente: ${createError.message}`);
       }
-      throw new Error(`Erro ao criar cliente: ${createError.message}`);
+      
+      console.log('✅ Cliente criado via fallback:', newCustomer);
+      return newCustomer.id;
     }
+
+    // Sucesso via RPC
+    const newCustomer = {
+      id: rpcResult.customer_id,
+      name: name,
+      phone: phone,
+      email: customerData.email
+    };
 
     console.log('✅ Novo cliente criado automaticamente:', {
       id: newCustomer.id,
@@ -621,17 +657,18 @@ async function vinculateCustomerToTicket(ticketId, customerId) {
   }
 }
 
-// Função para buscar ticket existente
+// Função para buscar ticket existente (APENAS tickets abertos - não finalizados)
 async function findExistingTicket(clientPhone, departmentId) {
   try {
     console.log('🔍 Buscando ticket existente para:', { clientPhone, departmentId });
     
-    // Buscar ticket existente por telefone e status aberto
+    // ⚡ NOVA LÓGICA: Buscar APENAS tickets abertos (não finalizados)
+    // Tickets finalizados NÃO devem ser reabertos - sempre criar novo ticket
     const { data: tickets, error } = await supabase
       .from('tickets')
-      .select('id, customer_id')
+      .select('id, customer_id, status, created_at')
       .or(`metadata->>whatsapp_phone.eq.${clientPhone},metadata->>client_phone.eq.${clientPhone}`)
-      .in('status', ['open', 'pendente', 'atendimento'])
+             .in('status', ['open', 'atendimento']) // ✅ Mapeamento correto: open=pendente, atendimento=em atendimento
       .order('created_at', { ascending: false })
       .limit(1);
     
@@ -641,11 +678,33 @@ async function findExistingTicket(clientPhone, departmentId) {
     }
     
     if (tickets && tickets.length > 0) {
-      console.log('✅ Ticket existente encontrado:', tickets[0].id);
-      return tickets[0].id;
+      const ticket = tickets[0];
+      console.log('✅ Ticket aberto encontrado:', {
+        id: ticket.id,
+        status: ticket.status,
+        created_at: ticket.created_at
+      });
+      return ticket.id;
     }
     
-    console.log('ℹ️ Nenhum ticket aberto encontrado para o telefone');
+         // Verificar se existem tickets finalizados para este cliente (apenas para log)
+     const { data: finalizedTickets, error: finalizedError } = await supabase
+       .from('tickets')
+       .select('id, status, created_at')
+       .or(`metadata->>whatsapp_phone.eq.${clientPhone},metadata->>client_phone.eq.${clientPhone}`)
+       .in('status', ['closed', 'finalizado']) // ✅ Mapeamento correto: closed=finalizado
+       .order('created_at', { ascending: false })
+       .limit(1);
+
+     if (!finalizedError && finalizedTickets && finalizedTickets.length > 0) {
+       console.log('ℹ️ Cliente possui tickets finalizados, mas criando novo ticket:', {
+         ultimoTicketFinalizado: finalizedTickets[0].id,
+         status: finalizedTickets[0].status,
+         finalizado_em: finalizedTickets[0].created_at
+       });
+     }
+    
+    console.log('🆕 Nenhum ticket aberto encontrado - novo ticket será criado');
     return null;
   } catch (error) {
     console.error('❌ Erro ao buscar ticket:', error);
@@ -696,9 +755,35 @@ async function createTicketAutomatically(data) {
       }
     }
     
+    // Verificar se existiam tickets finalizados para este cliente
+    const { data: previousTickets, error: previousError } = await supabase
+      .from('tickets')
+      .select('id, status, title, created_at')
+      .or(`metadata->>whatsapp_phone.eq.${data.clientPhone},metadata->>client_phone.eq.${data.clientPhone}`)
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    let ticketSequence = 1;
+    let hasPreviousFinalized = false;
+    
+         if (!previousError && previousTickets && previousTickets.length > 0) {
+       ticketSequence = previousTickets.length + 1;
+       hasPreviousFinalized = previousTickets.some(t => ['closed', 'finalizado'].includes(t.status)); // ✅ Valores corretos
+      
+      if (hasPreviousFinalized) {
+        console.log('📋 Cliente possui tickets anteriores finalizados:', {
+          total: previousTickets.length,
+          ultimoStatus: previousTickets[0].status,
+          novoSequencial: ticketSequence
+        });
+      }
+    }
+
     // Criar ticket no banco
     const ticketData = {
-      title: `Mensagem de ${data.clientName}`,
+      title: hasPreviousFinalized 
+        ? `Novo Atendimento - ${data.clientName} (#${ticketSequence})`
+        : `Mensagem de ${data.clientName}`,
       description: data.firstMessage,
       status: 'open',
       priority: 'medium',
@@ -713,6 +798,9 @@ async function createTicketAutomatically(data) {
         first_message: data.firstMessage,
         created_via: 'webhook_auto',
         source: 'evolution_api',
+        ticket_sequence: ticketSequence,
+        is_new_conversation: hasPreviousFinalized,
+        previous_tickets_count: previousTickets?.length || 0,
         // Se não tem cliente vinculado, manter info anônima
         ...(data.customerId ? {} : {
           anonymous_contact: {
@@ -936,14 +1024,42 @@ async function processChatUpdate(payload) {
 
 // Funções auxiliares
 function extractPhoneFromJid(jid) {
-  if (!jid) return null;
+  console.log('📱 Extraindo telefone de JID:', jid);
+  
+  if (!jid) {
+    console.log('❌ JID vazio ou nulo');
+    return null;
+  }
+  
+  // Detectar se é mensagem de grupo
+  if (jid.includes('@g.us')) {
+    console.log('👥 JID de grupo detectado, não é um telefone individual');
+    return null;
+  }
   
   // Remover sufixos do WhatsApp
-  const cleanJid = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+  let cleanJid = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+  console.log('🧹 JID limpo:', cleanJid);
   
-  // Verificar se é um número válido
-  if (!/^\d+$/.test(cleanJid)) return null;
+  // Verificar se é um número válido (apenas dígitos)
+  if (!/^\d+$/.test(cleanJid)) {
+    console.log('❌ JID não contém apenas números:', cleanJid);
+    return null;
+  }
   
+  // Verificar tamanho mínimo
+  if (cleanJid.length < 10) {
+    console.log('❌ Número muito curto (mínimo 10 dígitos):', cleanJid);
+    return null;
+  }
+  
+  // Adicionar código do país se necessário (Brasil = 55)
+  if (cleanJid.length >= 10 && !cleanJid.startsWith('55')) {
+    console.log('🇧🇷 Adicionando código do país (55) ao número:', cleanJid);
+    cleanJid = '55' + cleanJid;
+  }
+  
+  console.log('✅ Número de telefone extraído:', cleanJid);
   return cleanJid;
 }
 

@@ -1,45 +1,59 @@
 import React from 'react';
-import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
+import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../ui/tooltip';
+import { Separator } from '../../ui/separator';
+import { Switch } from '../../ui/switch';
 import { 
-  MessageSquare,
-  User,
-  Mail,
-  Phone,
-  Copy,
-  FileText,
-  Clock,
-  UserCheck,
-  Tag,
-  Building,
-  Eye,
-  Zap,
   Settings,
-  Smartphone,
+  Users,
+  Tag,
+  ChevronRight,
+  Volume2,
+  VolumeX,
+  LayoutGrid,
+  LayoutList,
   Wifi,
   WifiOff,
+  UserCheck,
+  ArrowRight,
+  Star,
+  Copy,
+  MoreHorizontal,
+  User,
+  CheckCircle,
+  X,
+  Zap,
+  FileText,
+  MessageSquare,
+  Mail,
+  Phone,
+  Clock,
+  Building,
+  Eye,
+  Smartphone,
   RefreshCw
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { UseTicketChatReturn } from '../../../types/ticketChat';
+import { useTicketsDB } from '../../../hooks/useTicketsDB';
+import { useToast } from '../../../hooks/use-toast';
 import { ChatAnimations, ResponsiveAnimations } from './chatAnimations';
+import { supabase } from '../../../lib/supabase';
 
 interface TicketChatSidebarProps {
   showSidebar: boolean;
   chatState: UseTicketChatReturn;
+  onClose?: () => void;
 }
 
 export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
   showSidebar,
-  chatState
+  chatState,
+  onClose
 }) => {
+  const { toast } = useToast();
+  const { updateTicket, refreshTickets } = useTicketsDB();
   const {
     currentTicket,
     realTimeMessages,
@@ -57,7 +71,8 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
     setShowCustomerModal,
     toggleSidebar,
     setSoundEnabled,
-    setCompactMode
+    setCompactMode,
+    setCurrentTicket
   } = chatState;
 
   // Calcular contadores de mensagens
@@ -90,6 +105,136 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
 
   const openCustomerModal = () => {
     setShowCustomerModal(true);
+  };
+
+  // Função para finalizar ticket rapidamente
+  const handleQuickFinishTicket = async () => {
+    if (!currentTicket) return;
+
+    console.log('🎯 [SIDEBAR] Iniciando finalização rápida do ticket:', {
+      id: currentTicket.id,
+      originalId: currentTicket.originalId,
+      status: currentTicket.status
+    });
+
+    try {
+      // Atualizar estado local imediatamente para feedback visual
+      setCurrentTicket((prev: any) => ({
+        ...prev,
+        status: 'finalizado',
+        updated_at: new Date().toISOString()
+      }));
+
+      // Tentar persistir no banco de dados com múltiplas estratégias
+      let persistenceSuccess = false;
+      const ticketId = currentTicket.originalId || currentTicket.id;
+
+      if (ticketId) {
+        console.log('💾 [SIDEBAR] Tentando salvar no banco:', { ticketId });
+        
+        // Estratégia 1: RPC finalize_ticket_safe (nova função que bypassa triggers)
+        try {
+          console.log('💾 [SIDEBAR-Estratégia 1] RPC finalize_ticket_safe...');
+          const { data: rpcSafeResult, error: rpcSafeError } = await supabase.rpc('finalize_ticket_safe', {
+            ticket_uuid: ticketId
+          });
+          
+          if (!rpcSafeError && rpcSafeResult?.success) {
+            persistenceSuccess = true;
+            console.log('✅ [SIDEBAR-Estratégia 1] RPC Safe Sucesso!', rpcSafeResult);
+          } else {
+            console.log('❌ [SIDEBAR-Estratégia 1] RPC Safe falhou:', rpcSafeError || rpcSafeResult);
+            throw new Error(rpcSafeError?.message || rpcSafeResult?.error || 'RPC Safe falhou');
+          }
+        } catch (error) {
+          console.log('❌ [SIDEBAR-Estratégia 1] RPC Safe falhou:', error);
+          
+          // Estratégia 2: RPC finalize_ticket original
+          try {
+            console.log('💾 [SIDEBAR-Estratégia 2] RPC finalize_ticket original...');
+            const { data: rpcResult, error: rpcError } = await supabase.rpc('finalize_ticket', {
+              ticket_id: ticketId
+            });
+            
+            if (!rpcError && rpcResult?.success) {
+              persistenceSuccess = true;
+              console.log('✅ [SIDEBAR-Estratégia 2] RPC Original Sucesso!', rpcResult);
+            } else {
+              console.log('❌ [SIDEBAR-Estratégia 2] RPC Original falhou:', rpcError || rpcResult);
+              throw new Error(rpcError?.message || rpcResult?.error || 'RPC Original falhou');
+            }
+          } catch (error2) {
+            console.log('❌ [SIDEBAR-Estratégia 2] RPC Original falhou:', error2);
+            
+            // Estratégia 3: UPDATE direto via updateTicket
+            try {
+              console.log('💾 [SIDEBAR-Estratégia 3] UPDATE via updateTicket...');
+              await updateTicket(ticketId, {
+                status: 'closed',
+                updated_at: new Date().toISOString(),
+                closed_at: new Date().toISOString()
+              });
+              persistenceSuccess = true;
+              console.log('✅ [SIDEBAR-Estratégia 3] UPDATE Sucesso!');
+            } catch (error3) {
+              console.log('❌ [SIDEBAR-Estratégia 3] UPDATE falhou:', error3);
+            }
+          }
+        }
+        
+        // Se conseguiu salvar no banco, atualizar contadores
+        if (persistenceSuccess) {
+          try {
+            await refreshTickets();
+            console.log('✅ [SIDEBAR] Contadores atualizados');
+          } catch (error) {
+            console.log('⚠️ [SIDEBAR] Erro ao atualizar contadores:', error);
+          }
+        }
+      }
+
+      // Mostrar mensagem de sucesso
+      const ticketTitle = currentTicket.subject || currentTicket.title || 'Ticket';
+      
+      if (persistenceSuccess) {
+        toast({
+          title: "🎉 Ticket Finalizado!",
+          description: `"${ticketTitle}" foi finalizado com sucesso e os contadores foram atualizados.`,
+          variant: "default",
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+        
+        // Fechar o modal após 2 segundos
+        if (onClose) {
+          setTimeout(() => {
+            console.log('🔄 [SIDEBAR] Fechando modal automaticamente...');
+            onClose();
+          }, 2000);
+        }
+      } else {
+        toast({
+          title: "⚠️ Ticket Finalizado (Apenas Local)",
+          description: `"${ticketTitle}" foi finalizado localmente. O status será sincronizado quando possível.`,
+          variant: "default",
+          className: "bg-yellow-50 border-yellow-200 text-yellow-800"
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ [SIDEBAR] Erro ao finalizar ticket:', error);
+      toast({
+        title: "❌ Erro",
+        description: "Não foi possível finalizar o ticket. Tente novamente.",
+        variant: "destructive"
+      });
+      
+      // Reverter estado local em caso de erro completo
+      setCurrentTicket((prev: any) => ({
+        ...prev,
+        status: currentTicket.status,
+        updated_at: currentTicket.updated_at
+      }));
+    }
   };
 
   if (!showSidebar) {
@@ -314,57 +459,79 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 space-y-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openChangeStatusModal()}
-              className={cn(
-                "w-full justify-start h-12 hover:bg-blue-50 hover:border-blue-300",
-                ChatAnimations.transition.colors
-              )}
-            >
-              <Tag className="w-4 h-4 mr-2" />
-              Alterar Status
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openAssignAgentModal()}
-              className={cn(
-                "w-full justify-start h-12 hover:bg-green-50 hover:border-green-300",
-                ChatAnimations.transition.colors
-              )}
-            >
-              <UserCheck className="w-4 h-4 mr-2" />
-              Atribuir Agente
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openCustomerModal()}
-              className={cn(
-                "w-full justify-start h-12 hover:bg-orange-50 hover:border-orange-300",
-                ChatAnimations.transition.colors
-              )}
-            >
-              <User className="w-4 h-4 mr-2" />
-              Atribuir Cliente
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openTransferModal()}
-              className={cn(
-                "w-full justify-start h-12 hover:bg-purple-50 hover:border-purple-300",
-                ChatAnimations.transition.colors
-              )}
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Transferir Ticket
-            </Button>
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-gray-700 flex items-center">
+                <Zap className="w-4 h-4 mr-2 text-orange-500" />
+                Ações Rápidas
+              </h4>
+              
+              <div className="space-y-2">
+                {/* Botão Finalizar Ticket - Apenas para tickets não finalizados */}
+                {currentTicket?.status !== 'finalizado' && currentTicket?.status !== 'closed' && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleQuickFinishTicket}
+                    className="w-full justify-start bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 transition-all duration-200"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    ✅ Finalizar Ticket
+                  </Button>
+                )}
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openChangeStatusModal()}
+                  className={cn(
+                    "w-full justify-start h-12 hover:bg-blue-50 hover:border-blue-300",
+                    ChatAnimations.transition.colors
+                  )}
+                >
+                  <Tag className="w-4 h-4 mr-2" />
+                  Alterar Status
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openAssignAgentModal()}
+                  className={cn(
+                    "w-full justify-start h-12 hover:bg-green-50 hover:border-green-300",
+                    ChatAnimations.transition.colors
+                  )}
+                >
+                  <UserCheck className="w-4 h-4 mr-2" />
+                  Atribuir Agente
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openCustomerModal()}
+                  className={cn(
+                    "w-full justify-start h-12 hover:bg-orange-50 hover:border-orange-300",
+                    ChatAnimations.transition.colors
+                  )}
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  Atribuir Cliente
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openTransferModal()}
+                  className={cn(
+                    "w-full justify-start h-12 hover:bg-purple-50 hover:border-purple-300",
+                    ChatAnimations.transition.colors
+                  )}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Transferir Ticket
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

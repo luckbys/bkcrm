@@ -276,13 +276,25 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
 
   // Estatísticas por status
   const statusCounts = useMemo(() => {
-    return {
+    // Debug: Verificar status dos tickets
+    console.log('🔍 Debug - Status dos tickets:');
+    const statusDistribution: Record<string, number> = {};
+    currentTickets.forEach(ticket => {
+      statusDistribution[ticket.status] = (statusDistribution[ticket.status] || 0) + 1;
+    });
+    console.log('📊 Distribuição de status:', statusDistribution);
+    
+    const counts = {
       todos: currentTickets.length,
       pendente: currentTickets.filter(t => t.status === 'pendente').length,
       atendimento: currentTickets.filter(t => t.status === 'atendimento').length,
       finalizado: currentTickets.filter(t => t.status === 'finalizado').length,
       cancelado: currentTickets.filter(t => t.status === 'cancelado').length,
     };
+    
+    console.log('🎯 Contadores finais:', counts);
+    
+    return counts;
   }, [currentTickets]);
 
   // Auto-refresh

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, FileText, Search, Wifi, WifiOff, Settings, Volume2, VolumeX, Minimize2, Maximize2 } from 'lucide-react';
+import { X, FileText, Search, Wifi, WifiOff, Settings, Volume2, VolumeX, Minimize2, Maximize2, CheckCircle } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { cn } from '../../../lib/utils';
 import { UseTicketChatReturn } from '../../../types/ticketChat';
 import { ChatAnimations, ResponsiveAnimations } from './chatAnimations';
+import { useTicketsDB } from '../../../hooks/useTicketsDB';
+import { useToast } from '../../../hooks/use-toast';
+import { supabase } from '../../../lib/supabase';
 
 interface TicketChatHeaderProps {
   currentTicket: any;
@@ -26,6 +29,8 @@ export const TicketChatHeader: React.FC<TicketChatHeaderProps> = ({
   onMinimize,
   chatState
 }) => {
+  const { toast } = useToast();
+  const { updateTicket, refreshTickets, finalizeTicket } = useTicketsDB();
   const {
     messageSearchTerm,
     setMessageSearchTerm,
@@ -40,7 +45,8 @@ export const TicketChatHeader: React.FC<TicketChatHeaderProps> = ({
     whatsappStatus,
     toggleSidebar,
     toggleMinimize,
-    realTimeMessages
+    realTimeMessages,
+    setCurrentTicket
   } = chatState;
 
   const getStatusColor = (status: string) => {
@@ -67,6 +73,130 @@ export const TicketChatHeader: React.FC<TicketChatHeaderProps> = ({
     total: realTimeMessages.length,
     public: realTimeMessages.filter(m => !m.isInternal).length,
     internal: realTimeMessages.filter(m => m.isInternal).length
+  };
+
+  // Função para finalizar ticket rapidamente
+  const handleQuickFinishTicket = async () => {
+    if (!currentTicket) return;
+
+    const confirmMessage = `Tem certeza que deseja finalizar o ticket "${currentTicket.subject || currentTicket.title}"?\n\nEsta ação irá:\n• Marcar o ticket como "Finalizado"\n• Fechar a conversa\n• Atualizar os contadores automaticamente`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      console.log('🎯 Finalizando ticket:', {
+        ticketId: currentTicket?.originalId || currentTicket?.id,
+        currentStatus: currentTicket.status
+      });
+
+      // Atualizar estado local imediatamente
+      setCurrentTicket((prev: any) => ({
+        ...prev,
+        status: 'closed',
+        updated_at: new Date().toISOString()
+      }));
+
+      // Tentar finalizar no banco usando a nova função específica
+      const ticketId = currentTicket?.originalId || currentTicket?.id;
+      let persistenceSuccess = false;
+      
+      if (ticketId) {
+        try {
+          console.log('💾 Usando finalizeTicket...');
+          
+          // Usar a função finalizeTicket diretamente
+          await finalizeTicket(ticketId);
+          persistenceSuccess = true;
+          console.log('✅ Ticket finalizado via finalizeTicket!');
+          
+        } catch (error) {
+          console.log('❌ finalizeTicket falhou, tentando RPC direto:', error);
+          
+          try {
+            // Fallback: usar RPC diretamente
+            console.log('🔄 Fallback: usando RPC diretamente...');
+            const { data: rpcResult, error: sqlError } = await supabase.rpc('finalize_ticket', {
+              ticket_id: ticketId
+            });
+            
+            if (!sqlError && rpcResult?.success) {
+              persistenceSuccess = true;
+              console.log('✅ Sucesso via RPC direto!', rpcResult);
+            } else {
+              console.log('❌ RPC direto falhou:', sqlError || rpcResult);
+              
+              // Último fallback: UPDATE simples
+              console.log('🔄 Último fallback: UPDATE simples...');
+              await updateTicket(ticketId, {
+                status: 'closed',
+                updated_at: new Date().toISOString(),
+                closed_at: new Date().toISOString()
+              });
+              persistenceSuccess = true;
+              console.log('✅ Sucesso via UPDATE simples!');
+            }
+          } catch (fallbackError) {
+            console.log('❌ Todas as estratégias falharam:', fallbackError);
+            persistenceSuccess = false;
+          }
+        }
+        
+        // Se conseguiu salvar no banco, atualizar contadores
+        if (persistenceSuccess) {
+          try {
+            console.log('🔄 Recarregando tickets do banco...');
+            await refreshTickets();
+            console.log('✅ Contadores atualizados - Tickets recarregados do banco');
+          } catch (error) {
+            console.log('⚠️ Erro ao atualizar contadores:', error);
+          }
+        } else {
+          console.log('⚠️ Não foi possível salvar no banco - mantendo apenas estado local');
+        }
+      }
+
+      // Mostrar mensagem de sucesso
+      const ticketTitle = currentTicket.subject || currentTicket.title || 'Ticket';
+      
+      if (persistenceSuccess) {
+        toast({
+          title: "🎉 Ticket Finalizado!",
+          description: `"${ticketTitle}" foi finalizado com sucesso e os contadores foram atualizados.`,
+          variant: "default",
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+        
+        // Fechar o modal após 2 segundos
+        if (onClose) {
+          setTimeout(() => {
+            console.log('🔄 Fechando modal automaticamente...');
+            onClose();
+          }, 2000);
+        }
+      } else {
+        toast({
+          title: "⚠️ Ticket Finalizado (Apenas Local)",
+          description: `"${ticketTitle}" foi finalizado localmente. O status será sincronizado quando possível.`,
+          variant: "default",
+          className: "bg-yellow-50 border-yellow-200 text-yellow-800"
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Erro ao finalizar ticket:', error);
+      toast({
+        title: "❌ Erro",
+        description: "Não foi possível finalizar o ticket. Tente novamente.",
+        variant: "destructive"
+      });
+      
+      // Reverter estado local em caso de erro completo
+      setCurrentTicket((prev: any) => ({
+        ...prev,
+        status: currentTicket.status,
+        updated_at: currentTicket.updated_at
+      }));
+    }
   };
 
   return (
@@ -151,6 +281,25 @@ export const TicketChatHeader: React.FC<TicketChatHeaderProps> = ({
               )}></div>
               {currentTicket?.status || 'Indefinido'}
             </Badge>
+            
+            {/* Botão de Finalizar Ticket - Destaque */}
+            {(currentTicket?.status === 'open' || currentTicket?.status === 'in_progress' || currentTicket?.status === 'atendimento') && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleQuickFinishTicket}
+                className={cn(
+                  "bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700",
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-medium",
+                  ChatAnimations.transition.colors,
+                  ChatAnimations.transition.scale
+                )}
+                title="Finalizar ticket rapidamente"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Finalizar
+              </Button>
+            )}
             
             {/* Controles UX - Animações suaves */}
             <Button

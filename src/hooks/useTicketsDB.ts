@@ -379,11 +379,72 @@ export function useTicketsDB() {
     }
   }, [user, fetchTickets]);
 
-  // Atualizar ticket
+  // Atualizar ticket com fallback para RPC
   const updateTicket = useCallback(async (ticketId: string, updates: Partial<DatabaseTicket>) => {
     try {
       setLoading(true);
       setError(null);
+
+      // Se é uma tentativa de finalizar ticket, usar RPC seguro primeiro
+      if (updates.status === 'closed' || updates.status === 'finalizado') {
+        console.log('🔄 [updateTicket] Finalizando ticket - usando RPC finalize_ticket_safe...');
+        
+        const { data: rpcSafeData, error: rpcSafeError } = await supabase.rpc('finalize_ticket_safe', {
+          ticket_uuid: ticketId
+        });
+
+        if (!rpcSafeError && rpcSafeData?.success) {
+          console.log('✅ [updateTicket] RPC Safe sucesso:', rpcSafeData);
+          
+          // Simular dados de retorno para compatibilidade
+          const mockData = {
+            id: ticketId,
+            status: 'closed',
+            updated_at: new Date().toISOString(),
+            closed_at: new Date().toISOString()
+          };
+
+          // Atualizar lista local
+          setTickets(prev => 
+            prev.map(ticket => 
+              ticket.id === ticketId ? { ...ticket, ...mockData } : ticket
+            )
+          );
+
+          return mockData;
+        }
+
+        console.log('⚠️ [updateTicket] RPC Safe falhou, tentando RPC original:', { rpcSafeError, rpcSafeData });
+
+        // Fallback para RPC original
+        const { data: rpcData, error: rpcError } = await supabase.rpc('finalize_ticket', {
+          ticket_id: ticketId
+        });
+
+        if (!rpcError && rpcData?.success) {
+          console.log('✅ [updateTicket] RPC original sucesso:', rpcData);
+          
+          const mockData = {
+            id: ticketId,
+            status: 'closed',
+            updated_at: new Date().toISOString(),
+            closed_at: new Date().toISOString()
+          };
+
+          setTickets(prev => 
+            prev.map(ticket => 
+              ticket.id === ticketId ? { ...ticket, ...mockData } : ticket
+            )
+          );
+
+          return mockData;
+        }
+
+        console.log('⚠️ [updateTicket] RPC original falhou, tentando UPDATE direto:', { rpcError, rpcData });
+      }
+
+      // Para outros tipos de update ou como último recurso para finalização
+      console.log('💾 [updateTicket] Tentando UPDATE direto:', { ticketId, updates });
 
       const { data, error: updateError } = await supabase
         .from('tickets')
@@ -392,7 +453,12 @@ export function useTicketsDB() {
         .select()
         .single();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.log('❌ [updateTicket] UPDATE direto falhou:', updateError);
+        throw updateError;
+      }
+
+      console.log('✅ [updateTicket] UPDATE direto sucesso:', data);
 
       // Atualizar lista local
       setTickets(prev => 
@@ -403,7 +469,7 @@ export function useTicketsDB() {
 
       return data;
     } catch (err: any) {
-      console.error('Erro ao atualizar ticket:', err);
+      console.error('❌ [updateTicket] Erro final:', err);
       setError(err.message);
       throw err;
     } finally {
@@ -483,6 +549,22 @@ export function useTicketsDB() {
     }
   }, [user]);
 
+  // Função para mapear status do banco para formato do frontend
+  const mapStatus = (status: string): 'pendente' | 'atendimento' | 'finalizado' | 'cancelado' => {
+    const statusMap: Record<string, 'pendente' | 'atendimento' | 'finalizado' | 'cancelado'> = {
+      'pendente': 'pendente',
+      'open': 'pendente',
+      'atendimento': 'atendimento',
+      'in_progress': 'atendimento',
+      'finalizado': 'finalizado',
+      'resolved': 'finalizado',
+      'closed': 'finalizado',
+      'cancelado': 'cancelado',
+      'cancelled': 'cancelado'
+    };
+    return statusMap[status] || 'pendente';
+  };
+
   // Função para converter tickets do banco para o formato esperado pelo componente
   const getCompatibilityTickets = useCallback((): CompatibilityTicket[] => {
     return tickets.map((ticket, index) => {
@@ -516,7 +598,7 @@ export function useTicketsDB() {
         id: uniqueId,
         client: clientName,
         subject: ticket.subject || ticket.title,
-        status: ticket.status as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
+        status: mapStatus(ticket.status),
         channel: ticket.channel,
         lastMessage: formatLastMessage(ticket.last_message_at),
         unread: ticket.unread,
@@ -563,6 +645,85 @@ export function useTicketsDB() {
     return priorityMap[priority] || 'normal';
   };
 
+  // Função específica para finalizar tickets usando RPC
+  const finalizeTicket = useCallback(async (ticketId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('🎯 [finalizeTicket] Iniciando finalização via RPC:', { ticketId });
+
+      // Tentar primeiro com RPC que contorna RLS
+      const { data: rpcData, error: rpcError } = await supabase.rpc('finalize_ticket', {
+        ticket_id: ticketId
+      });
+
+      if (rpcError) {
+        console.log('❌ [finalizeTicket] RPC falhou:', rpcError);
+        
+        // Fallback: tentar UPDATE direto
+        console.log('🔄 [finalizeTicket] Tentando UPDATE direto como fallback...');
+        const { data: updateData, error: updateError } = await supabase
+          .from('tickets')
+          .update({
+            status: 'closed' as const,
+            updated_at: new Date().toISOString(),
+            closed_at: new Date().toISOString()
+          })
+          .eq('id', ticketId)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.log('❌ [finalizeTicket] UPDATE também falhou:', updateError);
+          throw updateError;
+        }
+
+        console.log('✅ [finalizeTicket] UPDATE direto sucesso:', updateData);
+
+        // Atualizar lista local
+        setTickets(prev => 
+          prev.map(ticket => 
+            ticket.id === ticketId ? { ...ticket, ...updateData } : ticket
+          )
+        );
+
+        return updateData;
+      }
+
+      if (rpcData?.success) {
+        console.log('✅ [finalizeTicket] RPC sucesso:', rpcData);
+        
+        // Criar dados mockados para compatibilidade
+        const mockData: Partial<DatabaseTicket> = {
+          id: ticketId,
+          status: 'closed' as const,
+          updated_at: new Date().toISOString(),
+          closed_at: new Date().toISOString()
+        };
+
+        // Atualizar lista local
+        setTickets(prev => 
+          prev.map(ticket => 
+            ticket.id === ticketId ? { ...ticket, ...mockData } : ticket
+          )
+        );
+
+        return mockData;
+      } else {
+        console.log('❌ [finalizeTicket] RPC retornou erro:', rpcData?.error);
+        throw new Error(rpcData?.error || 'Falha na finalização via RPC');
+      }
+
+    } catch (err: any) {
+      console.error('❌ [finalizeTicket] Erro final:', err);
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Carregar tickets na inicialização
   useEffect(() => {
     if (user) {
@@ -588,6 +749,8 @@ export function useTicketsDB() {
     
     // Utilidades
     formatLastMessage,
-    mapPriority
+    mapPriority,
+    mapStatus,
+    finalizeTicket
   };
 } 

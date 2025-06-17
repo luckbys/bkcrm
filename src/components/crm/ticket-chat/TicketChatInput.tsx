@@ -19,7 +19,8 @@ import {
   Eye,
   X,
   Zap,
-  Loader2
+  Loader2,
+  CheckCircle
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { QuickTemplate, UseTicketChatReturn } from '../../../types/ticketChat';

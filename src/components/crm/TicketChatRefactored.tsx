@@ -88,6 +88,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
       <TicketChatSidebar
         showSidebar={showSidebar}
         chatState={chatState}
+        onClose={onClose}
       />
 
       {/* Modals */}
