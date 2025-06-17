@@ -8,19 +8,30 @@ import { supabase } from '../lib/supabase';
 import { LocalMessage, QuickTemplate, UseTicketChatReturn } from '../types/ticketChat';
 import { useEvolutionSender } from './useEvolutionSender';
 
-// Função helper para extrair informações do cliente do ticket
+// FUNÇÃO APRIMORADA PARA EXTRAIR INFORMAÇÕES DO CLIENTE COM DADOS ENRIQUECIDOS
 const extractClientInfo = (ticket: any) => {
+  console.log('👤 [EXTRAÇÃO] Extraindo informações do cliente:', ticket?.id);
+  
   if (!ticket) {
     return {
       clientName: 'Cliente Anônimo',
       clientPhone: 'Telefone não informado',
-      isWhatsApp: false
+      clientPhoneFormatted: 'Telefone não informado',
+      clientPhoneRaw: null,
+      whatsappJid: null,
+      isWhatsApp: false,
+      canReply: false,
+      country: null,
+      phoneFormat: null
     };
   }
 
-  // Verificar se é ticket do WhatsApp via metadata
   const metadata = ticket.metadata || {};
+  
+  // DETECTAR SE É WHATSAPP COM DADOS ENRIQUECIDOS
   const isWhatsApp = Boolean(
+    metadata.enhanced_processing ||
+    metadata.is_whatsapp ||
     metadata.created_from_whatsapp || 
     metadata.whatsapp_phone || 
     metadata.anonymous_contact || 
@@ -29,9 +40,21 @@ const extractClientInfo = (ticket: any) => {
 
   let clientName = 'Cliente Anônimo';
   let clientPhone = 'Telefone não informado';
+  let clientPhoneFormatted = 'Telefone não informado';
+  let clientPhoneRaw = null;
+  let whatsappJid = null;
+  let canReply = false;
+  let country = null;
+  let phoneFormat = null;
 
   if (isWhatsApp) {
-    // Extrair nome do WhatsApp
+    console.log('📱 [EXTRAÇÃO] Processando ticket WhatsApp:', {
+      enhanced: metadata.enhanced_processing,
+      hasPhoneInfo: !!metadata.phone_info,
+      hasResponseData: !!metadata.response_data
+    });
+
+    // EXTRAIR NOME COM PRIORIDADE PARA DADOS ENRIQUECIDOS
     clientName = metadata.client_name || 
                 metadata.whatsapp_name || 
                 (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.name : metadata.anonymous_contact) ||
@@ -39,43 +62,108 @@ const extractClientInfo = (ticket: any) => {
                 ticket.whatsapp_contact_name ||
                 'Cliente WhatsApp';
 
-    // Extrair telefone do WhatsApp com múltiplas fontes
-    clientPhone = metadata.client_phone || 
-                 metadata.whatsapp_phone || 
-                 (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.phone : null) ||
-                 ticket.client_phone ||
-                 ticket.customerPhone ||
-                 ticket.phone ||
-                 // Tentar extrair do próprio nome se contiver números
-                 (clientName && clientName.match(/\d{10,}/)?.[0]) ||
-                 'Telefone não informado';
-
-    // Formatar telefone brasileiro se necessário
-    if (clientPhone && clientPhone !== 'Telefone não informado' && !clientPhone.includes('+')) {
-      if (clientPhone.length >= 10) {
-        // Formatar como +55 (11) 99999-9999
-        const clean = clientPhone.replace(/\D/g, '');
-        if (clean.length === 13 && clean.startsWith('55')) {
-          const formatted = `+55 (${clean.substring(2, 4)}) ${clean.substring(4, 9)}-${clean.substring(9)}`;
-          clientPhone = formatted;
-        }
+    // EXTRAIR TELEFONES COM SISTEMA APRIMORADO
+    if (metadata.enhanced_processing && metadata.phone_formatted) {
+      // Dados do sistema aprimorado
+      clientPhoneRaw = metadata.client_phone;
+      clientPhoneFormatted = metadata.phone_formatted;
+      clientPhone = clientPhoneFormatted;
+      whatsappJid = metadata.whatsapp_jid;
+      canReply = metadata.can_reply || metadata.response_data?.canReply || false;
+      
+      // Informações do país e formato
+      if (metadata.phone_info) {
+        country = metadata.phone_info.country;
+        phoneFormat = metadata.phone_info.format;
       }
+      
+      console.log('✅ [EXTRAÇÃO] Dados enriquecidos encontrados:', {
+        raw: clientPhoneRaw,
+        formatted: clientPhoneFormatted,
+        canReply,
+        country,
+        format: phoneFormat
+      });
+    } else {
+      // Sistema legado - extrair e formatar
+      clientPhoneRaw = metadata.client_phone || 
+                      metadata.whatsapp_phone || 
+                      (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.phone : null) ||
+                      ticket.client_phone ||
+                      ticket.customerPhone ||
+                      ticket.phone ||
+                      null;
+
+      if (clientPhoneRaw && clientPhoneRaw !== 'Telefone não informado') {
+        // Formatar telefone brasileiro
+        const clean = clientPhoneRaw.replace(/\D/g, '');
+        if (clean.length >= 12 && clean.startsWith('55')) {
+          const ddd = clean.substring(2, 4);
+          const number = clean.substring(4);
+          if (number.length === 9) {
+            clientPhoneFormatted = `+55 (${ddd}) ${number.substring(0, 5)}-${number.substring(5)}`;
+            country = 'brazil';
+            phoneFormat = 'brazil_mobile';
+          } else if (number.length === 8) {
+            clientPhoneFormatted = `+55 (${ddd}) ${number.substring(0, 4)}-${number.substring(4)}`;
+            country = 'brazil';
+            phoneFormat = 'brazil_landline';
+          }
+        } else {
+          clientPhoneFormatted = clientPhoneRaw;
+        }
+        clientPhone = clientPhoneFormatted;
+        canReply = true; // Assumir que pode responder se tem telefone
+      } else {
+        clientPhone = 'Telefone não informado';
+        clientPhoneFormatted = 'Telefone não informado';
+      }
+      
+      console.log('📞 [EXTRAÇÃO] Sistema legado usado:', {
+        raw: clientPhoneRaw,
+        formatted: clientPhoneFormatted,
+        canReply
+      });
     }
   } else {
     // Ticket normal (não WhatsApp)
     clientName = ticket.client || ticket.customer_name || 'Cliente';
-    clientPhone = ticket.customerPhone || ticket.customer_phone || 'Telefone não informado';
+    clientPhoneRaw = ticket.customerPhone || ticket.customer_phone;
+    clientPhone = clientPhoneRaw || 'Telefone não informado';
+    clientPhoneFormatted = clientPhone;
+    canReply = false; // Não pode responder via WhatsApp
+    
+    console.log('💼 [EXTRAÇÃO] Ticket não-WhatsApp:', {
+      name: clientName,
+      phone: clientPhone
+    });
   }
 
   // Garantir que os valores sejam sempre strings válidas
-  const validClientName = typeof clientName === 'string' ? clientName : 'Cliente Anônimo';
-  const validClientPhone = typeof clientPhone === 'string' ? clientPhone : 'Telefone não informado';
-
-  return {
-    clientName: validClientName,
-    clientPhone: validClientPhone,
-    isWhatsApp
+  const result = {
+    clientName: typeof clientName === 'string' ? clientName : 'Cliente Anônimo',
+    clientPhone: typeof clientPhone === 'string' ? clientPhone : 'Telefone não informado',
+    clientPhoneFormatted: typeof clientPhoneFormatted === 'string' ? clientPhoneFormatted : 'Telefone não informado',
+    clientPhoneRaw,
+    whatsappJid,
+    isWhatsApp,
+    canReply,
+    country,
+    phoneFormat,
+    // Dados para resposta
+    responseData: metadata.response_data || null,
+    instanceName: metadata.instance_name || null
   };
+
+  console.log('✅ [EXTRAÇÃO] Informações extraídas:', {
+    name: result.clientName,
+    phoneFormatted: result.clientPhoneFormatted,
+    canReply: result.canReply,
+    isWhatsApp: result.isWhatsApp,
+    country: result.country
+  });
+
+  return result;
 };
 
 export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {

@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Separator } from '../../ui/separator';
 import { Switch } from '../../ui/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
+import { Progress } from '../../ui/progress';
 import { 
   Settings,
   Users,
   Tag,
   ChevronRight,
+  ChevronDown,
   Volume2,
   VolumeX,
   LayoutGrid,
@@ -32,7 +35,23 @@ import {
   Building,
   Eye,
   Smartphone,
-  RefreshCw
+  RefreshCw,
+  Activity,
+  TrendingUp,
+  Shield,
+  Heart,
+  Sparkles,
+  ChevronUp,
+  Loader2,
+  MapPin,
+  Calendar,
+  Timer,
+  Target,
+  Bookmark,
+  Share,
+  AlertCircle,
+  Info,
+  ExternalLink
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { UseTicketChatReturn } from '../../../types/ticketChat';
@@ -54,6 +73,17 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
 }) => {
   const { toast } = useToast();
   const { updateTicket, refreshTickets } = useTicketsDB();
+  
+  // Estados para UI aprimorada
+  const [expandedSections, setExpandedSections] = useState({
+    client: true,
+    ticket: true,
+    whatsapp: true,
+    actions: true,
+    stats: false
+  });
+  const [isLoadingAction, setIsLoadingAction] = useState(false);
+  const [actionType, setActionType] = useState<string | null>(null);
   const {
     currentTicket,
     realTimeMessages,
@@ -107,9 +137,20 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
     setShowCustomerModal(true);
   };
 
+  // Função para toggle de seções
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
   // Função para finalizar ticket rapidamente
   const handleQuickFinishTicket = async () => {
     if (!currentTicket) return;
+    
+    setIsLoadingAction(true);
+    setActionType('finish');
 
     console.log('🎯 [SIDEBAR] Iniciando finalização rápida do ticket:', {
       id: currentTicket.id,
@@ -255,7 +296,39 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
         status: currentTicket.status,
         updated_at: currentTicket.updated_at
       }));
+    } finally {
+      setIsLoadingAction(false);
+      setActionType(null);
     }
+  };
+
+  // Função para calcular tempo desde criação
+  const getTimeAgo = (date: string) => {
+    const now = new Date();
+    const created = new Date(date);
+    const diff = now.getTime() - created.getTime();
+    
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days > 0) return `${days}d atrás`;
+    if (hours > 0) return `${hours}h atrás`;
+    if (minutes > 0) return `${minutes}m atrás`;
+    return 'Agora mesmo';
+  };
+
+  // Função para calcular progresso do ticket
+  const getTicketProgress = () => {
+    const statusProgress = {
+      'open': 25,
+      'atendimento': 50,
+      'in_progress': 75,
+      'finalizado': 100,
+      'closed': 100,
+      'resolved': 100
+    };
+    return statusProgress[currentTicket?.status as keyof typeof statusProgress] || 0;
   };
 
   if (!showSidebar) {
@@ -263,332 +336,597 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
   }
 
   return (
-    <div className={cn(
-      "bg-gray-50 border-l border-gray-200 flex flex-col overflow-hidden",
-      ChatAnimations.chat.sidebarToggle,
-      ResponsiveAnimations.prefersReducedMotion.disable,
-      "w-72 sm:w-80 md:w-80 lg:w-96 xl:w-[400px] max-w-[30vw]"
-    )}>
-      {/* Header do Sidebar */}
-      <div className="p-4 border-b border-gray-200 bg-white">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-          <FileText className="w-5 h-5 mr-2 text-blue-600" />
-          Informações do Ticket
-        </h3>
-      </div>
-
-      {/* Conteúdo Scrollável */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Informações do Cliente */}
-        <Card className={cn(
-          "border border-gray-200 shadow-sm",
-          ChatAnimations.transition.hoverGlow
-        )}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
-              <User className="w-4 h-4 mr-2" />
-              Cliente
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 space-y-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="font-medium text-gray-900">{currentTicket?.client || 'Cliente Anônimo'}</p>
-                {currentTicket?.isWhatsApp && (
-                  <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200">
-                    WhatsApp
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-gray-500">ID: #{currentTicket?.id || currentTicket?.customerId || 'N/A'}</p>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center text-sm">
-                <Mail className="w-4 h-4 mr-2 text-gray-400" />
-                <span className="text-gray-600 flex-1">{currentTicket?.customerEmail || 'Email não informado'}</span>
-                {currentTicket?.customerEmail && currentTicket.customerEmail !== 'Email não informado' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      "ml-auto h-6 w-6 p-0 text-gray-400 hover:text-gray-600",
-                      ChatAnimations.interactive.icon
-                    )}
-                    onClick={() => navigator.clipboard.writeText(currentTicket?.customerEmail || '')}
-                  >
-                    <Copy className="w-3 h-3" />
-                  </Button>
-                )}
-              </div>
-              
-              <div className="flex items-center text-sm">
-                <Phone className="w-4 h-4 mr-2 text-gray-400" />
-                <span className={cn(
-                  "text-gray-600 flex-1",
-                  currentTicket?.customerPhone && currentTicket.customerPhone !== 'Telefone não informado' 
-                    ? "font-medium text-blue-600" 
-                    : ""
-                )}>{currentTicket?.customerPhone || 'Telefone não informado'}</span>
-                {currentTicket?.customerPhone && currentTicket.customerPhone !== 'Telefone não informado' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      "ml-auto h-6 w-6 p-0 text-gray-400 hover:text-gray-600",
-                      ChatAnimations.interactive.icon
-                    )}
-                    onClick={() => navigator.clipboard.writeText(currentTicket?.customerPhone || '')}
-                  >
-                    <Copy className="w-3 h-3" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Informações do Ticket */}
-        <Card className={cn(
-          "border border-gray-200 shadow-sm",
-          ChatAnimations.transition.hoverGlow
-        )}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Ticket
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 space-y-3">
-            <div>
-              <p className="font-medium text-gray-900">{currentTicket?.subject || 'Assunto não definido'}</p>
-              <p className="text-sm text-gray-500 mt-1">{currentTicket?.description || 'Descrição não informada'}</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Status</label>
-                <Badge 
-                  variant={currentTicket?.status === 'open' ? 'default' : 'secondary'}
-                  className={cn(
-                    "mt-1 block w-fit",
-                    ChatAnimations.transition.colors
-                  )}
-                >
-                  {currentTicket?.status || 'Indefinido'}
-                </Badge>
-              </div>
-              
-              <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridade</label>
-                <Badge 
-                  variant={currentTicket?.priority === 'high' ? 'destructive' : 'outline'}
-                  className={cn(
-                    "mt-1 block w-fit",
-                    ChatAnimations.transition.colors
-                  )}
-                >
-                  {currentTicket?.priority || 'Normal'}
-                </Badge>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center text-sm">
-                <Clock className="w-4 h-4 mr-2 text-gray-400" />
-                <span className="text-gray-600">
-                  Criado em {currentTicket?.createdAt ? new Date(currentTicket.createdAt).toLocaleDateString('pt-BR') : 'Data não informada'}
-                </span>
-              </div>
-              
-              <div className="flex items-center text-sm">
-                <UserCheck className="w-4 h-4 mr-2 text-gray-400" />
-                <span className="text-gray-600">Agente: {currentTicket?.assignedAgent || 'Não atribuído'}</span>
-              </div>
-              
-              <div className="flex items-center text-sm">
-                <Building className="w-4 h-4 mr-2 text-gray-400" />
-                <span className="text-gray-600">Departamento: {currentTicket?.department || 'Geral'}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* WhatsApp Status */}
-        <Card className={cn(
-          "border border-gray-200 shadow-sm",
-          ChatAnimations.transition.hoverGlow
-        )}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
-              <Smartphone className="w-4 h-4 mr-2" />
-              WhatsApp
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
+    <TooltipProvider>
+      <div className={cn(
+        "bg-gradient-to-b from-slate-50 to-gray-100 border-l border-gray-200/80 flex flex-col overflow-hidden shadow-xl",
+        ChatAnimations.chat.sidebarToggle,
+        ResponsiveAnimations.prefersReducedMotion.disable,
+        "w-72 sm:w-80 md:w-80 lg:w-96 xl:w-[400px] max-w-[30vw]"
+      )}>
+        {/* Header do Sidebar Aprimorado */}
+        <div className="relative p-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-700/10 backdrop-blur-sm"></div>
+          <div className="relative">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {whatsappStatus === 'connected' ? (
-                  <Wifi className={cn(
-                    "w-4 h-4 text-green-500",
-                    ChatAnimations.indicators.online
-                  )} />
-                ) : (
-                  <WifiOff className={cn(
-                    "w-4 h-4 text-red-500",
-                    ChatAnimations.indicators.offline
-                  )} />
-                )}
-                <span className={cn(
-                  "text-sm font-medium",
-                  whatsappStatus === 'connected' ? "text-green-600" : "text-red-600"
-                )}>
-                  {whatsappStatus === 'connected' ? 'Conectado' : 'Desconectado'}
-                </span>
+              <div className="flex items-center space-x-2">
+                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                  <FileText className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Detalhes</h3>
+                  <p className="text-xs text-blue-100">Informações do Ticket</p>
+                </div>
               </div>
               
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-8 w-8 p-0 text-gray-400 hover:text-blue-600",
-                  ChatAnimations.interactive.icon
+              <div className="flex items-center space-x-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-white/80 hover:text-white hover:bg-white/20 transition-all duration-200"
+                      onClick={() => window.location.reload()}
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Atualizar informações</p>
+                  </TooltipContent>
+                </Tooltip>
+                
+                {onClose && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-white/80 hover:text-white hover:bg-white/20 transition-all duration-200"
+                        onClick={onClose}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Fechar sidebar</p>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                onClick={checkWhatsAppStatus}
-                title="Atualizar status"
-              >
-                <RefreshCw className="w-3 h-3" />
-              </Button>
+              </div>
             </div>
             
-            <div className="mt-3 text-xs text-gray-500">
-              <p>Instância: {currentTicket?.whatsappInstance || 'Não definida'}</p>
-              <p>Última atividade: {lastActivity || 'Nunca'}</p>
+            {/* Indicador de Progresso */}
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-blue-100">Progresso do Ticket</span>
+                <span className="text-white font-medium">{getTicketProgress()}%</span>
+              </div>
+              <Progress 
+                value={getTicketProgress()} 
+                className="h-2 bg-white/20 overflow-hidden rounded-full"
+              />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Ações Rápidas */}
-        <Card className={cn(
-          "border border-gray-200 shadow-sm",
-          ChatAnimations.transition.hoverGlow
-        )}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
-              <Zap className="w-4 h-4 mr-2" />
-              Ações Rápidas
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 space-y-2">
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-gray-700 flex items-center">
-                <Zap className="w-4 h-4 mr-2 text-orange-500" />
-                Ações Rápidas
-              </h4>
-              
-              <div className="space-y-2">
+        {/* Conteúdo Scrollável */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          
+          {/* Informações do Cliente - Seção Colapsável */}
+          <Card className="border border-gray-200/60 shadow-lg bg-white/50 backdrop-blur-sm hover:shadow-xl transition-all duration-300 group">
+            <CardHeader 
+              className="pb-2 cursor-pointer select-none"
+              onClick={() => toggleSection('client')}
+            >
+              <CardTitle className="text-sm font-semibold text-gray-700 flex items-center justify-between group-hover:text-blue-600 transition-colors">
+                <div className="flex items-center">
+                  <div className="p-1.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg mr-2">
+                    <User className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  Cliente
+                </div>
+                <div className="flex items-center space-x-1">
+                  {currentTicket?.isWhatsApp && (
+                    <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200 px-1.5 py-0.5">
+                      <Smartphone className="w-3 h-3 mr-1" />
+                      WhatsApp
+                    </Badge>
+                  )}
+                  {expandedSections.client ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            
+            {expandedSections.client && (
+              <CardContent className="pt-0 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                <div className="space-y-3">
+                  <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                        <User className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{currentTicket?.client || 'Cliente Anônimo'}</p>
+                        <p className="text-xs text-blue-600 font-medium">ID: #{currentTicket?.id || currentTicket?.customerId || 'N/A'}</p>
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-100"
+                            onClick={() => openCustomerModal()}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Ver perfil completo</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm group hover:bg-gray-50 p-2 rounded-md transition-colors">
+                      <Mail className="w-4 h-4 mr-2 text-gray-400 group-hover:text-blue-500" />
+                      <span className="text-gray-600 flex-1 truncate">{currentTicket?.customerEmail || 'Email não informado'}</span>
+                      {currentTicket?.customerEmail && currentTicket.customerEmail !== 'Email não informado' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto h-6 w-6 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                              onClick={() => navigator.clipboard.writeText(currentTicket?.customerEmail || '')}
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Copiar email</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center text-sm group hover:bg-gray-50 p-2 rounded-md transition-colors">
+                      <Phone className="w-4 h-4 mr-2 text-gray-400 group-hover:text-green-500" />
+                      <span className={cn(
+                        "text-gray-600 flex-1 truncate font-medium",
+                        currentTicket?.customerPhone && currentTicket.customerPhone !== 'Telefone não informado' 
+                          ? "text-green-700" 
+                          : ""
+                      )}>{currentTicket?.customerPhone || 'Telefone não informado'}</span>
+                      {currentTicket?.customerPhone && currentTicket.customerPhone !== 'Telefone não informado' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto h-6 w-6 p-0 text-gray-400 hover:text-green-600 hover:bg-green-50"
+                              onClick={() => navigator.clipboard.writeText(currentTicket?.customerPhone || '')}
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Copiar telefone</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center text-sm group hover:bg-gray-50 p-2 rounded-md transition-colors">
+                      <Building className="w-4 h-4 mr-2 text-gray-400 group-hover:text-purple-500" />
+                      <span className="text-gray-600">Departamento: {currentTicket?.department || 'Geral'}</span>
+                    </div>
+                    
+                    <div className="flex items-center text-sm group hover:bg-gray-50 p-2 rounded-md transition-colors">
+                      <Calendar className="w-4 h-4 mr-2 text-gray-400 group-hover:text-orange-500" />
+                      <span className="text-gray-600">
+                        {currentTicket?.createdAt ? getTimeAgo(currentTicket.createdAt) : 'Data não informada'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Informações do Ticket - Seção Colapsável */}
+          <Card className="border border-gray-200/60 shadow-lg bg-white/50 backdrop-blur-sm hover:shadow-xl transition-all duration-300 group">
+            <CardHeader 
+              className="pb-2 cursor-pointer select-none"
+              onClick={() => toggleSection('ticket')}
+            >
+              <CardTitle className="text-sm font-semibold text-gray-700 flex items-center justify-between group-hover:text-indigo-600 transition-colors">
+                <div className="flex items-center">
+                  <div className="p-1.5 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg mr-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  Ticket
+                </div>
+                <div className="flex items-center space-x-1">
+                  <Badge 
+                    variant={currentTicket?.status === 'open' ? 'default' : 'secondary'}
+                    className="text-xs px-2 py-0.5"
+                  >
+                    {currentTicket?.status || 'Indefinido'}
+                  </Badge>
+                  {expandedSections.ticket ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            
+            {expandedSections.ticket && (
+              <CardContent className="pt-0 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                <div className="p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-100">
+                  <h4 className="font-semibold text-gray-900 mb-1">{currentTicket?.subject || 'Assunto não definido'}</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed">{currentTicket?.description || 'Descrição não informada'}</p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center">
+                      <Target className="w-3 h-3 mr-1" />
+                      Status
+                    </label>
+                    <Badge 
+                      variant={currentTicket?.status === 'open' ? 'default' : 'secondary'}
+                      className="w-full justify-center py-1"
+                    >
+                      {currentTicket?.status || 'Indefinido'}
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      Prioridade
+                    </label>
+                    <Badge 
+                      variant={currentTicket?.priority === 'high' ? 'destructive' : 'outline'}
+                      className="w-full justify-center py-1"
+                    >
+                      {currentTicket?.priority || 'Normal'}
+                    </Badge>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm group hover:bg-gray-50 p-2 rounded-md transition-colors">
+                    <UserCheck className="w-4 h-4 mr-2 text-gray-400 group-hover:text-blue-500" />
+                    <span className="text-gray-600">Agente: {currentTicket?.assignedAgent || 'Não atribuído'}</span>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* WhatsApp Status - Seção Colapsável */}
+          <Card className="border border-gray-200/60 shadow-lg bg-white/50 backdrop-blur-sm hover:shadow-xl transition-all duration-300 group">
+            <CardHeader 
+              className="pb-2 cursor-pointer select-none"
+              onClick={() => toggleSection('whatsapp')}
+            >
+              <CardTitle className="text-sm font-semibold text-gray-700 flex items-center justify-between group-hover:text-green-600 transition-colors">
+                <div className="flex items-center">
+                  <div className="p-1.5 bg-gradient-to-br from-green-500 to-green-600 rounded-lg mr-2">
+                    <Smartphone className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  WhatsApp
+                </div>
+                <div className="flex items-center space-x-1">
+                  <div className={cn(
+                    "w-2 h-2 rounded-full animate-pulse",
+                    whatsappStatus === 'connected' ? "bg-green-400" : "bg-red-400"
+                  )}></div>
+                  {expandedSections.whatsapp ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            
+            {expandedSections.whatsapp && (
+              <CardContent className="pt-0 animate-in slide-in-from-top-2 duration-300">
+                <div className="p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      {whatsappStatus === 'connected' ? (
+                        <div className="flex items-center gap-2">
+                          <div className="p-1 bg-green-100 rounded-full">
+                            <Wifi className="w-3 h-3 text-green-600" />
+                          </div>
+                          <span className="text-sm font-medium text-green-700">Conectado</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="p-1 bg-red-100 rounded-full">
+                            <WifiOff className="w-3 h-3 text-red-600" />
+                          </div>
+                          <span className="text-sm font-medium text-red-700">Desconectado</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-green-500 hover:text-green-700 hover:bg-green-100"
+                          onClick={checkWhatsAppStatus}
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Atualizar status</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  
+                  <div className="space-y-1 text-xs text-green-700">
+                    <div className="flex items-center justify-between">
+                      <span>Instância:</span>
+                      <span className="font-medium">{currentTicket?.whatsappInstance || 'Não definida'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Última atividade:</span>
+                      <span className="font-medium">{lastActivity || 'Nunca'}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Ações Rápidas - Seção Colapsável */}
+          <Card className="border border-gray-200/60 shadow-lg bg-white/50 backdrop-blur-sm hover:shadow-xl transition-all duration-300 group">
+            <CardHeader 
+              className="pb-2 cursor-pointer select-none"
+              onClick={() => toggleSection('actions')}
+            >
+              <CardTitle className="text-sm font-semibold text-gray-700 flex items-center justify-between group-hover:text-orange-600 transition-colors">
+                <div className="flex items-center">
+                  <div className="p-1.5 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg mr-2">
+                    <Zap className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  Ações Rápidas
+                </div>
+                {expandedSections.actions ? (
+                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                )}
+              </CardTitle>
+            </CardHeader>
+            
+            {expandedSections.actions && (
+              <CardContent className="pt-0 space-y-2 animate-in slide-in-from-top-2 duration-300">
                 {/* Botão Finalizar Ticket - Apenas para tickets não finalizados */}
                 {currentTicket?.status !== 'finalizado' && currentTicket?.status !== 'closed' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleQuickFinishTicket}
-                    className="w-full justify-start bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 transition-all duration-200"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    ✅ Finalizar Ticket
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleQuickFinishTicket}
+                        disabled={isLoadingAction && actionType === 'finish'}
+                        className="w-full justify-start bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-green-700 hover:from-green-100 hover:to-emerald-100 hover:border-green-300 hover:text-green-800 transition-all duration-200 h-12"
+                      >
+                        {isLoadingAction && actionType === 'finish' ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                        )}
+                        {isLoadingAction && actionType === 'finish' ? 'Finalizando...' : '✅ Finalizar Ticket'}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Finalizar este ticket rapidamente</p>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openChangeStatusModal()}
-                  className={cn(
-                    "w-full justify-start h-12 hover:bg-blue-50 hover:border-blue-300",
-                    ChatAnimations.transition.colors
-                  )}
-                >
-                  <Tag className="w-4 h-4 mr-2" />
-                  Alterar Status
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openChangeStatusModal()}
+                      className="w-full justify-start h-12 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-700 hover:from-blue-100 hover:to-indigo-100 hover:border-blue-300 transition-all duration-200"
+                    >
+                      <Tag className="w-4 h-4 mr-2" />
+                      Alterar Status
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Alterar o status do ticket</p>
+                  </TooltipContent>
+                </Tooltip>
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openAssignAgentModal()}
-                  className={cn(
-                    "w-full justify-start h-12 hover:bg-green-50 hover:border-green-300",
-                    ChatAnimations.transition.colors
-                  )}
-                >
-                  <UserCheck className="w-4 h-4 mr-2" />
-                  Atribuir Agente
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openAssignAgentModal()}
+                      className="w-full justify-start h-12 bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-violet-100 hover:border-purple-300 transition-all duration-200"
+                    >
+                      <UserCheck className="w-4 h-4 mr-2" />
+                      Atribuir Agente
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Atribuir este ticket a um agente</p>
+                  </TooltipContent>
+                </Tooltip>
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openCustomerModal()}
-                  className={cn(
-                    "w-full justify-start h-12 hover:bg-orange-50 hover:border-orange-300",
-                    ChatAnimations.transition.colors
-                  )}
-                >
-                  <User className="w-4 h-4 mr-2" />
-                  Atribuir Cliente
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openCustomerModal()}
+                      className="w-full justify-start h-12 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-700 hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 transition-all duration-200"
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      Atribuir Cliente
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Atribuir ou alterar cliente do ticket</p>
+                  </TooltipContent>
+                </Tooltip>
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openTransferModal()}
-                  className={cn(
-                    "w-full justify-start h-12 hover:bg-purple-50 hover:border-purple-300",
-                    ChatAnimations.transition.colors
-                  )}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Transferir Ticket
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openTransferModal()}
+                      className="w-full justify-start h-12 bg-gradient-to-r from-teal-50 to-cyan-50 border-teal-200 text-teal-700 hover:from-teal-100 hover:to-cyan-100 hover:border-teal-300 transition-all duration-200"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Transferir Ticket
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Transferir ticket para outro departamento</p>
+                  </TooltipContent>
+                </Tooltip>
+              </CardContent>
+            )}
+          </Card>
 
-        {/* Estatísticas */}
-        <Card className={cn(
-          "border border-gray-200 shadow-sm",
-          ChatAnimations.transition.hoverGlow
-        )}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center">
-              <Eye className="w-4 h-4 mr-2" />
-              Estatísticas
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div>
-                <p className="text-lg font-bold text-blue-600">{messageCounts.total}</p>
-                <p className="text-xs text-gray-500">Total</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-green-600">{messageCounts.public}</p>
-                <p className="text-xs text-gray-500">Públicas</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-orange-600">{messageCounts.internal}</p>
-                <p className="text-xs text-gray-500">Internas</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-purple-600">{favoriteMessages.size}</p>
-                <p className="text-xs text-gray-500">Favoritas</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          {/* Estatísticas - Seção Colapsável */}
+          <Card className="border border-gray-200/60 shadow-lg bg-white/50 backdrop-blur-sm hover:shadow-xl transition-all duration-300 group">
+            <CardHeader 
+              className="pb-2 cursor-pointer select-none"
+              onClick={() => toggleSection('stats')}
+            >
+              <CardTitle className="text-sm font-semibold text-gray-700 flex items-center justify-between group-hover:text-purple-600 transition-colors">
+                <div className="flex items-center">
+                  <div className="p-1.5 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg mr-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  Estatísticas
+                </div>
+                <div className="flex items-center space-x-1">
+                  <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                    {messageCounts.total}
+                  </Badge>
+                  {expandedSections.stats ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            
+            {expandedSections.stats && (
+              <CardContent className="pt-0 animate-in slide-in-from-top-2 duration-300">
+                <div className="grid grid-cols-2 gap-3">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg text-center cursor-help transition-all duration-200 hover:scale-105">
+                        <div className="flex items-center justify-center mb-1">
+                          <MessageSquare className="w-4 h-4 text-blue-600 mr-1" />
+                          <p className="text-lg font-bold text-blue-600">{messageCounts.total}</p>
+                        </div>
+                        <p className="text-xs text-blue-700">Total</p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Total de mensagens na conversa</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg text-center cursor-help transition-all duration-200 hover:scale-105">
+                        <div className="flex items-center justify-center mb-1">
+                          <Eye className="w-4 h-4 text-green-600 mr-1" />
+                          <p className="text-lg font-bold text-green-600">{messageCounts.public}</p>
+                        </div>
+                        <p className="text-xs text-green-700">Públicas</p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Mensagens visíveis para o cliente</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-3 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg text-center cursor-help transition-all duration-200 hover:scale-105">
+                        <div className="flex items-center justify-center mb-1">
+                          <Shield className="w-4 h-4 text-orange-600 mr-1" />
+                          <p className="text-lg font-bold text-orange-600">{messageCounts.internal}</p>
+                        </div>
+                        <p className="text-xs text-orange-700">Internas</p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Notas internas da equipe</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg text-center cursor-help transition-all duration-200 hover:scale-105">
+                        <div className="flex items-center justify-center mb-1">
+                          <Star className="w-4 h-4 text-purple-600 mr-1" />
+                          <p className="text-lg font-bold text-purple-600">{favoriteMessages.size}</p>
+                        </div>
+                        <p className="text-xs text-purple-700">Favoritas</p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Mensagens marcadas como favoritas</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                
+                {/* Progresso Visual */}
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs text-gray-500 font-medium">Atividade da Conversa</div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span>Públicas</span>
+                      <span>{messageCounts.total > 0 ? Math.round((messageCounts.public / messageCounts.total) * 100) : 0}%</span>
+                    </div>
+                    <Progress value={messageCounts.total > 0 ? (messageCounts.public / messageCounts.total) * 100 : 0} className="h-1" />
+                  </div>
+                  {favoriteMessages.size > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span>Favoritas</span>
+                        <span>{messageCounts.total > 0 ? Math.round((favoriteMessages.size / messageCounts.total) * 100) : 0}%</span>
+                      </div>
+                      <Progress value={messageCounts.total > 0 ? (favoriteMessages.size / messageCounts.total) * 100 : 0} className="h-1" />
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }; 
