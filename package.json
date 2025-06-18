@@ -2,7 +2,6 @@
   "name": "bkcrm",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build --mode production",
@@ -16,7 +15,8 @@
     "supabase:status": "supabase status",
     "supabase:db:reset": "supabase db reset",
     "supabase:db:push": "supabase db push",
-    "supabase:types": "supabase gen types typescript --local > src/types/supabase.ts"
+    "supabase:types": "supabase gen types typescript --local > src/types/supabase.ts",
+    "webhook": "node webhook-evolution-complete-corrigido.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

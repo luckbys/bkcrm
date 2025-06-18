@@ -23,4 +23,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:4000/health || exit 1
 
 # Comando para iniciar
-CMD ["node", "webhook-evolution-complete.js"] 
+CMD ["node", "webhook-evolution-complete-corrigido.cjs"] 
