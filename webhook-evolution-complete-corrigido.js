@@ -42,7 +42,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Endpoint principal para webhook Evolution API
+// HANDLER DUPLICADO REMOVIDO - usando apenas o handler principal na linha 295
+/*
 app.post('/webhook/evolution', async (req, res) => {
   try {
     const payload = req.body;
@@ -101,6 +102,7 @@ app.post('/webhook/evolution', async (req, res) => {
     });
   }
 });
+*/
 
 // FUNÇÃO PRINCIPAL PARA SALVAR MENSAGENS (VERSÃO ÚNICA)
 async function saveMessageToDatabase(data) {
