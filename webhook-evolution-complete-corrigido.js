@@ -42,68 +42,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// HANDLER DUPLICADO REMOVIDO - usando apenas o handler principal na linha 295
-/*
-app.post('/webhook/evolution', async (req, res) => {
-  try {
-    const payload = req.body;
-    const timestamp = new Date().toISOString();
-    
-    console.log(`🔔 [${timestamp}] Webhook Evolution API:`, {
-      event: payload.event,
-      instance: payload.instance,
-      dataKeys: Object.keys(payload.data || {})
-    });
-
-    let result = { success: false, message: 'Evento não processado' };
-
-    // Processar diferentes tipos de eventos
-    if (payload.event) {
-      switch (payload.event) {
-        case 'MESSAGES_UPSERT':
-          result = await processNewMessage(payload);
-          break;
-        
-        case 'QRCODE_UPDATED':
-          result = await processQRCodeUpdate(payload);
-          break;
-        
-        case 'CONNECTION_UPDATE':
-          result = await processConnectionUpdate(payload);
-          break;
-        
-        case 'SEND_MESSAGE':
-          result = await processSentMessage(payload);
-          break;
-        
-        default:
-          console.log(`📋 Evento não processado: ${payload.event}`);
-          result = { success: true, message: `Evento ${payload.event} recebido` };
-      }
-    }
-
-    // Resposta de sucesso
-    res.status(200).json({ 
-      received: true, 
-      timestamp,
-      event: payload.event || 'unknown',
-      instance: payload.instance,
-      processed: result.success,
-      message: result.message,
-      ticketId: result.ticketId
-    });
-
-  } catch (error) {
-    console.error('❌ Erro ao processar webhook:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor',
-      timestamp: new Date().toISOString(),
-      details: error.message
-    });
-  }
-});
-*/
-
 // FUNÇÃO PRINCIPAL PARA SALVAR MENSAGENS (VERSÃO ÚNICA)
 async function saveMessageToDatabaseUnified(data) {
   try {
@@ -114,15 +52,19 @@ async function saveMessageToDatabaseUnified(data) {
       timestamp: data.timestamp
     });
 
-    // VALIDAR UUID DO TICKET
+    // VALIDAR UUID DO TICKET - Validação mais rigorosa
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!data.ticketId || !uuidRegex.test(data.ticketId)) {
-      console.error('❌ UUID do ticket inválido:', data.ticketId);
+    let finalTicketId = data.ticketId;
+    let usedFallback = false;
+
+    // Se o ticket_id for inválido ou contiver "ticket-fallback"
+    if (!finalTicketId || !uuidRegex.test(finalTicketId) || finalTicketId.includes('ticket-fallback')) {
+      console.error('❌ UUID do ticket inválido ou contém "ticket-fallback":', finalTicketId);
       
-      // Gerar UUID válido como fallback
-      const validTicketId = crypto.randomUUID();
-      console.log('🔄 Usando UUID válido como fallback:', validTicketId);
-      data.ticketId = validTicketId;
+      // Gerar novo UUID válido
+      finalTicketId = crypto.randomUUID();
+      usedFallback = true;
+      console.log('🔄 Usando UUID válido gerado:', finalTicketId);
     }
 
     // PREPARAR DADOS ENRIQUECIDOS PARA MENSAGEM
@@ -147,16 +89,17 @@ async function saveMessageToDatabaseUnified(data) {
       }),
       
       // Flag de fallback se UUID foi corrigido
-      ...(data.ticketId !== data.originalTicketId && {
+      ...(usedFallback && {
         ticket_id_fallback: true,
-        original_ticket_id: data.originalTicketId
+        original_ticket_id: data.ticketId,
+        fallback_reason: 'invalid_uuid_format'
       })
     };
 
     const messageData = {
-      ticket_id: data.ticketId,
+      ticket_id: finalTicketId, // Usar o UUID validado/corrigido
       content: data.content,
-      sender_id: null, // Cliente anônimo
+      sender_id: null,
       sender_type: 'customer',
       message_type: 'text',
       metadata: enhancedMessageMetadata,
@@ -570,6 +513,14 @@ async function processNewMessage(payload) {
     if (!ticket) {
       console.log('❌ Não foi possível criar/encontrar ticket');
       return { success: false, message: 'Erro ao processar ticket' };
+    }
+
+    // VALIDAR UUID DO TICKET antes de salvar mensagem
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!ticket.id || !uuidRegex.test(ticket.id) || ticket.id.includes('ticket-fallback')) {
+      console.error('❌ UUID do ticket inválido antes de salvar mensagem:', ticket.id);
+      ticket.id = crypto.randomUUID();
+      console.log('🔄 Corrigido UUID do ticket para:', ticket.id);
     }
 
     // SALVAR MENSAGEM COM DADOS ENRIQUECIDOS
