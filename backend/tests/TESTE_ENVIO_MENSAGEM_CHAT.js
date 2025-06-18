@@ -12,7 +12,7 @@ const testarEnvioMensagem = async () => {
     const dadosTeste = {
       phone: '5511999887766',
       text: 'Olá! Esta é uma mensagem de teste enviada do CRM para WhatsApp.',
-      instance: 'atendimento-ao-cliente-sac1',
+      instance: 'atendimento-ao-cliente-suporte',
       options: {
         delay: 1000,
         presence: 'composing',
@@ -69,7 +69,7 @@ const testarConfiguracoes = async () => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        instance: 'atendimento-ao-cliente-sac1'
+        instance: 'atendimento-ao-cliente-suporte'
       })
     });
     

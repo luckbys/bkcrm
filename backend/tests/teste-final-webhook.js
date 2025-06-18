@@ -6,7 +6,7 @@ console.log('==================================================');
 // Dados de teste com número específico
 const testeWebhook = {
   "event": "MESSAGES_UPSERT",
-  "instance": "atendimento-ao-cliente-sac1",
+  "instance": "atendimento-ao-cliente-suporte",
   "data": {
     "key": {
       "remoteJid": "5512345678900@s.whatsapp.net",

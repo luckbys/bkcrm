@@ -3,7 +3,7 @@ import axios from 'axios';
 // Teste simples de número de telefone
 const testeNumero = {
   "event": "MESSAGES_UPSERT",
-  "instance": "atendimento-ao-cliente-sac1",
+  "instance": "atendimento-ao-cliente-suporte",
   "data": {
     "key": {
       "remoteJid": "5511987654321@s.whatsapp.net",

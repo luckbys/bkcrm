@@ -94,7 +94,7 @@ async function testWebhookSimulation() {
   // Simular recebimento de mensagem
   const webhookPayload = {
     event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     data: {
       key: {
         remoteJid: '5511999000001@s.whatsapp.net',
@@ -150,7 +150,7 @@ async function testMessageSending() {
   const messagePayload = {
     phone: '5511999000001',
     text: '🤖 Esta é uma mensagem de teste do webhook aprimorado! Funcionalidades incluem: extração avançada de dados, resposta automática e cache de contatos.',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     options: {
       delay: 1000,
       presence: 'composing'
@@ -203,7 +203,7 @@ async function testMediaMessage() {
   
   const mediaPayload = {
     event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     data: {
       key: {
         remoteJid: '5511999000002@s.whatsapp.net',

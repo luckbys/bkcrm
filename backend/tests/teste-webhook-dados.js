@@ -8,7 +8,7 @@ const exemplosWebhookData = {
   // Exemplo 1: Estrutura padrão Evolution API
   exemplo1: {
     event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     data: {
       key: {
         remoteJid: '5511999887766@s.whatsapp.net',
@@ -27,7 +27,7 @@ const exemplosWebhookData = {
   // Exemplo 2: Mensagem de grupo
   exemplo2: {
     event: 'MESSAGES_UPSERT', 
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     data: {
       key: {
         remoteJid: '120363123456789012@g.us',
@@ -46,7 +46,7 @@ const exemplosWebhookData = {
   // Exemplo 3: Número sem código do país
   exemplo3: {
     event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1', 
+    instance: 'atendimento-ao-cliente-suporte', 
     data: {
       key: {
         remoteJid: '11999887766@s.whatsapp.net',
@@ -64,7 +64,7 @@ const exemplosWebhookData = {
   // Exemplo 4: Número com @c.us (formato antigo)
   exemplo4: {
     event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     data: {
       key: {
         remoteJid: '5511999887766@c.us',
@@ -82,7 +82,7 @@ const exemplosWebhookData = {
   // Exemplo 5: Mensagem sem pushName
   exemplo5: {
     event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     data: {
       key: {
         remoteJid: '5511987654321@s.whatsapp.net',

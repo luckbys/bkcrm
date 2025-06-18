@@ -12,7 +12,7 @@ async function testarWebhookDireto() {
   // Simular payload da Evolution API
   const payloadSimulado = {
     event: 'MESSAGES_UPSERT',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     data: {
       key: {
         remoteJid: '5511999999999@s.whatsapp.net',

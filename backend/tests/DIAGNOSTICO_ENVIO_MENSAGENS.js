@@ -58,7 +58,7 @@ async function testarEndpointEnvio(webhookURL) {
   const payloadTeste = {
     phone: '5511999999999',
     text: 'TESTE DIAGNÓSTICO - Esta é uma mensagem de teste para verificar o funcionamento do sistema',
-    instance: 'atendimento-ao-cliente-sac1',
+    instance: 'atendimento-ao-cliente-suporte',
     options: {
       delay: 1000,
       presence: 'composing',
@@ -115,7 +115,7 @@ async function verificarEvolutionAPI() {
   const configs = {
     EVOLUTION_API_URL: 'https://press-evolution-api.jhkbgs.easypanel.host',
     EVOLUTION_API_KEY: '429683C4C977415CAAFCCE10F7D57E11', // ⚠️ Deve ser configurada corretamente
-    EVOLUTION_DEFAULT_INSTANCE: 'atendimento-ao-cliente-sac1'
+    EVOLUTION_DEFAULT_INSTANCE: 'atendimento-ao-cliente-suporte'
   };
   
   console.log('📋 Configurações Evolution API necessárias:');
@@ -140,7 +140,7 @@ async function testarInstanciaEvolution(webhookURL) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        instance: 'atendimento-ao-cliente-sac1'
+        instance: 'atendimento-ao-cliente-suporte'
       })
     });
     

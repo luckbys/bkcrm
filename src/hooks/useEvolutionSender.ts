@@ -61,7 +61,7 @@ export function useEvolutionSender() {
         body: JSON.stringify({
           phone: data.phone,
           text: data.text,
-          instance: data.instance || 'atendimento-ao-cliente-sac1',
+          instance: data.instance || 'atendimento-ao-cliente-suporte',
           options: {
             delay: 1000,
             presence: 'composing',
@@ -138,7 +138,7 @@ export function useEvolutionSender() {
         body: JSON.stringify({
           phone: data.phone,
           text: data.text,
-          instance: data.instance || 'atendimento-ao-cliente-sac1',
+          instance: data.instance || 'atendimento-ao-cliente-suporte',
           quotedMessage: data.quotedMessage,
           options: {
             delay: 1000,

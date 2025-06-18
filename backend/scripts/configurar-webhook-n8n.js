@@ -12,7 +12,7 @@ const CONFIG = {
   EVOLUTION_API_URL: 'https://press-evolution-api.jhkbgs.easypanel.host',
   EVOLUTION_API_KEY: '429683C4C977415CAAFCCE10F7D57E11',
   N8N_WEBHOOK_URL: 'https://sua-instancia-n8n.com/webhook/evolution-webhook', // ⚠️ SUBSTITUA pela sua URL do n8n
-  INSTANCE_NAME: 'atendimento-ao-cliente-sac1', // ⚠️ Nome da sua instância
+  INSTANCE_NAME: 'atendimento-ao-cliente-suporte', // ⚠️ Nome da sua instância
   BKCRM_WEBHOOK_URL: 'https://bkcrm.devsible.com.br/webhook/evolution'
 };
 

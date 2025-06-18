@@ -9,7 +9,7 @@ console.log('🔍 TESTE DETALHADO: Analisando Evolution API...');
 // Configurações diretas
 const EVOLUTION_API_URL = 'https://press-evolution-api.jhkbgs.easypanel.host';
 const EVOLUTION_API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
-const INSTANCE_NAME = 'atendimento-ao-cliente-sac1';
+const INSTANCE_NAME = 'atendimento-ao-cliente-suporte';
 
 // 1. Testar conexão direta com Evolution API
 const testarConexaoEvolution = async () => {

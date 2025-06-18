@@ -6,7 +6,7 @@ const WEBHOOK_LOCAL_URL = 'http://localhost:4000/webhook/evolution';
 // Payload de exemplo do webhook MESSAGES_UPSERT
 const webhookPayload = {
   event: 'MESSAGES_UPSERT',
-  instance: 'atendimento-ao-cliente-sac1',
+  instance: 'atendimento-ao-cliente-suporte',
   data: {
     key: {
       remoteJid: '5511999887766@s.whatsapp.net',

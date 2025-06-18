@@ -72,7 +72,7 @@ POST /message/sendText/{instance}
 ```javascript
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evolution-api.devsible.com.br';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
-const EVOLUTION_DEFAULT_INSTANCE = 'atendimento-ao-cliente-sac1';
+const EVOLUTION_DEFAULT_INSTANCE = 'atendimento-ao-cliente-suporte';
 ```
 
 **Endpoint: POST `/webhook/send-message`**
@@ -81,7 +81,7 @@ const EVOLUTION_DEFAULT_INSTANCE = 'atendimento-ao-cliente-sac1';
 {
   "phone": "5511999999999",
   "text": "Mensagem a ser enviada",
-  "instance": "atendimento-ao-cliente-sac1", // opcional
+  "instance": "atendimento-ao-cliente-suporte", // opcional
   "options": {
     "delay": 1000,
     "presence": "composing",
@@ -96,7 +96,7 @@ const EVOLUTION_DEFAULT_INSTANCE = 'atendimento-ao-cliente-sac1';
 {
   "phone": "5511999999999",
   "text": "Resposta à mensagem",
-  "instance": "atendimento-ao-cliente-sac1",
+  "instance": "atendimento-ao-cliente-suporte",
   "quotedMessage": {
     "remoteJid": "5511999999999@s.whatsapp.net",
     "fromMe": false,
@@ -132,7 +132,7 @@ const {
 const result = await sendMessage({
   phone: "5511999999999",
   text: "Olá! Como posso ajudá-lo?",
-  instance: "atendimento-ao-cliente-sac1",
+  instance: "atendimento-ao-cliente-suporte",
   options: {
     delay: 1000,
     presence: "composing"
@@ -149,7 +149,7 @@ if (!isInternal && currentTicket?.customerPhone && currentTicket?.isWhatsApp) {
   const evolutionResult = await sendEvolutionMessage({
     phone: currentTicket.customerPhone,
     text: message,
-    instance: whatsappInstance || 'atendimento-ao-cliente-sac1'
+    instance: whatsappInstance || 'atendimento-ao-cliente-suporte'
   });
   
   if (evolutionResult.success) {
@@ -173,7 +173,7 @@ if (!isInternal && currentTicket?.customerPhone && currentTicket?.isWhatsApp) {
 # Evolution API
 EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host
 EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
-EVOLUTION_DEFAULT_INSTANCE=atendimento-ao-cliente-sac1
+EVOLUTION_DEFAULT_INSTANCE=atendimento-ao-cliente-suporte
 
 # URLs
 BASE_URL=https://bkcrm.devsible.com.br
@@ -216,7 +216,7 @@ WEBHOOK_PORT=4000
 await sendWhatsAppMessage({
   phone: "5511999999999",
   text: "Mensagem de teste",
-  instance: "atendimento-ao-cliente-sac1"
+  instance: "atendimento-ao-cliente-suporte"
 });
 
 // Verificar status do servidor

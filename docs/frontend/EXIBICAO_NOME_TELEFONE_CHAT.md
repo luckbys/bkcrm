@@ -172,7 +172,7 @@ metadata: {
   client_phone: "5511999999999",
   anonymous_contact: "Cliente Teste",
   created_from_whatsapp: true,
-  evolution_instance_name: "atendimento-ao-cliente-sac1"
+  evolution_instance_name: "atendimento-ao-cliente-suporte"
 }
 ```
 

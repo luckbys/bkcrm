@@ -266,7 +266,7 @@ INSERT INTO tickets (
   '{
     "whatsapp_phone": "5511999999999",
     "client_name": "João Silva",
-    "instance_name": "atendimento-ao-cliente-sac1",
+    "instance_name": "atendimento-ao-cliente-suporte",
     "message_type": "text",
     "contact_language": "pt-BR",
     "profile_pic_url": "https://...",

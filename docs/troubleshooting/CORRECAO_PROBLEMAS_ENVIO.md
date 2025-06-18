@@ -63,7 +63,7 @@ function formatPhoneNumber(phone) {
 ```env
 EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host
 EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
-EVOLUTION_DEFAULT_INSTANCE=atendimento-ao-cliente-sac1
+EVOLUTION_DEFAULT_INSTANCE=atendimento-ao-cliente-suporte
 ```
 
 ## 🔧 IMPLEMENTAÇÃO DAS CORREÇÕES
@@ -100,7 +100,7 @@ const payload = {
 ### **3. Verificar Instância Evolution API**
 
 **Status da Instância:**
-- Nome: `atendimento-ao-cliente-sac1`
+- Nome: `atendimento-ao-cliente-suporte`
 - Status: Deve estar `CONNECTED`
 - URL: `https://press-evolution-api.jhkbgs.easypanel.host`
 
@@ -118,7 +118,7 @@ curl -X POST http://localhost:4000/webhook/send-message \
   -d '{
     "phone": "5511999999999",
     "text": "Teste de envio via API",
-    "instance": "atendimento-ao-cliente-sac1"
+    "instance": "atendimento-ao-cliente-suporte"
   }'
 ```
 
@@ -175,7 +175,7 @@ diagnosticoEnvioMensagens()
 // Verificar configurações Evolution
 console.log('Configurações:', {
   URL: 'https://press-evolution-api.jhkbgs.easypanel.host',
-  Instance: 'atendimento-ao-cliente-sac1',
+  Instance: 'atendimento-ao-cliente-suporte',
   Key: '429683C4C977415CAAFCCE10F7D57E11'
 });
 ```

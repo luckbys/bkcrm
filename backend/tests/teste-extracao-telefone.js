@@ -223,7 +223,7 @@ const webhookData = {
       conversation: 'Olá, preciso de ajuda!'
     }
   },
-  instance: 'atendimento-ao-cliente-sac1'
+  instance: 'atendimento-ao-cliente-suporte'
 };
 
 console.log('\n📨 Simulando processamento de mensagem real...');

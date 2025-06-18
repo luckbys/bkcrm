@@ -3,7 +3,7 @@
 const WEBHOOK_URL = 'https://bkcrm.devsible.com.br/webhook/evolution';
 const EVOLUTION_API_URL = 'https://press-evolution-api.jhkbgs.easypanel.host';
 const API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
-const INSTANCE_NAME = 'atendimento-ao-cliente-sac1';
+const INSTANCE_NAME = 'atendimento-ao-cliente-suporte';
 
 console.log('🐞 Debug Detalhado - Erro Webhook Evolution API');
 console.log('');

@@ -196,7 +196,7 @@ async function saveMessage(ticketId, messageData, instanceName) {
       .select()
       .single();
 
-    if (error) {
+  if (error) {
       console.error('❌ Erro ao salvar mensagem:', error);
       return null;
     }

@@ -20,7 +20,7 @@ const clienteNome = 'Cliente Teste Finalizado';
 async function enviarMensagem(mensagem, pushName = clienteNome) {
   const webhookData = {
     "event": "MESSAGES_UPSERT",
-    "instance": "atendimento-ao-cliente-sac1",
+    "instance": "atendimento-ao-cliente-suporte",
     "data": {
       "key": {
         "remoteJid": `${numeroTeste}@s.whatsapp.net`,

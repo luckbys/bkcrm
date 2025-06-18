@@ -508,7 +508,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
           const evolutionResult = await sendEvolutionMessage({
             phone: clientInfo.clientPhone,
             text: message,
-            instance: whatsappInstance || 'atendimento-ao-cliente-sac1',
+            instance: whatsappInstance || 'atendimento-ao-cliente-suporte',
             options: {
               delay: 1000,
               presence: 'composing'
@@ -640,7 +640,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       // Usar instância específica baseada no metadata ou padrão
       const instanceName = currentTicket?.metadata?.instance_name || 
                           currentTicket?.department || 
-                          'atendimento-ao-cliente-sac1';
+                          'atendimento-ao-cliente-suporte';
       setWhatsappInstance(instanceName);
       setWhatsappStatus('connected'); // Para demonstração
       

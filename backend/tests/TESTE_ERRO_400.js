@@ -8,7 +8,7 @@ console.log('🔍 TESTE: Analisando erro 400 da Evolution API...');
 
 const EVOLUTION_API_URL = 'https://press-evolution-api.jhkbgs.easypanel.host';
 const EVOLUTION_API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
-const INSTANCE_NAME = 'atendimento-ao-cliente-sac1';
+const INSTANCE_NAME = 'atendimento-ao-cliente-suporte';
 
 const testarComDetalhes = async () => {
   try {

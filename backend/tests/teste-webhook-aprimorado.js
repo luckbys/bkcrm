@@ -10,7 +10,7 @@ import axios from 'axios';
 // Configurações de teste
 const WEBHOOK_BASE_URL = 'http://localhost:4000'; // ou 'https://bkcrm.devsible.com.br'
 const TEST_PHONE = '5511999887766'; // Número para testes
-const TEST_INSTANCE = 'atendimento-ao-cliente-sac1';
+const TEST_INSTANCE = 'atendimento-ao-cliente-suporte';
 
 console.log('🧪 Iniciando testes do Webhook Evolution API Aprimorado');
 console.log(`📡 Base URL: ${WEBHOOK_BASE_URL}`);
@@ -522,7 +522,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log('Variáveis de ambiente:');
     console.log('  WEBHOOK_BASE_URL  # URL base do webhook (padrão: http://localhost:4000)');
     console.log('  TEST_PHONE        # Telefone para teste (padrão: 5511999887766)');
-    console.log('  TEST_INSTANCE     # Instância para teste (padrão: atendimento-ao-cliente-sac1)');
+    console.log('  TEST_INSTANCE     # Instância para teste (padrão: atendimento-ao-cliente-suporte)');
   } else {
     runAllTests();
   }

@@ -7,7 +7,7 @@ console.log('=====================================');
 // Simular payload de mensagem WhatsApp
 const testePayload = {
   event: 'MESSAGES_UPSERT',
-  instance: 'atendimento-ao-cliente-sac1',
+  instance: 'atendimento-ao-cliente-suporte',
   data: {
     key: {
       remoteJid: '5512981022013@s.whatsapp.net',

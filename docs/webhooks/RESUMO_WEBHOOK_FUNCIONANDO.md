@@ -16,7 +16,7 @@
   - `/webhook/messages-upsert` (compatibilidade)
 
 ### 2. Instância Evolution API ✅
-- **Nome**: `atendimento-ao-cliente-sac1`
+- **Nome**: `atendimento-ao-cliente-suporte`
 - **Status**: `open` (conectada)
 - **WhatsApp conectado**: ✅ Sim
 - **Número**: `5512981022013@s.whatsapp.net`
@@ -53,14 +53,14 @@ Invoke-WebRequest -Uri "http://localhost:4000/webhook/health" -Method GET
 📥 [2025-06-15T22:XX:XX.XXX] POST /webhook/evolution
 🔔 [timestamp] Webhook Evolution API: {
   event: 'MESSAGES_UPSERT',
-  instance: 'atendimento-ao-cliente-sac1',
+  instance: 'atendimento-ao-cliente-suporte',
   dataKeys: ['key', 'message', 'pushName', ...]
 }
 📨 Processando mensagem: {
   from: 'Nome do Cliente',
   phone: '5511XXXXXXXXX',
   content: 'Mensagem recebida...',
-  instance: 'atendimento-ao-cliente-sac1'
+  instance: 'atendimento-ao-cliente-suporte'
 }
 ```
 
@@ -75,7 +75,7 @@ Invoke-WebRequest -Uri "http://localhost:4000/webhook/health" -Method GET
 | Componente | Status | URL/Detalhes |
 |------------|--------|--------------|
 | Webhook Local | ✅ Rodando | `http://localhost:4000` |
-| Evolution API | ✅ Conectada | `atendimento-ao-cliente-sac1` |
+| Evolution API | ✅ Conectada | `atendimento-ao-cliente-suporte` |
 | WhatsApp | ✅ Conectado | `5512981022013@s.whatsapp.net` |
 | Configuração | ✅ Correta | URL local configurada |
 

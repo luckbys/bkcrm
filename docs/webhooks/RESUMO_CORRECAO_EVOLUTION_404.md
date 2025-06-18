@@ -12,7 +12,7 @@
 ### 2. 🔐 Problemas de Descriptografia
 **Problema**: Mensagens de grupos com contadores antigos causavam erros
 **Solução**:
-- ✅ Instância `atendimento-ao-cliente-sac1` reconectada
+- ✅ Instância `atendimento-ao-cliente-suporte` reconectada
 - ✅ Cache de sessão limpo automaticamente
 - ✅ Processo de reconexão iniciado
 
@@ -32,7 +32,7 @@
 - ✅ **Health Check**: `http://localhost:4000/webhook/health`
 
 ### Instâncias Evolution API
-- 📱 **Instância**: `atendimento-ao-cliente-sac1`
+- 📱 **Instância**: `atendimento-ao-cliente-suporte`
 - 🔄 **Status**: Reconectando (processo iniciado)
 - ⚠️ **Webhook**: Configuração teve erro 400 (provavelmente formato da URL)
 
@@ -132,7 +132,7 @@ node configurar-webhooks-evolution.js
 
 ### Enviar Mensagem de Teste
 1. Abra o WhatsApp
-2. Envie mensagem para o número da instância `atendimento-ao-cliente-sac1`
+2. Envie mensagem para o número da instância `atendimento-ao-cliente-suporte`
 3. Verifique se aparece no CRM como novo ticket
 
 ### Verificar Webhook

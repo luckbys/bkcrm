@@ -9,7 +9,7 @@ class EvolutionMessageSender {
   constructor() {
     this.baseURL = process.env.EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host/';
     this.apiKey = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
-    this.defaultInstance = process.env.EVOLUTION_DEFAULT_INSTANCE || 'atendimento-ao-cliente-sac1';
+    this.defaultInstance = process.env.EVOLUTION_DEFAULT_INSTANCE || 'atendimento-ao-cliente-suporte';
     
     // Configurar axios com defaults
     this.api = axios.create({

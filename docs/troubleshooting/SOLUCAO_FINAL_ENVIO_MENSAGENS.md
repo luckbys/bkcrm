@@ -58,7 +58,7 @@ const validarNumeroWhatsApp = async (phone) => {
     const response = await fetch('/webhook/check-instance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instance: 'atendimento-ao-cliente-sac1' })
+      body: JSON.stringify({ instance: 'atendimento-ao-cliente-suporte' })
     });
     
     // Evolution API valida automaticamente se o número existe
@@ -96,7 +96,7 @@ async function testarEnvioReal() {
     body: JSON.stringify({
       phone: phone,
       text: 'Teste do CRM - funcionando!',
-      instance: 'atendimento-ao-cliente-sac1'
+      instance: 'atendimento-ao-cliente-suporte'
     })
   });
   

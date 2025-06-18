@@ -11,7 +11,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Dados da instância Evolution (versão simplificada para teste)
 const instanceData = {
-  instance_name: 'atendimento-ao-cliente-sac1',
+  instance_name: 'atendimento-ao-cliente-suporte',
   instance_display_name: 'Atendimento ao Cliente SAC',
   evolution_api_url: 'https://press-evolution-api.jhkbgs.easypanel.host',
   api_key: '429683C4C977415CAAFCCE10F7D57E11',
