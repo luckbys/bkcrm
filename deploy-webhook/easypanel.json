@@ -1,0 +1,23 @@
+{
+  "name": "evolution-webhook",
+  "type": "app",
+  "source": {
+    "type": "dockerfile",
+    "dockerfile": "Dockerfile"
+  },
+  "domains": [
+    {
+      "host": "bkcrm.devsible.com.br",
+      "path": "/webhook",
+      "port": 4000,
+      "https": true
+    }
+  ],
+  "healthcheck": {
+    "path": "/health",
+    "port": 4000,
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3
+  }
+} 

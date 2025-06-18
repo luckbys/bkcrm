@@ -17,7 +17,11 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nextjs -u 1001
 
 # Copiar todos os arquivos necessários
-COPY . ./
+COPY webhook-evolution-complete-corrigido.cjs ./
+COPY webhook.env ./
+
+# Verificar se o arquivo existe
+RUN test -f webhook-evolution-complete-corrigido.cjs || (echo "❌ Arquivo webhook-evolution-complete-corrigido.cjs não encontrado" && exit 1)
 
 # Mudar ownership dos arquivos
 RUN chown -R nextjs:nodejs /app
