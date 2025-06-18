@@ -102,59 +102,14 @@ app.post('/webhook/evolution', async (req, res) => {
   }
 });
 
-// FUNÇÃO CORRIGIDA PARA SALVAR MENSAGENS SEM TRIGGER DE NOTIFICAÇÕES
+// FUNÇÃO PRINCIPAL PARA SALVAR MENSAGENS (VERSÃO ÚNICA)
 async function saveMessageToDatabase(data) {
   try {
-    console.log('💾 Salvando mensagem real no banco:', {
+    console.log('💾 Salvando mensagem no banco:', {
       ticketId: data.ticketId,
       content: data.content.substring(0, 30) + '...',
       sender: data.senderName,
       timestamp: data.timestamp
-    });
-
-    // ESTRATÉGIA 1: Usar RPC function que bypassa triggers problemáticos
-    console.log('🔧 Tentando método RPC...');
-    try {
-      const { data: rpcResult, error: rpcError } = await supabase
-        .rpc('insert_message_safe', {
-          p_ticket_id: data.ticketId,
-          p_content: data.content,
-          p_sender_type: 'customer',
-          p_sender_name: data.senderName,
-          p_metadata: {
-            whatsapp_phone: data.senderPhone,
-            sender_name: data.senderName,
-            instance_name: data.instanceName,
-            message_id: data.messageId,
-            timestamp: data.timestamp,
-            source: 'webhook'
-          }
-        });
-
-      if (!rpcError && rpcResult) {
-        console.log('✅ Mensagem salva via RPC:', rpcResult);
-        return {
-          success: true,
-          message: 'Mensagem salva via RPC',
-          messageId: rpcResult
-        };
-      }
-
-      console.log('⚠️ RPC method failed, trying direct insert...');
-    } catch (rpcError) {
-      console.log('⚠️ RPC method not available, trying direct insert...');
-    }
-
-    // ESTRATÉGIA 2: Insert direto com configuração especial
-    console.log('🔧 Tentando insert direto...');
-    
-    // Desabilitar triggers temporariamente para esta sessão
-    await supabase.rpc('set_config', {
-      setting_name: 'session_replication_role',
-      new_value: 'replica',
-      is_local: true
-    }).catch(() => {
-      console.log('⚠️ Não foi possível desabilitar triggers');
     });
 
     // PREPARAR DADOS ENRIQUECIDOS PARA MENSAGEM
@@ -194,57 +149,12 @@ async function saveMessageToDatabase(data) {
       .insert([messageData])
       .select()
       .single();
-
-    // Reabilitar triggers
-    await supabase.rpc('set_config', {
-      setting_name: 'session_replication_role',
-      new_value: 'origin',
-      is_local: true
-    }).catch(() => {
-      console.log('⚠️ Não foi possível reabilitar triggers');
-    });
     
     if (error) {
-      console.error('❌ Erro ao salvar mensagem (insert direto):', error);
-      
-      // ESTRATÉGIA 3: Fallback - salvar apenas em logs
-      console.log('🔧 Usando fallback - salvando em logs...');
-      
-      // Tentar salvar sem fields problemáticos
-      const fallbackData = {
-        ticket_id: data.ticketId,
-        content: data.content,
-        sender_type: 'customer',
-        message_type: 'text',
-        metadata: {
-          fallback: true,
-          whatsapp_phone: data.senderPhone,
-          sender_name: data.senderName,
-          source: 'webhook_fallback'
-        }
-      };
-      
-      const { data: fallbackMessage, error: fallbackError } = await supabase
-        .from('messages')
-        .insert([fallbackData])
-        .select()
-        .single();
-      
-      if (fallbackError) {
-        console.error('❌ Fallback também falhou:', fallbackError);
-        return { 
-          success: false, 
-          message: `Erro ao salvar: ${error.message}`,
-          fallbackError: fallbackError.message
-        };
-      }
-      
-      console.log('✅ Mensagem salva via fallback:', fallbackMessage.id);
-      return {
-        success: true,
-        message: 'Mensagem salva via fallback (sem triggers)',
-        messageId: fallbackMessage.id,
-        method: 'fallback'
+      console.error('❌ Erro ao salvar mensagem:', error);
+      return { 
+        success: false, 
+        message: `Erro ao salvar: ${error.message}`
       };
     }
     
@@ -253,28 +163,15 @@ async function saveMessageToDatabase(data) {
     return {
       success: true,
       message: 'Mensagem salva no banco',
-      messageId: message.id,
-      method: 'direct'
+      messageId: message.id
     };
 
   } catch (error) {
     console.error('❌ Erro geral ao salvar mensagem:', error);
     
-    // ESTRATÉGIA 4: Log local apenas
-    console.log('📝 Salvando apenas em log local...');
-    console.log('💾 [LOCAL LOG]', {
-      ticketId: data.ticketId,
-      content: data.content,
-      sender: data.senderName,
-      timestamp: data.timestamp,
-      error: error.message
-    });
-    
     return { 
-      success: true, // Consideramos sucesso porque não queremos quebrar o fluxo
-      message: 'Mensagem salva apenas em log local',
-      method: 'local_log',
-      error: error.message
+      success: false, 
+      message: `Erro: ${error.message}`
     };
   }
 }
@@ -503,20 +400,24 @@ async function processNewMessage(payload) {
       canReply: clientData.responseData.canReply
     });
 
-    // VERIFICAR/CRIAR CLIENTE COM DADOS ENRIQUECIDOS
+    // VERIFICAR/CRIAR CLIENTE USANDO RPC
     let customerId = null;
     try {
-      const customer = await findOrCreateCustomerEnhanced({
-        phone: clientData.phone,
-        phoneFormatted: clientData.phoneFormatted,
-        name: clientData.name,
-        instanceName: instanceName,
-        whatsappMetadata: clientData.whatsappMetadata,
-        responseData: clientData.responseData
-      });
-      
+      // Usar função RPC do banco
+      const { data: customer, error: customerError } = await supabase
+        .rpc('create_customer_webhook', {
+          p_phone: clientData.phone,
+          p_name: clientData.name,
+          p_instance_name: instanceName
+        })
+        .single();
+
+      if (customerError) {
+        throw new Error(`Erro RPC cliente: ${customerError.message}`);
+      }
+
       customerId = customer?.id || null;
-      console.log('✅ [CLIENTE] Encontrado/criado com dados enriquecidos:', customerId);
+      console.log('✅ [CLIENTE] Encontrado/criado via RPC:', customerId);
     } catch (error) {
       console.error('⚠️ Erro ao verificar/criar cliente, continuando com cliente anônimo:', error.message);
     }
@@ -527,8 +428,24 @@ async function processNewMessage(payload) {
       console.log('⚠️ Instância Evolution não encontrada, usando departamento padrão:', instanceName);
     }
 
-    // BUSCAR TICKET EXISTENTE COM NOVO SISTEMA
-    let ticket = await findExistingTicket(clientData.phone, departmentId);
+    // BUSCAR TICKET EXISTENTE USANDO RPC
+    let ticket = null;
+    try {
+      const { data: existingTickets, error: ticketSearchError } = await supabase
+        .rpc('find_existing_ticket_webhook', {
+          p_client_phone: clientData.phone,
+          p_department_id: departmentId
+        });
+
+      if (ticketSearchError) {
+        console.warn('⚠️ Erro na busca RPC de ticket:', ticketSearchError.message);
+      } else if (existingTickets && existingTickets.length > 0) {
+        ticket = existingTickets[0];
+        console.log('✅ [TICKET] Ticket existente encontrado via RPC:', ticket.id);
+      }
+    } catch (error) {
+      console.warn('⚠️ Erro na busca de ticket, continuando para criar novo:', error.message);
+    }
     
     if (ticket) {
       console.log('✅ Ticket aberto encontrado:', {
@@ -554,14 +471,45 @@ async function processNewMessage(payload) {
         canReply: clientData.responseData.canReply
       });
       
-      ticket = await createTicketAutomaticallyEnhanced({
-        clientData: clientData,
-        customerId: customerId,
-        departmentId: departmentId,
-        messageContent: messageContent,
-        instanceName: instanceName,
-        phoneInfo: phoneInfo
-      });
+      // CRIAR TICKET USANDO RPC
+      try {
+        const { data: newTicket, error: ticketCreateError } = await supabase
+          .rpc('create_ticket_webhook', {
+            p_client_name: clientData.name,
+            p_client_phone: clientData.phone,
+            p_customer_id: customerId,
+            p_department_id: departmentId,
+            p_instance_name: instanceName,
+            p_message_content: messageContent,
+            p_title: `WhatsApp: ${clientData.name}`
+          })
+          .single();
+
+        if (ticketCreateError) {
+          throw new Error(`Erro RPC ticket: ${ticketCreateError.message}`);
+        }
+
+        ticket = newTicket;
+        console.log('✅ [TICKET] Ticket criado via RPC:', ticket.id);
+      } catch (error) {
+        console.error('❌ Erro ao criar ticket via RPC:', error.message);
+        
+        // FALLBACK: Criar ticket local com UUID válido
+        ticket = {
+          id: crypto.randomUUID(), // UUID válido ao invés de string inválida
+          title: `WhatsApp: ${clientData.name}`,
+          status: 'open',
+          channel: 'whatsapp',
+          metadata: {
+            client_phone: clientData.phone,
+            phone_formatted: clientData.phoneFormatted,
+            can_reply: true,
+            error: error.message
+          },
+          isLocal: true
+        };
+        console.log('🔄 [TICKET] Fallback local criado com UUID válido:', ticket.id);
+      }
     }
 
     if (!ticket) {
