@@ -433,11 +433,344 @@ router.post('/chats-update', async (req, res) => {
   }
 });
 
+// === ENDPOINT DE ENVIO DE MENSAGENS ===
+// Endpoint para enviar mensagens do TK para WhatsApp
+router.post('/send-message', async (req, res) => {
+  try {
+    const { phone, text, instance = 'atendimento-ao-cliente-suporte', options = {} } = req.body;
+
+    console.log('📤 [ENVIO] Recebida solicitação de envio:', {
+      phone: phone,
+      text: text?.substring(0, 50) + '...',
+      instance: instance
+    });
+
+    // Validar dados obrigatórios
+    if (!phone || !text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Telefone e texto são obrigatórios',
+        received: true
+      });
+    }
+
+    // Formatação do telefone
+    let formattedPhone = phone.replace(/\D/g, ''); // Remove caracteres não numéricos
+    
+    // Se não começar com código do país, adicionar +55 (Brasil)
+    if (!formattedPhone.startsWith('55') && formattedPhone.length >= 10) {
+      formattedPhone = '55' + formattedPhone;
+    }
+
+    console.log(`📱 [ENVIO] Enviando para ${formattedPhone} via instância ${instance}`);
+
+    // Payload correto conforme documentação Evolution API
+    const payload = {
+      number: formattedPhone,
+      text: text,
+      options: {
+        delay: options.delay || 1000,
+        presence: options.presence || 'composing',
+        linkPreview: options.linkPreview !== false,
+        ...options
+      }
+    };
+
+    console.log('🚀 [ENVIO] Payload:', {
+      number: payload.number,
+      text: payload.text.substring(0, 50) + '...',
+      options: payload.options
+    });
+
+    // Fazer requisição para Evolution API
+    const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const responseData = await evolutionResponse.json();
+
+    if (evolutionResponse.ok) {
+      console.log('✅ [ENVIO] Mensagem enviada com sucesso:', {
+        messageId: responseData.key?.id,
+        status: responseData.status,
+        timestamp: responseData.messageTimestamp
+      });
+
+      res.status(200).json({
+        success: true,
+        messageId: responseData.key?.id,
+        status: responseData.status,
+        data: responseData,
+        sent: true
+      });
+    } else {
+      console.error('❌ [ENVIO] Erro da Evolution API:', {
+        status: evolutionResponse.status,
+        error: responseData
+      });
+
+      res.status(evolutionResponse.status).json({
+        success: false,
+        error: responseData.message || 'Erro ao enviar mensagem',
+        details: responseData,
+        sent: false
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ [ENVIO] Erro no endpoint send-message:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      sent: false
+    });
+  }
+});
+
+// === ENDPOINT DE RESPOSTA A MENSAGEM ===
+// Endpoint para responder a uma mensagem específica
+router.post('/reply-message', async (req, res) => {
+  try {
+    const { phone, text, instance = 'atendimento-ao-cliente-suporte', quotedMessage, options = {} } = req.body;
+
+    console.log('💬 [REPLY] Recebida solicitação de resposta:', {
+      phone: phone,
+      text: text?.substring(0, 50) + '...',
+      instance: instance,
+      hasQuoted: !!quotedMessage
+    });
+
+    // Validar dados obrigatórios
+    if (!phone || !text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Telefone e texto são obrigatórios',
+        received: true
+      });
+    }
+
+    // Formatação do telefone
+    let formattedPhone = phone.replace(/\D/g, '');
+    if (!formattedPhone.startsWith('55') && formattedPhone.length >= 10) {
+      formattedPhone = '55' + formattedPhone;
+    }
+
+    // Payload com citação
+    const payload = {
+      number: formattedPhone,
+      text: text,
+      options: {
+        delay: options.delay || 1000,
+        presence: options.presence || 'composing',
+        linkPreview: options.linkPreview !== false,
+        ...options
+      }
+    };
+
+    // Adicionar citação se fornecida
+    if (quotedMessage) {
+      payload.options.quoted = {
+        key: {
+          remoteJid: quotedMessage.remoteJid || `${formattedPhone}@s.whatsapp.net`,
+          fromMe: quotedMessage.fromMe || false,
+          id: quotedMessage.id,
+          participant: quotedMessage.participant
+        },
+        message: {
+          conversation: quotedMessage.text || quotedMessage.conversation
+        }
+      };
+    }
+
+    console.log('🚀 [REPLY] Enviando resposta via Evolution API...');
+
+    // Fazer requisição para Evolution API
+    const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const responseData = await evolutionResponse.json();
+
+    if (evolutionResponse.ok) {
+      console.log('✅ [REPLY] Resposta enviada com sucesso:', responseData.key?.id);
+
+      res.status(200).json({
+        success: true,
+        messageId: responseData.key?.id,
+        status: responseData.status,
+        data: responseData,
+        sent: true
+      });
+    } else {
+      console.error('❌ [REPLY] Erro da Evolution API:', responseData);
+
+      res.status(evolutionResponse.status).json({
+        success: false,
+        error: responseData.message || 'Erro ao enviar resposta',
+        details: responseData,
+        sent: false
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ [REPLY] Erro no endpoint reply-message:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      sent: false
+    });
+  }
+});
+
+// === ENDPOINT DE VERIFICAÇÃO DE INSTÂNCIA ===
+// Endpoint para verificar status da instância padrão
+router.get('/check-instance', async (req, res) => {
+  try {
+    const instanceName = 'atendimento-ao-cliente-suporte';
+    
+    console.log(`🔍 [CHECK] Verificando instância padrão: ${instanceName}`);
+
+    const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+      method: 'GET',
+      headers: {
+        'apikey': EVOLUTION_API_KEY
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log(`✅ [CHECK] Status da instância ${instanceName}:`, data.instance?.state);
+      
+      res.status(200).json({
+        success: true,
+        instance: instanceName,
+        state: data.instance?.state,
+        connected: data.instance?.state === 'open',
+        data: data
+      });
+    } else {
+      console.error(`❌ [CHECK] Erro ao verificar instância ${instanceName}:`, data);
+      
+      res.status(response.status).json({
+        success: false,
+        error: data.message || 'Erro ao verificar instância',
+        instance: instanceName,
+        connected: false
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ [CHECK] Erro no endpoint check-instance:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      connected: false
+    });
+  }
+});
+
+// Endpoint para verificar status de instância específica
+router.get('/check-instance/:instanceName', async (req, res) => {
+  try {
+    const instanceName = req.params.instanceName;
+    
+    console.log(`🔍 [CHECK] Verificando instância: ${instanceName}`);
+
+    const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+      method: 'GET',
+      headers: {
+        'apikey': EVOLUTION_API_KEY
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log(`✅ [CHECK] Status da instância ${instanceName}:`, data.instance?.state);
+      
+      res.status(200).json({
+        success: true,
+        instance: instanceName,
+        state: data.instance?.state,
+        connected: data.instance?.state === 'open',
+        data: data
+      });
+    } else {
+      console.error(`❌ [CHECK] Erro ao verificar instância ${instanceName}:`, data);
+      
+      res.status(response.status).json({
+        success: false,
+        error: data.message || 'Erro ao verificar instância',
+        instance: instanceName,
+        connected: false
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ [CHECK] Erro no endpoint check-instance:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      connected: false
+    });
+  }
+});
+
+// === ENDPOINT DE TESTE DE ENVIO ===
+// Endpoint para testar envio de mensagem
+router.post('/test-send', async (req, res) => {
+  try {
+    const { phone, instance = 'atendimento-ao-cliente-suporte' } = req.body;
+    
+    const testMessage = `🧪 TESTE AUTOMÁTICO - ${new Date().toLocaleString('pt-BR')}`;
+    
+    console.log(`🧪 [TEST] Testando envio para ${phone} via ${instance}`);
+
+    const result = await fetch(`http://localhost:${PORT}/webhook/send-message`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        phone: phone,
+        text: testMessage,
+        instance: instance
+      })
+    });
+
+    const data = await result.json();
+
+    res.status(result.status).json({
+      test: true,
+      timestamp: new Date().toISOString(),
+      result: data
+    });
+
+  } catch (error) {
+    console.error('❌ [TEST] Erro no endpoint test-send:', error);
+    res.status(500).json({
+      test: true,
+      error: error.message
+    });
+  }
+});
+
 router.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '2.1.0-corrigido',
+    version: '2.2.0-envio-habilitado',
     endpoints: [
       'POST /webhook/evolution',
       'POST /webhook/evolution/messages-upsert',
@@ -446,6 +779,11 @@ router.get('/health', (req, res) => {
       'POST /webhook/messages-update',
       'POST /webhook/chats-upsert',
       'POST /webhook/chats-update',
+      'POST /webhook/send-message',
+      'POST /webhook/reply-message',
+      'POST /webhook/test-send',
+      'GET /webhook/check-instance',
+      'GET /webhook/check-instance/:instanceName',
       'GET /webhook/health'
     ]
   });
@@ -456,18 +794,27 @@ app.use('/webhook', router);
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`🚀 Webhook Evolution API v2.0 rodando na porta ${PORT}`);
+  console.log(`🚀 Webhook Evolution API v2.2 - ENVIO HABILITADO - rodando na porta ${PORT}`);
   console.log('📋 Endpoints disponíveis:');
-  console.log('   POST /webhook/evolution');
-  console.log('   POST /webhook/evolution/messages-upsert');
-  console.log('   POST /webhook/messages-upsert');
-  console.log('   POST /webhook/contacts-update');
-  console.log('   POST /webhook/messages-update');
-  console.log('   POST /webhook/chats-upsert');
-  console.log('   POST /webhook/chats-update');
-  console.log('   GET  /webhook/health');
+  console.log('   📥 RECEBER MENSAGENS:');
+  console.log('      POST /webhook/evolution');
+  console.log('      POST /webhook/evolution/messages-upsert');
+  console.log('      POST /webhook/messages-upsert');
+  console.log('      POST /webhook/contacts-update');
+  console.log('      POST /webhook/messages-update');
+  console.log('      POST /webhook/chats-upsert');
+  console.log('      POST /webhook/chats-update');
+  console.log('   📤 ENVIAR MENSAGENS:');
+  console.log('      POST /webhook/send-message');
+  console.log('      POST /webhook/reply-message');
+  console.log('      POST /webhook/test-send');
+  console.log('   🔧 UTILITÁRIOS:');
+  console.log('      GET  /webhook/check-instance/:instanceName?');
+  console.log('      GET  /webhook/health');
   console.log('🔧 Configurações:');
   console.log(`   📡 Evolution API: ${EVOLUTION_API_URL}`);
   console.log(`   🗄️ Supabase: ${supabaseUrl}`);
   console.log(`   🌐 Base URL: ${BASE_URL}`);
+  console.log('');
+  console.log('✅ Sistema bidirecional ativo: RECEBER ↔️ ENVIAR mensagens WhatsApp');
 }); 
