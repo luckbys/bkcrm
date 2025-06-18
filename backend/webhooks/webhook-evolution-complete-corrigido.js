@@ -320,31 +320,111 @@ router.post('/evolution', async (req, res) => {
   }
 });
 
-// Rota genérica para capturar todos os webhooks
-router.post('/*', async (req, res) => {
+// Rotas específicas para eventos conhecidos da Evolution API
+router.post('/messages-upsert', async (req, res) => {
   try {
-    const eventPath = req.path.replace('/', '');
-    const payload = req.body;
+    console.log('🔔 Webhook messages-upsert (endpoint direto) recebido');
     
-    console.log(`🔔 Webhook genérico recebido - Path: ${eventPath}, Evento: ${payload.event}`);
+    const payload = {
+      event: 'messages.upsert',
+      instance: req.body.instance || 'unknown',
+      data: req.body.data || req.body
+    };
 
-    if (payload.event === 'messages.upsert') {
-      const result = await processMessage(payload);
-      res.status(200).json({
-        received: true,
-        processed: true,
-        result
-      });
-    } else {
-      console.log(`ℹ️ Evento ${payload.event} em ${eventPath} recebido mas não processado`);
-      res.status(200).json({
-        received: true,
-        processed: false,
-        message: `Evento ${payload.event} não requer processamento`
-      });
-    }
+    const result = await processMessage(payload);
+
+    res.status(200).json({
+      received: true,
+      processed: true,
+      result
+    });
+    
   } catch (error) {
-    console.error('❌ Erro no webhook genérico:', error);
+    console.error('❌ Erro no webhook messages-upsert direto:', error);
+    res.status(500).json({ 
+      error: error.message,
+      received: true,
+      processed: false 
+    });
+  }
+});
+
+router.post('/contacts-update', async (req, res) => {
+  try {
+    const payload = req.body;
+    console.log(`🔔 Webhook contacts-update recebido`);
+    
+    // Apenas loggar e responder positivamente (não processamos contatos)
+    res.status(200).json({
+      received: true,
+      processed: false,
+      message: 'Evento contacts-update não requer processamento'
+    });
+  } catch (error) {
+    console.error('❌ Erro no webhook contacts-update:', error);
+    res.status(500).json({ 
+      error: error.message,
+      received: true,
+      processed: false 
+    });
+  }
+});
+
+router.post('/messages-update', async (req, res) => {
+  try {
+    const payload = req.body;
+    console.log(`🔔 Webhook messages-update recebido`);
+    
+    // Apenas loggar e responder positivamente (não processamos updates de mensagem)
+    res.status(200).json({
+      received: true,
+      processed: false,
+      message: 'Evento messages-update não requer processamento'
+    });
+  } catch (error) {
+    console.error('❌ Erro no webhook messages-update:', error);
+    res.status(500).json({ 
+      error: error.message,
+      received: true,
+      processed: false 
+    });
+  }
+});
+
+router.post('/chats-upsert', async (req, res) => {
+  try {
+    const payload = req.body;
+    console.log(`🔔 Webhook chats-upsert recebido`);
+    
+    // Apenas loggar e responder positivamente (não processamos chats)
+    res.status(200).json({
+      received: true,
+      processed: false,
+      message: 'Evento chats-upsert não requer processamento'
+    });
+  } catch (error) {
+    console.error('❌ Erro no webhook chats-upsert:', error);
+    res.status(500).json({ 
+      error: error.message,
+      received: true,
+      processed: false 
+    });
+  }
+});
+
+router.post('/chats-update', async (req, res) => {
+  try {
+    const payload = req.body;
+    console.log(`🔔 Webhook chats-update recebido`);
+    
+    // Apenas loggar e responder positivamente (não processamos updates de chat)
+    res.status(200).json({
+      received: true,
+      processed: false,
+      message: 'Evento chats-update não requer processamento'
+    });
+  } catch (error) {
+    console.error('❌ Erro no webhook chats-update:', error);
     res.status(500).json({ 
       error: error.message,
       received: true,
@@ -357,11 +437,15 @@ router.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '2.0.0-aprimorado',
+    version: '2.1.0-corrigido',
     endpoints: [
       'POST /webhook/evolution',
       'POST /webhook/evolution/messages-upsert',
-      'POST /webhook/* (genérico)',
+      'POST /webhook/messages-upsert',
+      'POST /webhook/contacts-update',
+      'POST /webhook/messages-update',
+      'POST /webhook/chats-upsert',
+      'POST /webhook/chats-update',
       'GET /webhook/health'
     ]
   });
@@ -376,7 +460,11 @@ app.listen(PORT, () => {
   console.log('📋 Endpoints disponíveis:');
   console.log('   POST /webhook/evolution');
   console.log('   POST /webhook/evolution/messages-upsert');
-  console.log('   POST /webhook/* (captura todos)');
+  console.log('   POST /webhook/messages-upsert');
+  console.log('   POST /webhook/contacts-update');
+  console.log('   POST /webhook/messages-update');
+  console.log('   POST /webhook/chats-upsert');
+  console.log('   POST /webhook/chats-update');
   console.log('   GET  /webhook/health');
   console.log('🔧 Configurações:');
   console.log(`   📡 Evolution API: ${EVOLUTION_API_URL}`);

@@ -1,100 +1,222 @@
-// 🧪 Teste Simples do Webhook Corrigido
-console.log('🧪 TESTE: Webhook Evolution API Corrigido');
-console.log('=========================================');
+const http = require('http');
 
-// Simular dados de mensagem WhatsApp
-const testMessage = {
-  data: {
-    key: {
-      remoteJid: '5512981022013@s.whatsapp.net',
-      fromMe: false,
-      id: 'test-message-123'
-    },
-    pushName: 'Lucas Borges Teste',
-    messageTimestamp: Math.floor(Date.now() / 1000),
-    message: {
-      conversation: 'Olá! Este é um teste do webhook corrigido.'
+// Função helper para fazer requisições HTTP
+function makeRequest(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const requestOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || 80,
+      path: urlObj.pathname,
+      method: options.method || 'GET',
+      headers: options.headers || {}
+    };
+
+    const req = http.request(requestOptions, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const jsonData = JSON.parse(data);
+          resolve({
+            status: res.statusCode,
+            data: jsonData
+          });
+        } catch (e) {
+          resolve({
+            status: res.statusCode,
+            data: data
+          });
+        }
+      });
+    });
+
+    req.on('error', reject);
+
+    if (options.body) {
+      req.write(options.body);
     }
-  },
-  instance: 'atendimento-ao-cliente-sac1'
-};
 
-console.log('\n📱 Dados de teste simulados:');
-console.log('JID:', testMessage.data.key.remoteJid);
-console.log('Nome:', testMessage.data.pushName);
-console.log('Mensagem:', testMessage.data.message.conversation);
-console.log('Instância:', testMessage.instance);
+    req.end();
+  });
+}
 
-console.log('\n🔍 Verificando extração de telefone...');
-
-// Extrair telefone (função simplificada)
-function extractPhone(jid) {
-  if (!jid || jid.includes('@g.us')) {
-    return null;
+// Teste 1: Health Check
+async function testHealthCheck() {
+  console.log('🏥 Testando Health Check...');
+  try {
+    const response = await makeRequest('http://localhost:4000/webhook/health');
+    console.log('✅ Health Check:', response.data);
+    return response.status === 200;
+  } catch (error) {
+    console.error('❌ Erro no Health Check:', error.message);
+    return false;
   }
+}
+
+// Teste 2: Mensagem de Texto
+async function testTextMessage() {
+  console.log('\n📱 Testando Mensagem de Texto...');
   
-  const clean = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
-  
-  if (clean.length < 10) {
-    return null;
-  }
-  
-  // Formatar número brasileiro
-  if (clean.startsWith('55') && clean.length >= 12) {
-    const ddd = clean.substring(2, 4);
-    const number = clean.substring(4);
-    if (number.length === 9) {
-      return {
-        raw: clean,
-        formatted: `+55 (${ddd}) ${number.substring(0, 5)}-${number.substring(5)}`,
-        country: 'brazil'
-      };
+  const payload = {
+    event: 'messages.upsert',
+    instance: 'atendimento-ao-cliente-suporte',
+    data: {
+      key: {
+        remoteJid: '5511999887766@s.whatsapp.net',
+        fromMe: false,
+        id: 'TEST_MESSAGE_001'
+      },
+      pushName: 'João da Silva',
+      status: 'SERVER_ACK',
+      message: {
+        conversation: 'Olá! Preciso de ajuda com meu pedido.'
+      },
+      messageType: 'conversation',
+      messageTimestamp: Math.floor(Date.now() / 1000),
+      instanceId: 'test-instance-123',
+      source: 'android'
     }
-  }
-  
-  return {
-    raw: clean,
-    formatted: clean,
-    country: 'unknown'
   };
-}
 
-const phoneResult = extractPhone(testMessage.data.key.remoteJid);
+  try {
+    const response = await makeRequest('http://localhost:4000/webhook/evolution', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
 
-if (phoneResult) {
-  console.log('✅ Telefone extraído com sucesso:');
-  console.log('   Raw:', phoneResult.raw);
-  console.log('   Formatado:', phoneResult.formatted);
-  console.log('   País:', phoneResult.country);
-} else {
-  console.log('❌ Falha na extração do telefone');
-}
-
-console.log('\n🗄️ Dados que seriam enviados para o banco:');
-console.log({
-  cliente: {
-    nome: testMessage.data.pushName,
-    telefone: phoneResult?.raw,
-    telefoneFormatado: phoneResult?.formatted
-  },
-  ticket: {
-    titulo: `WhatsApp: ${testMessage.data.pushName}`,
-    telefone: phoneResult?.raw,
-    instancia: testMessage.instance,
-    canal: 'whatsapp'
-  },
-  mensagem: {
-    conteudo: testMessage.data.message.conversation,
-    remetente: testMessage.data.pushName,
-    telefone: phoneResult?.raw
+    console.log('✅ Resposta da Mensagem de Texto:', response.data);
+    return response.data.processed === true;
+  } catch (error) {
+    console.error('❌ Erro na Mensagem de Texto:', error.message);
+    return false;
   }
-});
+}
 
-console.log('\n✅ TESTE CONCLUÍDO!');
-console.log('\n📝 Próximos passos:');
-console.log('1. Execute o script SQL: CORRECAO_BANCO_PROFILES_PHONE.sql');
-console.log('2. Reinicie o webhook: node webhook-evolution-complete-corrigido.js');
-console.log('3. Envie mensagem WhatsApp real para testar');
-console.log('4. Verifique logs sem erros de banco');
+// Teste 3: Mensagem Real (baseada nos logs)
+async function testRealMessage() {
+  console.log('\n📱 Testando Mensagem Real (baseada nos logs)...');
+  
+  const payload = {
+    event: 'messages.upsert',
+    instance: 'atendimento-ao-cliente-suporte',
+    data: {
+      key: {
+        remoteJid: '5512981022013@s.whatsapp.net',
+        fromMe: true,
+        id: '3EB0E0D9A910DBC99496B5'
+      },
+      pushName: 'Lucas Borges',
+      status: 'SERVER_ACK',
+      message: {
+        conversation: 'mnnkjjnjj'
+      },
+      messageType: 'conversation',
+      messageTimestamp: 1750287815,
+      instanceId: 'ad22f1f9-3b0d-4a4e-8f16-db1ed86d2eab',
+      source: 'web'
+    }
+  };
 
-console.log('\n🎯 Aguardando correção do banco de dados...'); 
+  try {
+    const response = await makeRequest('http://localhost:4000/webhook/evolution', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    console.log('✅ Resposta da Mensagem Real:', response.data);
+    return response.data.processed === true;
+  } catch (error) {
+    console.error('❌ Erro na Mensagem Real:', error.message);
+    return false;
+  }
+}
+
+// Teste 4: Endpoint Específico
+async function testSpecificEndpoint() {
+  console.log('\n📱 Testando Endpoint Específico...');
+  
+  const payload = {
+    instance: 'atendimento-ao-cliente-suporte',
+    data: {
+      key: {
+        remoteJid: '5511888776655@s.whatsapp.net',
+        fromMe: false,
+        id: 'SPECIFIC_TEST_001'
+      },
+      pushName: 'Maria Santos',
+      message: {
+        conversation: 'Teste do endpoint específico'
+      },
+      messageType: 'conversation',
+      messageTimestamp: Math.floor(Date.now() / 1000)
+    }
+  };
+
+  try {
+    const response = await makeRequest('http://localhost:4000/webhook/messages-upsert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    console.log('✅ Resposta do Endpoint Específico:', response.data);
+    return response.data.processed === true;
+  } catch (error) {
+    console.error('❌ Erro no Endpoint Específico:', error.message);
+    return false;
+  }
+}
+
+// Executar todos os testes
+async function runAllTests() {
+  console.log('🚀 Iniciando Testes Simples do Webhook Evolution API\n');
+  
+  const results = {
+    healthCheck: await testHealthCheck(),
+    textMessage: await testTextMessage(),
+    realMessage: await testRealMessage(),
+    specificEndpoint: await testSpecificEndpoint()
+  };
+
+  console.log('\n📊 RESUMO DOS TESTES:');
+  console.log('========================');
+  console.log(`🏥 Health Check: ${results.healthCheck ? '✅ PASSOU' : '❌ FALHOU'}`);
+  console.log(`📱 Mensagem de Texto: ${results.textMessage ? '✅ PASSOU' : '❌ FALHOU'}`);
+  console.log(`📱 Mensagem Real: ${results.realMessage ? '✅ PASSOU' : '❌ FALHOU'}`);
+  console.log(`📱 Endpoint Específico: ${results.specificEndpoint ? '✅ PASSOU' : '❌ FALHOU'}`);
+
+  const passed = Object.values(results).filter(Boolean).length;
+  const total = Object.keys(results).length;
+  
+  console.log(`\n🎯 RESULTADO FINAL: ${passed}/${total} testes passaram`);
+  
+  if (passed === total) {
+    console.log('🎉 TODOS OS TESTES PASSARAM! Webhook está funcionando corretamente.');
+  } else {
+    console.log('⚠️ Alguns testes falharam. Verifique os logs acima.');
+  }
+
+  return results;
+}
+
+// Executar se chamado diretamente
+if (require.main === module) {
+  runAllTests().catch(console.error);
+}
+
+module.exports = {
+  testHealthCheck,
+  testTextMessage,
+  testRealMessage,
+  testSpecificEndpoint,
+  runAllTests
+}; 

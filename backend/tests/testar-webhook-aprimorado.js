@@ -1,4 +1,52 @@
-const fetch = require('node-fetch');
+// Importar fetch de forma compatível
+let fetch;
+try {
+  // Tentar usar fetch nativo (Node 18+)
+  fetch = globalThis.fetch;
+} catch (e) {
+  // Fallback para node-fetch
+  try {
+    fetch = require('node-fetch');
+  } catch (e2) {
+    // Último fallback - dynamic import
+    const { default: fetchModule } = await import('node-fetch');
+    fetch = fetchModule;
+  }
+}
+
+// Se ainda não temos fetch, usar método alternativo
+if (!fetch) {
+  const https = require('https');
+  const http = require('http');
+  
+  // Implementação simples de fetch para testes
+  fetch = function(url, options = {}) {
+    return new Promise((resolve, reject) => {
+      const protocol = url.startsWith('https:') ? https : http;
+      const req = protocol.request(url, {
+        method: options.method || 'GET',
+        headers: options.headers || {}
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          resolve({
+            status: res.statusCode,
+            json: () => Promise.resolve(JSON.parse(data))
+          });
+        });
+      });
+      
+      req.on('error', reject);
+      
+      if (options.body) {
+        req.write(options.body);
+      }
+      
+      req.end();
+    });
+  };
+}
 
 // Configurações
 const WEBHOOK_URL = 'http://localhost:4000/webhook';
