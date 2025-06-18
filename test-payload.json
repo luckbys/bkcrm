@@ -1,0 +1,14 @@
+{
+  "event": "MESSAGES_UPSERT",
+  "instance": "atendimento-ao-cliente-sac1",
+  "data": {
+    "key": {
+      "remoteJid": "5511999999999@s.whatsapp.net",
+      "id": "123456"
+    },
+    "pushName": "Cliente Teste",
+    "message": {
+      "conversation": "Olá, preciso de ajuda"
+    }
+  }
+} 
