@@ -243,59 +243,48 @@ async function saveMessageToDatabase(data) {
 
     // VALIDAR UUID DO TICKET
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!data.ticketId || !uuidRegex.test(data.ticketId)) {
-      console.error('❌ UUID do ticket inválido:', data.ticketId);
-      
-      // Gerar UUID válido como fallback
-      const validTicketId = crypto.randomUUID();
-      console.log('🔄 Usando UUID válido como fallback:', validTicketId);
-      data.ticketId = validTicketId;
+    let validTicketId = data.ticketId;
+    
+    if (!validTicketId || !uuidRegex.test(validTicketId)) {
+      console.error('❌ UUID do ticket inválido:', validTicketId);
+      validTicketId = crypto.randomUUID();
+      console.log('🔄 Usando novo UUID válido:', validTicketId);
     }
 
-    // PREPARAR DADOS ENRIQUECIDOS PARA MENSAGEM
+    // Preparar metadados enriquecidos
     const enhancedMessageMetadata = {
-      // Dados básicos
-      whatsapp_phone: data.senderPhone,
-      sender_name: data.senderName,
-      instance_name: data.instanceName,
-      message_id: data.messageId,
-      timestamp: data.timestamp,
-      source: data.enhanced ? 'webhook_enhanced' : 'webhook',
-      
-      // Dados enriquecidos (se disponíveis)
-      ...(data.enhanced && {
-        phone_formatted: data.senderPhoneFormatted,
-        whatsapp_jid: data.whatsappJid,
-        client_data: data.clientData,
-        phone_info: data.phoneInfo,
-        can_reply: true,
-        reply_ready: true,
-        enhanced_processing: true
-      }),
-      
-      // Flag de fallback se UUID foi corrigido
-      ...(data.ticketId !== data.originalTicketId && {
-        ticket_id_fallback: true,
-        original_ticket_id: data.originalTicketId
-      })
+      whatsapp_data: {
+        messageId: data.messageId,
+        senderPhone: data.senderPhone,
+        senderPhoneFormatted: data.senderPhoneFormatted,
+        whatsappJid: data.whatsappJid,
+        instanceName: data.instanceName
+      },
+      client_data: data.clientData,
+      phone_info: data.phoneInfo,
+      enhanced: true,
+      original_ticket_id: data.originalTicketId,
+      created_from: 'webhook_evolution_enhanced'
     };
 
+    // Dados da mensagem
     const messageData = {
-      ticket_id: data.ticketId,
+      ticket_id: validTicketId,
       content: data.content,
-      sender_id: null, // Cliente anônimo
+      sender_id: null, // Será atualizado depois
       sender_type: 'customer',
       message_type: 'text',
       metadata: enhancedMessageMetadata,
       created_at: data.timestamp
     };
-    
+
+    // Inserir mensagem no banco
     const { data: message, error } = await supabase
       .from('messages')
       .insert([messageData])
       .select()
       .single();
-    
+
     if (error) {
       console.error('❌ Erro ao salvar mensagem:', error);
       
@@ -420,9 +409,59 @@ async function processNewMessage(payload) {
       console.log('✅ [TICKET] Ticket criado:', ticket.id);
     } catch (error) {
       console.error('❌ Erro ao criar ticket:', error);
+      // Gerar UUID válido como fallback
       const fallbackTicketId = crypto.randomUUID();
-      console.log('🔄 Usando UUID válido como fallback para ticket:', fallbackTicketId);
-      ticket = { id: fallbackTicketId };
+      console.log('🔄 Usando UUID válido como fallback:', fallbackTicketId);
+      
+      // Tentar criar ticket com UUID válido
+      try {
+        const fallbackTicketData = {
+          id: fallbackTicketId,
+          title: `Atendimento WhatsApp - ${clientInfo.name} (Fallback)`,
+          description: messageContent,
+          status: 'open',
+          priority: 'normal',
+          channel: 'whatsapp',
+          customer_id: customerId,
+          metadata: {
+            client_name: clientInfo.name,
+            client_phone: clientInfo.phone,
+            whatsapp_instance: payload.instance,
+            is_whatsapp: true,
+            auto_created: true,
+            is_fallback: true,
+            first_message: messageContent,
+            created_from: 'webhook_evolution_fallback',
+            error_original: error.message
+          }
+        };
+
+        const { data: fallbackTicket, error: fallbackError } = await supabase
+          .from('tickets')
+          .insert([fallbackTicketData])
+          .select()
+          .single();
+
+        if (fallbackError) {
+          console.error('❌ Erro ao criar ticket fallback:', fallbackError);
+          ticket = { id: fallbackTicketId, isFallback: true };
+        } else {
+          console.log('✅ [TICKET] Ticket fallback criado:', fallbackTicket.id);
+          ticket = fallbackTicket;
+        }
+      } catch (fallbackError) {
+        console.error('❌ Erro ao criar ticket fallback:', fallbackError);
+        ticket = { id: fallbackTicketId, isFallback: true };
+      }
+    }
+
+    // Validar UUID do ticket antes de salvar mensagem
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!ticket.id || !uuidRegex.test(ticket.id)) {
+      console.error('❌ UUID do ticket inválido após todas as tentativas');
+      const lastResortTicketId = crypto.randomUUID();
+      console.log('🔄 Usando UUID last resort:', lastResortTicketId);
+      ticket.id = lastResortTicketId;
     }
 
     // Salvar mensagem
