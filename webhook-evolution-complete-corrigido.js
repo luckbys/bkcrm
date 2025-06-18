@@ -112,6 +112,17 @@ async function saveMessageToDatabase(data) {
       timestamp: data.timestamp
     });
 
+    // VALIDAR UUID DO TICKET
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!data.ticketId || !uuidRegex.test(data.ticketId)) {
+      console.error('❌ UUID do ticket inválido:', data.ticketId);
+      
+      // Gerar UUID válido como fallback
+      const validTicketId = crypto.randomUUID();
+      console.log('🔄 Usando UUID válido como fallback:', validTicketId);
+      data.ticketId = validTicketId;
+    }
+
     // PREPARAR DADOS ENRIQUECIDOS PARA MENSAGEM
     const enhancedMessageMetadata = {
       // Dados básicos
@@ -131,6 +142,12 @@ async function saveMessageToDatabase(data) {
         can_reply: true,
         reply_ready: true,
         enhanced_processing: true
+      }),
+      
+      // Flag de fallback se UUID foi corrigido
+      ...(data.ticketId !== data.originalTicketId && {
+        ticket_id_fallback: true,
+        original_ticket_id: data.originalTicketId
       })
     };
 
@@ -152,6 +169,42 @@ async function saveMessageToDatabase(data) {
     
     if (error) {
       console.error('❌ Erro ao salvar mensagem:', error);
+      
+      // Se ainda der erro, tentar salvar sem ticket_id (mensagem órfã)
+      if (error.code === '22P02' || error.message.includes('uuid')) {
+        console.log('🔄 Tentando salvar mensagem sem ticket_id (mensagem órfã)...');
+        
+        const orphanMessageData = {
+          content: data.content,
+          sender_id: null,
+          sender_type: 'customer',
+          message_type: 'text',
+          metadata: {
+            ...enhancedMessageMetadata,
+            orphan_message: true,
+            original_ticket_id: data.ticketId,
+            error_reason: 'invalid_ticket_uuid'
+          },
+          created_at: data.timestamp
+        };
+        
+        const { data: orphanMessage, error: orphanError } = await supabase
+          .from('messages')
+          .insert([orphanMessageData])
+          .select()
+          .single();
+        
+        if (!orphanError) {
+          console.log('✅ Mensagem órfã salva com sucesso:', orphanMessage.id);
+          return {
+            success: true,
+            message: 'Mensagem salva como órfã (ticket UUID inválido)',
+            messageId: orphanMessage.id,
+            method: 'orphan'
+          };
+        }
+      }
+      
       return { 
         success: false, 
         message: `Erro ao salvar: ${error.message}`
@@ -520,6 +573,7 @@ async function processNewMessage(payload) {
     // SALVAR MENSAGEM COM DADOS ENRIQUECIDOS
     const messageResult = await saveMessageToDatabase({
       ticketId: ticket.id,
+      originalTicketId: ticket.id, // Preservar ID original para logging
       content: messageContent,
       senderName: clientData.name,
       senderPhone: clientData.phone,
