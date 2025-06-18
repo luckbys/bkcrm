@@ -105,7 +105,7 @@ app.post('/webhook/evolution', async (req, res) => {
 */
 
 // FUNÇÃO PRINCIPAL PARA SALVAR MENSAGENS (VERSÃO ÚNICA)
-async function saveMessageToDatabase(data) {
+async function saveMessageToDatabaseUnified(data) {
   try {
     console.log('💾 Salvando mensagem no banco:', {
       ticketId: data.ticketId,
@@ -573,7 +573,7 @@ async function processNewMessage(payload) {
     }
 
     // SALVAR MENSAGEM COM DADOS ENRIQUECIDOS
-    const messageResult = await saveMessageToDatabase({
+    const messageResult = await saveMessageToDatabaseUnified({
       ticketId: ticket.id,
       originalTicketId: ticket.id, // Preservar ID original para logging
       content: messageContent,
