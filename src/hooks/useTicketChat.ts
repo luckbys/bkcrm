@@ -362,6 +362,11 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   
+  // NOVO: Estado para modal de validação de telefone
+  const [showPhoneValidationModal, setShowPhoneValidationModal] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string>('');
+  const [pendingIsInternal, setPendingIsInternal] = useState<boolean>(false);
+  
   // Sidebar
   const [showSidebar, setShowSidebar] = useState(true);
   
@@ -526,6 +531,41 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
         throw new Error('Não foi possível obter ID válido do ticket');
       }
 
+      // Extrair informações do cliente e validar telefone ANTES de salvar
+      const clientInfo = extractClientInfo(currentTicket);
+      const hasValidPhone = clientInfo.clientPhone && 
+                           clientInfo.clientPhone !== 'Telefone não informado' && 
+                           clientInfo.clientPhone.replace(/\D/g, '').length >= 10;
+      
+      console.log('🔍 DEBUG - Verificando condições de envio WhatsApp:', {
+        isInternal,
+        clientInfo,
+        hasValidPhone,
+        currentTicket: {
+          id: currentTicket?.id,
+          client: currentTicket?.client,
+          channel: currentTicket?.channel,
+          isWhatsApp: currentTicket?.isWhatsApp,
+          metadata: currentTicket?.metadata
+        }
+      });
+      
+      const isWhatsAppTicket = Boolean(clientInfo.isWhatsApp);
+      
+      // NOVA LÓGICA: Verificar se precisa de telefone válido ANTES de continuar
+      if (!isInternal && isWhatsAppTicket && !hasValidPhone) {
+        console.log('🚨 Telefone WhatsApp não válido, abrindo modal de validação...');
+        
+        // Guardar mensagem e estado para envio posterior
+        setPendingMessage(message);
+        setPendingIsInternal(isInternal);
+        setShowPhoneValidationModal(true);
+        
+        // Parar execução aqui - continuará após validação
+        setIsSending(false);
+        return;
+      }
+
       // Criar mensagem no banco de dados
       const messageData = {
         ticket_id: realTicketId,
@@ -561,27 +601,6 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       setTimeout(() => setLastSentMessage(null), 2000);
 
       // Enviar via Evolution API se não for mensagem interna e tiver telefone do cliente
-      const clientInfo = extractClientInfo(currentTicket);
-      const hasValidPhone = clientInfo.clientPhone && 
-                           clientInfo.clientPhone !== 'Telefone não informado' && 
-                           clientInfo.clientPhone.replace(/\D/g, '').length >= 10;
-      
-      console.log('🔍 DEBUG - Verificando condições de envio WhatsApp:', {
-        isInternal,
-        clientInfo,
-        hasValidPhone,
-        currentTicket: {
-          id: currentTicket?.id,
-          client: currentTicket?.client,
-          channel: currentTicket?.channel,
-          isWhatsApp: currentTicket?.isWhatsApp,
-          metadata: currentTicket?.metadata
-        }
-      });
-      
-      // Corrigir validação do isWhatsApp - deve ser boolean
-      const isWhatsAppTicket = Boolean(clientInfo.isWhatsApp);
-      
       if (!isInternal && hasValidPhone && isWhatsAppTicket) {
         try {
           console.log('📱 Enviando mensagem via WhatsApp:', {
@@ -640,6 +659,138 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
+      toast({
+        title: "❌ Erro ao enviar",
+        description: "Não foi possível enviar a mensagem. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // NOVA FUNÇÃO: Continuar envio após validação de telefone
+  const handleContinueSendAfterValidation = async (validatedPhone: string, phoneFormatted: string) => {
+    if (!pendingMessage.trim() || !user || !ticket?.id) {
+      console.error('❌ Dados pendentes inválidos para continuar envio');
+      return;
+    }
+
+    setIsSending(true);
+    
+    try {
+      console.log('📱 Continuando envio com telefone validado:', {
+        phone: validatedPhone,
+        phoneFormatted,
+        message: pendingMessage.substring(0, 50) + '...'
+      });
+
+      const realTicketId = await getRealTicketId(ticket.id);
+      if (!realTicketId) {
+        throw new Error('ID do ticket não encontrado');
+      }
+
+      // Criar mensagem no banco
+      const messageData = {
+        ticket_id: realTicketId,
+        sender_id: user.id,
+        content: pendingMessage,
+        type: 'text' as const,
+        is_internal: pendingIsInternal,
+        sender_name: currentUserProfile?.name || user.email?.split('@')[0] || 'Usuário',
+        sender_email: user.email,
+        metadata: {
+          validated_phone: validatedPhone,
+          phone_formatted: phoneFormatted
+        }
+      };
+
+      const newMessage = await sendMessage(messageData);
+      console.log('✅ Mensagem salva no banco com telefone validado:', newMessage);
+
+      // Adicionar mensagem localmente
+      const localMessage: LocalMessage = {
+        id: generateUniqueId(newMessage.id),
+        content: pendingMessage,
+        sender: 'agent' as const,
+        senderName: currentUserProfile?.name || user.email?.split('@')[0] || 'Agente',
+        timestamp: new Date(),
+        type: 'text' as const,
+        status: 'sent' as const,
+        isInternal: pendingIsInternal,
+        attachments: []
+      };
+
+      addMessage(localMessage);
+      setLastSentMessage(Date.now());
+      setMessage(''); // Limpar input
+      
+      setTimeout(() => setLastSentMessage(null), 2000);
+
+      // Atualizar ticket local com telefone validado
+      setCurrentTicket((prev: any) => ({
+        ...prev,
+        metadata: {
+          ...prev.metadata,
+          whatsapp_phone: validatedPhone,
+          phone_formatted: phoneFormatted,
+          client_phone: validatedPhone,
+          is_whatsapp: true,
+          can_reply_whatsapp: true
+        }
+      }));
+
+      // Enviar via Evolution API se não for mensagem interna
+      if (!pendingIsInternal) {
+        try {
+          const evolutionResult = await sendEvolutionMessage({
+            phone: validatedPhone,
+            text: pendingMessage,
+            instance: 'atendimento-ao-cliente-suporte',
+            options: {
+              delay: 1000,
+              presence: 'composing'
+            }
+          });
+
+          if (evolutionResult.success) {
+            console.log('✅ Mensagem enviada via WhatsApp com telefone validado:', evolutionResult.messageId);
+            
+            updateMessage(localMessage.id, { status: 'delivered' as const });
+
+            toast({
+              title: "📱 Enviado via WhatsApp!",
+              description: `Mensagem entregue para ${phoneFormatted}`,
+            });
+          } else {
+            console.warn('⚠️ Falha no envio via WhatsApp:', evolutionResult.error);
+            toast({
+              title: "⚠️ Salvo localmente",
+              description: "Mensagem salva mas não foi possível enviar via WhatsApp",
+              variant: "default"
+            });
+          }
+        } catch (evolutionError) {
+          console.error('❌ Erro no envio via Evolution API:', evolutionError);
+          toast({
+            title: "⚠️ Erro no WhatsApp",
+            description: "Mensagem salva mas houve erro no envio via WhatsApp",
+            variant: "default"
+          });
+        }
+      } else {
+        toast({
+          title: "✅ Nota interna salva",
+          description: "Nota interna salva com telefone validado",
+        });
+      }
+
+      // Limpar dados pendentes
+      setPendingMessage('');
+      setPendingIsInternal(false);
+      
+    } catch (error) {
+      console.error('❌ Erro ao continuar envio:', error);
       toast({
         title: "❌ Erro ao enviar",
         description: "Não foi possível enviar a mensagem. Tente novamente.",
@@ -909,6 +1060,14 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     showCustomerModal,
     setShowCustomerModal,
     
+    // NOVO: Estado para modal de validação de telefone
+    showPhoneValidationModal,
+    setShowPhoneValidationModal,
+    pendingMessage,
+    setPendingMessage,
+    pendingIsInternal,
+    setPendingIsInternal,
+    
     // Mensagens
     realTimeMessages,
     isLoadingHistory,
@@ -934,6 +1093,8 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     toggleSidebar,
     handleTemplateSelect,
     handleKeyDown,
-    getRealTicketId
+    getRealTicketId,
+    handleContinueSendAfterValidation,
+    extractClientInfo
   };
 }; 

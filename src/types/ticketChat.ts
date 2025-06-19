@@ -73,6 +73,14 @@ export interface UseTicketChatReturn {
   showCustomerModal: boolean;
   setShowCustomerModal: (show: boolean) => void;
   
+  // NOVO: Modal de validação de telefone
+  showPhoneValidationModal: boolean;
+  setShowPhoneValidationModal: (show: boolean) => void;
+  pendingMessage: string;
+  setPendingMessage: (message: string) => void;
+  pendingIsInternal: boolean;
+  setPendingIsInternal: (isInternal: boolean) => void;
+  
   // Mensagens
   realTimeMessages: LocalMessage[];
   isLoadingHistory: boolean;
@@ -97,6 +105,8 @@ export interface UseTicketChatReturn {
   toggleMessageFavorite: (messageId: number) => void;
   handleTemplateSelect: (template: QuickTemplate) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
-  getRealTicketId: (ticketId: number | string) => Promise<string | null>;
+  getRealTicketId: (ticketId: string) => Promise<string | null>;
   toggleSidebar: () => void;
+  handleContinueSendAfterValidation: (validatedPhone: string, phoneFormatted: string) => Promise<void>;
+  extractClientInfo: (ticket: any) => any;
 } 

@@ -36,6 +36,7 @@ import { useCustomers } from '../../../hooks/useCustomers';
 import { useTicketsDB } from '../../../hooks/useTicketsDB';
 import { useTicketCustomerAssignment } from '../../../hooks/useTicketCustomerAssignment';
 import { Customer } from '../../../types/customer';
+import { PhoneValidationModal } from './PhoneValidationModal';
 
 interface TicketChatModalsProps {
   chatState: UseTicketChatReturn;
@@ -631,6 +632,20 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Phone Validation Modal */}
+      <PhoneValidationModal
+        isOpen={chatState.showPhoneValidationModal}
+        onClose={() => chatState.setShowPhoneValidationModal(false)}
+        ticketId={currentTicket?.originalId || currentTicket?.id || ''}
+        currentPhone={chatState.extractClientInfo?.(currentTicket)?.clientPhone}
+        customerName={currentTicket?.client || currentTicket?.customer_name}
+        onPhoneValidated={(phone, phoneFormatted) => {
+          // Continuar com o envio usando o telefone validado
+          chatState.handleContinueSendAfterValidation?.(phone, phoneFormatted);
+          chatState.setShowPhoneValidationModal(false);
+        }}
+      />
     </>
   );
 }; 

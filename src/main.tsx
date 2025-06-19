@@ -11,6 +11,12 @@ import './utils/database-test'
 import { testCustomerAssignment, testTicketWithCustomerLoading, cleanupTestData } from './utils/testCustomerAssignment'
 import { debugTicketAssignment, debugCurrentTicket, forceTicketReload } from './utils/debugTicketAssignment'
 
+// Importar diagnóstico de envio WhatsApp
+import './utils/diagnosticoEnvioWhatsApp'
+
+// Importar teste de validação de telefone
+import './utils/testeValidacaoTelefoneCompleto'
+
 // Configurar endpoint global para receber respostas de webhook (mencionado nas memórias)
 import webhookResponseService from './services/webhook-response-service'
 
