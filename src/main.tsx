@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toaster'
 import './utils/dev-helpers'
 import './utils/migration-helpers'
 import './utils/database-test'
+import { testCustomerAssignment, testTicketWithCustomerLoading, cleanupTestData } from './utils/testCustomerAssignment'
 
 // Configurar endpoint global para receber respostas de webhook (mencionado nas memórias)
 import webhookResponseService from './services/webhook-response-service'
@@ -81,6 +82,22 @@ import webhookResponseService from './services/webhook-response-service'
   console.log('- simulateN8nResponse:', typeof (globalThis as any).simulateN8nResponse);
   console.log('- testWebhookFix:', typeof (globalThis as any).testWebhookFix);
   console.log('✅ Todos os endpoints estão configurados');
+};
+
+// Funções globais para teste de vinculação de clientes
+(globalThis as any).testCustomerAssignment = testCustomerAssignment;
+(globalThis as any).testTicketWithCustomerLoading = testTicketWithCustomerLoading;
+(globalThis as any).cleanupTestData = cleanupTestData;
+
+// Helper para debug de vinculação
+(globalThis as any).debugCustomerAssignment = () => {
+  console.log('🔍 Status das funções de teste de vinculação:');
+  console.log('- testCustomerAssignment:', typeof (globalThis as any).testCustomerAssignment);
+  console.log('- testTicketWithCustomerLoading:', typeof (globalThis as any).testTicketWithCustomerLoading);
+  console.log('- cleanupTestData:', typeof (globalThis as any).cleanupTestData);
+  console.log('✅ Todas as funções de teste estão disponíveis');
+  console.log('\n🧪 Para testar vinculação, execute:');
+  console.log('testCustomerAssignment()');
 };
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

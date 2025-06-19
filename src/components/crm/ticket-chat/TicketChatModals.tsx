@@ -34,6 +34,7 @@ import { UseTicketChatReturn } from '../../../types/ticketChat';
 import { useToast } from '../../../hooks/use-toast';
 import { useCustomers } from '../../../hooks/useCustomers';
 import { useTicketsDB } from '../../../hooks/useTicketsDB';
+import { useTicketCustomerAssignment } from '../../../hooks/useTicketCustomerAssignment';
 import { Customer } from '../../../types/customer';
 
 interface TicketChatModalsProps {
@@ -46,6 +47,7 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
   const { toast } = useToast();
   const { customers, loading: loadingCustomers } = useCustomers();
   const { assignCustomerToTicket } = useTicketsDB();
+  const { assignCustomer, removeAssignment } = useTicketCustomerAssignment();
   const [newAssignee, setNewAssignee] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [newTag, setNewTag] = useState('');
@@ -373,50 +375,30 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    console.log('🗑️ Removendo cliente do ticket:', {
-                      currentTicket: currentTicket?.id,
-                      originalId: currentTicket?.originalId,
-                      currentCustomer: currentTicket?.client
-                    });
-
-                    // Atualizar estado local
-                    setCurrentTicket((prev: any) => ({ 
-                      ...prev, 
-                      customer_id: undefined,
-                      client: 'Cliente Anônimo'
-                    }));
-
-                    // Persistir no banco de dados
-                    let persistenceSuccess = false;
                     const ticketId = currentTicket?.originalId || currentTicket?.id;
                     
                     if (ticketId) {
-                      try {
-                        console.log('💾 Removendo cliente do banco de dados:', { ticketId });
+                      // Usar hook especializado para remoção
+                      await removeAssignment(ticketId, (updatedTicket) => {
+                        // Callback de sucesso - atualizar estado local
+                        setCurrentTicket((prev: any) => ({
+                          ...prev,
+                          ...updatedTicket,
+                          customer_id: null,
+                          client: 'Cliente Anônimo',
+                          customerEmail: '',
+                          customerPhone: ''
+                        }));
                         
-                        await assignCustomerToTicket(ticketId, {
-                          customer_id: undefined
-                        });
-                        
-                        persistenceSuccess = true;
-                        console.log('✅ Cliente removido do banco com sucesso');
-                        
-                      } catch (error) {
-                        console.error('❌ Erro ao remover cliente do banco:', error);
-                        toast({
-                          title: "⚠️ Aviso",
-                          description: "Cliente removido localmente, mas não foi salvo no banco de dados",
-                          variant: "destructive"
-                        });
-                      }
+                        console.log('🔄 [REMOÇÃO] Estado local atualizado');
+                      });
+                    } else {
+                      toast({
+                        title: "❌ Erro",
+                        description: "ID do ticket não encontrado",
+                        variant: "destructive"
+                      });
                     }
-
-                    toast({
-                      title: persistenceSuccess ? "✅ Cliente removido" : "⚠️ Cliente removido (apenas local)",
-                      description: persistenceSuccess 
-                        ? "Cliente foi desassociado do ticket e salvo no banco"
-                        : "Cliente foi desassociado apenas localmente",
-                    });
                   }}
                   className="mt-2 text-red-600 border-red-300 hover:bg-red-50"
                 >
@@ -540,54 +522,76 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
                     customerPhone: selectedCustomer.phone
                   }));
                   
-                  // Persistir no banco de dados
+                  // Persistir no banco de dados com validação robusta
                   let persistenceSuccess = false;
                   const ticketId = currentTicket?.originalId || currentTicket?.id;
                   
                   if (ticketId) {
                     try {
-                      console.log('💾 Salvando no banco de dados:', {
-                        ticketId,
-                        customer_id: selectedCustomer.id
-                      });
+                      // Usar o hook especializado para vinculação robusta
+                      const assignmentResult = await assignCustomer(
+                        ticketId, 
+                        selectedCustomer,
+                        (updatedTicket) => {
+                          // Callback de sucesso - atualizar estado local
+                          setCurrentTicket((prev: any) => ({
+                            ...prev,
+                            ...updatedTicket,
+                            customer_id: selectedCustomer.id,
+                            client: selectedCustomer.name,
+                            customerEmail: selectedCustomer.email,
+                            customerPhone: selectedCustomer.phone
+                          }));
+                          
+                          console.log('🔄 [VINCULAÇÃO] Estado local atualizado com dados do banco');
+                        }
+                      );
                       
-                      await assignCustomerToTicket(ticketId, {
-                        customer_id: selectedCustomer.id
-                      });
-                      
-                      persistenceSuccess = true;
-                      console.log('✅ Cliente salvo no banco com sucesso');
+                      persistenceSuccess = assignmentResult.success;
                       
                     } catch (error) {
-                      console.error('❌ Erro ao atribuir cliente no banco:', error);
+                      console.error('❌ [VINCULAÇÃO] Erro ao atribuir cliente no banco:', error);
+                      persistenceSuccess = false;
+                      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
                       toast({
-                        title: "⚠️ Aviso",
-                        description: "Cliente atribuído localmente, mas não foi salvo no banco de dados",
+                        title: "❌ Erro na vinculação",
+                        description: `Não foi possível salvar no banco: ${errorMessage}`,
                         variant: "destructive"
                       });
                     }
                   } else {
-                    console.warn('⚠️ Ticket não tem ID válido para persistência:', {
+                    console.warn('⚠️ [VINCULAÇÃO] Ticket não tem ID válido:', {
                       currentTicket: currentTicket?.id,
                       originalId: currentTicket?.originalId
                     });
                     toast({
-                      title: "⚠️ Aviso", 
-                      description: "Ticket não tem ID válido - alteração apenas local",
+                      title: "❌ ID inválido", 
+                      description: "Ticket não tem ID válido para vinculação",
                       variant: "destructive"
                     });
                   }
                   
-                  toast({
-                    title: persistenceSuccess ? "✅ Cliente atribuído" : "⚠️ Cliente atribuído (apenas local)",
-                    description: persistenceSuccess 
-                      ? `Ticket atribuído para ${selectedCustomer.name} e salvo no banco`
-                      : `Ticket atribuído para ${selectedCustomer.name} apenas localmente`,
-                  });
+                  // Toast só se houve sucesso na persistência
+                  if (persistenceSuccess) {
+                    toast({
+                      title: "✅ Cliente vinculado com sucesso",
+                      description: `${selectedCustomer.name} foi vinculado ao ticket e salvo no banco de dados`,
+                    });
+                    
+                    // Fechar modal apenas se salvou com sucesso
+                    setShowCustomerModal(false);
+                    setSelectedCustomer(null);
+                    setCustomerSearchTerm('');
+                  } else {
+                    // Manter modal aberto em caso de erro para nova tentativa
+                    console.warn('⚠️ [VINCULAÇÃO] Modal mantido aberto devido ao erro de persistência');
+                  }
+                } else {
+                  // Se não há cliente selecionado, fechar modal
+                  setShowCustomerModal(false);
+                  setSelectedCustomer(null);
+                  setCustomerSearchTerm('');
                 }
-                setShowCustomerModal(false);
-                setSelectedCustomer(null);
-                setCustomerSearchTerm('');
               }}
               disabled={!selectedCustomer}
               className="bg-blue-600 hover:bg-blue-700"
