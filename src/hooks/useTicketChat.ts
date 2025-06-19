@@ -590,7 +590,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
           const evolutionResult = await sendEvolutionMessage({
             phone: clientInfo.clientPhone,
             text: message,
-            instance: whatsappInstance || 'atendimento-ao-cliente-suporte',
+            instance: 'atendimento-ao-cliente-suporte', // SEMPRE usar instância que existe
             options: {
               delay: 1000,
               presence: 'composing'
@@ -719,17 +719,26 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   // Effect para carregar dados do WhatsApp quando componente monta
   useEffect(() => {
     if (currentTicket) {
-      // Usar instância específica baseada no metadata ou padrão
-      const instanceName = currentTicket?.metadata?.instance_name || 
-                          currentTicket?.department || 
-                          'atendimento-ao-cliente-suporte';
+      // FORÇA SEMPRE A INSTÂNCIA CORRETA QUE EXISTE NA EVOLUTION API
+      const instanceName = 'atendimento-ao-cliente-suporte'; // Instância que realmente existe
+      
+      // Log para debug se estava usando instância incorreta
+      const metadataInstance = currentTicket?.metadata?.instance_name;
+      if (metadataInstance && metadataInstance !== instanceName) {
+        console.warn('⚠️ [CORREÇÃO] Instância incorreta detectada no metadata:', {
+          incorreta: metadataInstance,
+          corrigida: instanceName,
+          ticketId: currentTicket.id
+        });
+      }
+      
       setWhatsappInstance(instanceName);
       setWhatsappStatus('connected'); // Para demonstração
       
-      console.log('🔧 Configurando instância WhatsApp:', {
+      console.log('🔧 Configurando instância WhatsApp (FORÇADA CORRETA):', {
         instanceName,
-        department: currentTicket?.department,
-        metadataInstance: currentTicket?.metadata?.instance_name
+        originalMetadata: metadataInstance,
+        forced: true
       });
     }
   }, [currentTicket]);
