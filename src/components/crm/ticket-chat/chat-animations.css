@@ -1,0 +1,620 @@
+/* Animações customizadas para TicketChatModal */
+
+/* Correções de layout para modal */
+.chat-modal-content {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 95vh !important;
+  max-height: 95vh !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.chat-main-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-content-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(to right, #ffffff, #f9fafb);
+  z-index: 10;
+}
+
+.chat-messages-area {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.chat-scroll-container {
+  height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.chat-input-section {
+  flex-shrink: 0;
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+  z-index: 10;
+}
+
+.chat-textarea {
+  resize: none !important;
+  min-height: 48px !important;
+  max-height: 120px !important;
+  overflow-y: auto !important;
+  transition: height 0.2s ease;
+}
+
+.chat-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid #e5e7eb;
+  background: rgba(249, 250, 251, 0.5);
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+/* Garantir que o textarea não expanda demais */
+.chat-textarea {
+  resize: none;
+  overflow-y: auto;
+  max-height: 6rem;
+  min-height: 3.5rem;
+}
+
+/* Scrollbar para área de mensagens */
+.chat-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+@keyframes slideInRight {
+  from { 
+    opacity: 0; 
+    transform: translateX(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateX(0); 
+  }
+}
+
+@keyframes slideInLeft {
+  from { 
+    opacity: 0; 
+    transform: translateX(-20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateX(0); 
+  }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.95); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+}
+
+@keyframes messageHover {
+  from { 
+    transform: scale(1); 
+  }
+  to { 
+    transform: scale(1.02); 
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { 
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); 
+  }
+  50% { 
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.6); 
+  }
+}
+
+@keyframes typingBounce {
+  0%, 80%, 100% { 
+    transform: scale(0.8); 
+    opacity: 0.5; 
+  }
+  40% { 
+    transform: scale(1); 
+    opacity: 1; 
+  }
+}
+
+@keyframes shimmer {
+  0% { 
+    background-position: -200px 0; 
+  }
+  100% { 
+    background-position: calc(200px + 100%) 0; 
+  }
+}
+
+@keyframes heartbeat {
+  0%, 100% { 
+    transform: scale(1); 
+  }
+  50% { 
+    transform: scale(1.1); 
+  }
+}
+
+/* Classes utilitárias */
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slideInRight {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.animate-slideInLeft {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.2s ease-out;
+}
+
+.animate-messageHover {
+  animation: messageHover 0.2s ease-in-out;
+}
+
+.animate-pulseGlow {
+  animation: pulseGlow 2s infinite;
+}
+
+.animate-typingBounce {
+  animation: typingBounce 1.4s infinite ease-in-out;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.animate-heartbeat {
+  animation: heartbeat 1s ease-in-out infinite;
+}
+
+/* Efeitos hover customizados */
+.chat-message:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease-in-out;
+}
+
+.chat-input:focus-within {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+  transition: all 0.2s ease-in-out;
+}
+
+.chat-avatar {
+  transition: all 0.2s ease-in-out;
+}
+
+.chat-avatar:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Gradientes animados */
+.gradient-bg {
+  background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Efeitos de loading */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Scrollbar customizada */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(45deg, #5a6fd8, #6a4190);
+}
+
+/* Ripple effect */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.ripple:active::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Estados de mensagem */
+.message-sending {
+  opacity: 0.7;
+  animation: pulseGlow 1s infinite;
+}
+
+.message-delivered {
+  animation: scaleIn 0.3s ease-out;
+}
+
+.message-error {
+  border: 2px solid #ef4444;
+  animation: heartbeat 0.5s ease-in-out 3;
+}
+
+/* Toggle switch customizado */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+input:checked + .toggle-slider {
+  background: linear-gradient(45deg, #f97316, #ea580c);
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+/* Highlight de busca */
+.search-highlight {
+  background: linear-gradient(120deg, #fef08a, #facc15);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Badge flutuante */
+.floating-badge {
+  animation: fadeIn 0.3s ease-out, heartbeat 2s ease-in-out infinite 1s;
+}
+
+/* Transições globais */
+* {
+  transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* === CHAT MODAL LAYOUT FIXES === */
+
+/* Responsividade mobile */
+@media (max-width: 768px) {
+  .chat-modal-content {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+  
+  .chat-sidebar {
+    width: 280px;
+  }
+  
+  .chat-header .flex {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .chat-header .hidden-mobile {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-sidebar {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(8px);
+    z-index: 50;
+  }
+}
+
+/* === ANIMAÇÕES MELHORADAS === */
+
+/* Animação de entrada do modal */
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.chat-modal-content {
+  animation: modalEnter 0.3s ease-out;
+}
+
+/* Animação de slide para mensagens */
+@keyframes slideInMessage {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-bubble {
+  animation: slideInMessage 0.4s ease-out;
+}
+
+/* Hover melhorado para mensagens */
+.message-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Indicador de digitação */
+@keyframes typingDots {
+  0%, 20% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+.typing-dot {
+  animation: typingDots 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Scrollbar customizada */
+.chat-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-scroll-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #cbd5e1, #94a3b8);
+  border-radius: 3px;
+}
+
+.chat-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #94a3b8, #64748b);
+}
+
+/* Balões de mensagem melhorados */
+.message-agent {
+  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
+  color: white !important;
+  border-radius: 18px 18px 4px 18px !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.message-client {
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 18px 18px 18px 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.message-internal {
+  background: linear-gradient(135deg, #f59e0b, #f97316) !important;
+  color: white !important;
+  border-radius: 12px !important;
+  border: 2px dashed #fed7aa !important;
+  opacity: 0.95;
+}
+
+/* Badges melhorados */
+.status-badge {
+  transition: all 0.2s ease;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+}
+
+.status-badge:hover {
+  transform: scale(1.05);
+}
+
+/* Botões de ação hover */
+.action-button {
+  transition: all 0.2s ease;
+  border-radius: 8px;
+}
+
+.action-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Loading skeleton */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+.loading-skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+/* Pulse melhorado */
+@keyframes pulseImproved {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.pulse-improved {
+  animation: pulseImproved 2s infinite;
+}
+
+/* Transições globais otimizadas */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fix para problema de altura do textarea */
+.chat-textarea[data-autosize="true"] {
+  field-sizing: content;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Melhorias de performance */
+.chat-modal-content * {
+  will-change: auto;
+}
+
+.message-bubble {
+  contain: layout style paint;
+}
+
+.chat-scroll-container {
+  contain: strict;
+}
+
+/* Estados de focus melhorados */
+.chat-textarea:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+}
+
+/* Tooltip melhorado */
+.tooltip-content {
+  animation: fadeIn 0.2s ease-out;
+  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.9);
+}
+
+/* Grid responsivo para controles */
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .control-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+} 
