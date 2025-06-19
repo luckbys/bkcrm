@@ -43,7 +43,7 @@ async function findOrCreateCustomer(phone, instanceName, pushName = null) {
       .single();
 
     if (existingCustomer) {
-      console.log(`✅ Cliente encontrado: ${existingCustomer.full_name} (${existingCustomer.id})`);
+      console.log(`✅ Cliente encontrado: ${existingCustomer.name} (${existingCustomer.id})`);
       return existingCustomer.id;
     }
 
@@ -51,7 +51,7 @@ async function findOrCreateCustomer(phone, instanceName, pushName = null) {
     console.log(`➕ Criando novo cliente para ${phone}`);
     const customerData = {
       id: crypto.randomUUID(),
-      full_name: pushName || `Cliente WhatsApp ${phone.slice(-4)}`,
+      name: pushName || `Cliente WhatsApp ${phone.slice(-4)}`,
       email: `whatsapp-${phone}@auto-generated.com`,
       role: 'customer',
       metadata: {
@@ -73,7 +73,7 @@ async function findOrCreateCustomer(phone, instanceName, pushName = null) {
       return null;
     }
 
-    console.log(`✅ Cliente criado: ${newCustomer.full_name} (${newCustomer.id})`);
+    console.log(`✅ Cliente criado: ${newCustomer.name} (${newCustomer.id})`);
     return newCustomer.id;
 
   } catch (error) {
