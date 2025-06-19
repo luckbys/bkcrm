@@ -46,6 +46,7 @@ interface SimpleMessage {
 }
 
 export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClose, isOpen }) => {
+  // TODOS OS HOOKS DEVEM ESTAR NO TOPO - SEMPRE CHAMADOS NA MESMA ORDEM
   const { toast } = useToast();
   const { user } = useAuth();
   
@@ -56,13 +57,8 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
   const [isLoading, setIsLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
-  // Early return se não tem ticket ou não está aberto
-  if (!ticket || !isOpen) {
-    return null;
-  }
-
   // Função para carregar mensagens do banco
-  const loadMessages = async () => {
+  const loadMessages = React.useCallback(async () => {
     if (!ticket?.id) return;
     
     setIsLoading(true);
@@ -94,18 +90,18 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [ticket?.id]);
 
   // Função para enviar mensagem
-  const handleSendMessage = async () => {
+  const handleSendMessage = React.useCallback(async () => {
     if (!newMessage.trim() || !ticket?.id) return;
 
     try {
-             const messageData = {
-         ticket_id: ticket.id,
-         content: newMessage.trim(),
-         sender_id: isInternal ? user?.id : null,
-         sender_name: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket.client || 'Cliente'),
+      const messageData = {
+        ticket_id: ticket.id,
+        content: newMessage.trim(),
+        sender_id: isInternal ? user?.id : null,
+        sender_name: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket.client || 'Cliente'),
         type: 'text',
         is_internal: isInternal,
         metadata: {
@@ -125,11 +121,11 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
       }
 
       // Adicionar mensagem localmente
-             const newMsg: SimpleMessage = {
-         id: Date.now(),
-         content: newMessage.trim(),
-         sender: isInternal ? 'agent' : 'client',
-         senderName: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket.client || 'Cliente'),
+      const newMsg: SimpleMessage = {
+        id: Date.now(),
+        content: newMessage.trim(),
+        sender: isInternal ? 'agent' : 'client',
+        senderName: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket.client || 'Cliente'),
         timestamp: new Date(),
         isInternal
       };
@@ -149,22 +145,27 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
         variant: "destructive"
       });
     }
-  };
-
-  // Carregar mensagens ao abrir
-  useEffect(() => {
-    if (isOpen && ticket?.id) {
-      loadMessages();
-    }
-  }, [isOpen, ticket?.id]);
+  }, [newMessage, ticket?.id, isInternal, user, toast]);
 
   // Função para formatar data
-  const formatTime = (date: Date) => {
+  const formatTime = React.useCallback((date: Date) => {
     return date.toLocaleTimeString('pt-BR', { 
       hour: '2-digit', 
       minute: '2-digit' 
     });
-  };
+  }, []);
+
+  // Carregar mensagens ao abrir - useEffect sempre executado
+  useEffect(() => {
+    if (isOpen && ticket?.id) {
+      loadMessages();
+    }
+  }, [isOpen, ticket?.id, loadMessages]);
+
+  // Early return APÓS todos os hooks serem definidos
+  if (!ticket || !isOpen) {
+    return null;
+  }
 
   return (
     <Dialog 
