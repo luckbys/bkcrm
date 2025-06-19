@@ -185,7 +185,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { sendMessage, createTicket, fetchMessages } = useTicketsDB();
-  const { sendMessage: sendEvolutionMessage, validateMessageData } = useEvolutionSender();
+  const { sendMessage: sendEvolutionMessage, validateMessageData, extractPhoneFromTicket } = useEvolutionSender();
 
   // Estados do ticket – inicialização mais defensiva
   const [currentTicket, setCurrentTicket] = useState(() => {
@@ -545,21 +545,26 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
         throw new Error('Não foi possível obter ID válido do ticket');
       }
 
-      // Extrair informações do cliente e validar telefone ANTES de salvar
+      // ✅ USAR FUNÇÃO ESPECIALIZADA PARA EXTRAIR TELEFONE (prioriza campo nunmsg)
+      const clientPhone = extractPhoneFromTicket(currentTicket);
       const clientInfo = extractClientInfo(currentTicket);
-      const hasValidPhone = clientInfo.clientPhone && 
-                           clientInfo.clientPhone !== 'Telefone não informado' && 
-                           clientInfo.clientPhone.replace(/\D/g, '').length >= 10;
+      
+      // Validar telefone usando a função especializada
+      const hasValidPhone = clientPhone && 
+                           clientPhone !== 'Telefone não informado' && 
+                           clientPhone.replace(/\D/g, '').length >= 10;
       
       console.log('🔍 DEBUG - Verificando condições de envio WhatsApp:', {
         isInternal,
-        clientInfo,
+        clientPhone, // 📱 Telefone extraído com prioridade do campo nunmsg
         hasValidPhone,
+        clientInfo,
         currentTicket: {
           id: currentTicket?.id,
           client: currentTicket?.client,
           channel: currentTicket?.channel,
           isWhatsApp: currentTicket?.isWhatsApp,
+          nunmsg: currentTicket?.nunmsg, // 📱 Campo nunmsg
           metadata: currentTicket?.metadata
         }
       });
@@ -618,14 +623,14 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       if (!isInternal && hasValidPhone && isWhatsAppTicket) {
         try {
           console.log('📱 Enviando mensagem via WhatsApp:', {
-            phone: clientInfo.clientPhone,
+            phone: clientPhone, // 📱 Usar telefone extraído com prioridade do campo nunmsg
             message: message.substring(0, 50) + '...',
-            instance: whatsappInstance,
-            isWhatsApp: clientInfo.isWhatsApp
+            isWhatsApp: clientInfo.isWhatsApp,
+            nunmsg: currentTicket?.nunmsg
           });
 
           const evolutionResult = await sendEvolutionMessage({
-            phone: clientInfo.clientPhone,
+            phone: clientPhone, // 📱 Usar telefone correto do campo nunmsg
             text: message,
             instance: 'atendimento-ao-cliente-suporte', // SEMPRE usar instância que existe
             options: {
@@ -661,8 +666,9 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
           isInternal: isInternal ? 'Mensagem é interna' : 'OK',
           hasValidPhone: hasValidPhone ? 'OK' : 'Telefone inválido ou não informado',
           isWhatsApp: clientInfo.isWhatsApp ? 'OK' : 'Ticket não é do WhatsApp',
-          clientPhone: clientInfo.clientPhone,
-          phoneLength: clientInfo.clientPhone?.replace(/\D/g, '').length
+          clientPhone: clientPhone, // 📱 Telefone correto do campo nunmsg
+          phoneLength: clientPhone?.replace(/\D/g, '').length,
+          nunmsg: currentTicket?.nunmsg
         });
         
         toast({
