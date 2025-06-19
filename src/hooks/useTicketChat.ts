@@ -187,6 +187,88 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     };
   });
 
+  // Função para recarregar dados completos do ticket incluindo cliente vinculado
+  const loadFullTicketData = useCallback(async (ticketId: string) => {
+    try {
+      console.log('🔄 [TICKET] Carregando dados completos do ticket:', ticketId);
+
+      const { data: fullTicket, error } = await supabase
+        .from('tickets')
+        .select(`
+          *,
+          customer:profiles!tickets_customer_id_fkey (
+            id,
+            name,
+            email,
+            metadata
+          )
+        `)
+        .eq('id', ticketId)
+        .single();
+
+      if (error) {
+        console.error('❌ [TICKET] Erro ao carregar dados completos:', error);
+        return null;
+      }
+
+      if (fullTicket) {
+        console.log('✅ [TICKET] Dados completos carregados:', {
+          ticketId: fullTicket.id,
+          hasCustomer: !!fullTicket.customer_id,
+          customerName: fullTicket.customer ? (fullTicket.customer as any).name : null
+        });
+
+        // Enriquecer ticket com dados do cliente se vinculado
+        let enrichedTicket = { ...fullTicket };
+
+        if (fullTicket.customer_id && fullTicket.customer) {
+          const customerData = fullTicket.customer as any;
+          enrichedTicket = {
+            ...fullTicket,
+            client: customerData.name || 'Cliente',
+            customerEmail: customerData.email || 'Email não informado',
+            customerPhone: customerData.metadata?.phone || 'Telefone não informado',
+            // Manter dados originais do WhatsApp se existirem
+            originalClient: fullTicket.metadata?.client_name || null,
+            originalClientPhone: fullTicket.metadata?.client_phone || null
+          };
+
+          console.log('👤 [TICKET] Dados do cliente aplicados:', {
+            client: enrichedTicket.client,
+            customerEmail: enrichedTicket.customerEmail,
+            customerPhone: enrichedTicket.customerPhone
+          });
+        } else {
+          // Usar dados originais do ticket/WhatsApp
+          const clientInfo = extractClientInfo(fullTicket);
+          enrichedTicket = {
+            ...fullTicket,
+            client: clientInfo.clientName,
+            customerPhone: clientInfo.clientPhone,
+            customerEmail: fullTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fullTicket.email),
+            isWhatsApp: clientInfo.isWhatsApp
+          };
+
+          console.log('📱 [TICKET] Dados WhatsApp/originais aplicados:', {
+            client: enrichedTicket.client,
+            customerPhone: enrichedTicket.customerPhone,
+            isWhatsApp: enrichedTicket.isWhatsApp
+          });
+        }
+
+        // Atualizar estado local
+        setCurrentTicket(enrichedTicket);
+        return enrichedTicket;
+      }
+
+      return null;
+
+    } catch (error) {
+      console.error('❌ [TICKET] Erro no carregamento completo:', error);
+      return null;
+    }
+  }, []);
+
   // Hook para mensagens Evolution, usando o ID do ticket (que pode mudar após migração)
   const {
     /* evolutionMessages – ainda não utilizado internamente */
@@ -698,20 +780,41 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
 
   // Effect para reprocessar dados do ticket quando ticket prop mudar
   useEffect(() => {
-    if (ticket) {
-      // Primeiro, corrigir dados do ticket se necessário
-      const fixedTicket = fixTicketData(ticket);
-      
-      const clientInfo = extractClientInfo(fixedTicket);
-      setCurrentTicket({
-        ...fixedTicket,
-        client: clientInfo.clientName,
-        customerPhone: clientInfo.clientPhone,
-        customerEmail: fixedTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fixedTicket.email),
-        isWhatsApp: clientInfo.isWhatsApp
-      });
-    }
-  }, [ticket, fixTicketData]);
+    const initializeTicket = async () => {
+      if (ticket) {
+        console.log('🎯 [INIT] Inicializando ticket:', ticket.id);
+
+        // Primeiro, corrigir dados do ticket se necessário
+        const fixedTicket = fixTicketData(ticket);
+        
+        // Se temos um UUID válido, carregar dados completos do banco
+        const ticketId = fixedTicket.originalId || fixedTicket.id;
+        
+        if (typeof ticketId === 'string' && ticketId.includes('-')) {
+          console.log('🔄 [INIT] Carregando dados completos do banco...');
+          const fullTicketData = await loadFullTicketData(ticketId);
+          
+          if (fullTicketData) {
+            console.log('✅ [INIT] Ticket inicializado com dados completos');
+            return; // loadFullTicketData já atualizou o currentTicket
+          }
+        }
+
+        // Fallback: usar dados básicos do ticket prop
+        console.log('📋 [INIT] Usando dados básicos do ticket prop');
+        const clientInfo = extractClientInfo(fixedTicket);
+        setCurrentTicket({
+          ...fixedTicket,
+          client: clientInfo.clientName,
+          customerPhone: clientInfo.clientPhone,
+          customerEmail: fixedTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fixedTicket.email),
+          isWhatsApp: clientInfo.isWhatsApp
+        });
+      }
+    };
+
+    initializeTicket();
+  }, [ticket, fixTicketData, loadFullTicketData]);
 
   // Effect para responsividade da sidebar
   useEffect(() => {

@@ -98,10 +98,11 @@ Cada vinculação salva metadados completos:
 }
 ```
 
-## 📋 Scripts de Teste
+## 📋 Scripts de Teste e Debug
 
 ### Funções Globais Disponíveis
 ```javascript
+// ===== FUNÇÕES DE TESTE =====
 // Testar vinculação completa
 await testCustomerAssignment();
 
@@ -111,22 +112,48 @@ await testTicketWithCustomerLoading();
 // Limpar dados de teste  
 await cleanupTestData();
 
-// Debug das funções
+// ===== FUNÇÕES DE DEBUG =====
+// Debug geral de vinculações
+await debugTicketAssignment();
+
+// Debug de ticket específico
+await debugTicketAssignment('ticket-id-uuid');
+
+// Debug do estado atual
+debugCurrentTicket();
+
+// Forçar recarregamento
+await forceTicketReload('ticket-id-uuid');
+
+// Listar todas as funções disponíveis
 debugCustomerAssignment();
 ```
 
-### Como Testar
-1. Abra o DevTools (F12)
-2. Execute no console:
+### Como Usar
+1. **Após vincular um cliente**, abra o DevTools (F12)
+2. **Execute o debug específico**:
 ```javascript
-// Teste completo de vinculação
-const result = await testCustomerAssignment();
+// Debug do ticket que você acabou de vincular
+await debugTicketAssignment('5431d9ad-284a-4c79-9aa4-5813548c6476');
+```
+
+3. **Se a vinculação não aparecer**, execute:
+```javascript
+// Verificar se existe no banco
+const result = await debugTicketAssignment();
 console.log('Resultado:', result);
 
-// Verificar tickets existentes
-const tickets = await testTicketWithCustomerLoading();
-console.log('Tickets com clientes:', tickets);
+// Forçar recarregamento
+await forceTicketReload('ticket-id-aqui');
 ```
+
+### Análise de Debug
+O script `debugTicketAssignment()` mostra:
+- ✅ **Customer ID**: Se o ticket tem customer_id definido
+- ✅ **Dados do cliente**: Se os dados foram carregados via JOIN
+- ✅ **Metadados**: Histórico da vinculação nos metadados
+- ✅ **Processamento frontend**: Como os dados seriam exibidos
+- ⚠️ **Inconsistências**: Problemas encontrados nos dados
 
 ## 🔄 Fluxo de Vinculação
 

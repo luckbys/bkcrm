@@ -9,6 +9,7 @@ import './utils/dev-helpers'
 import './utils/migration-helpers'
 import './utils/database-test'
 import { testCustomerAssignment, testTicketWithCustomerLoading, cleanupTestData } from './utils/testCustomerAssignment'
+import { debugTicketAssignment, debugCurrentTicket, forceTicketReload } from './utils/debugTicketAssignment'
 
 // Configurar endpoint global para receber respostas de webhook (mencionado nas memórias)
 import webhookResponseService from './services/webhook-response-service'
@@ -89,15 +90,31 @@ import webhookResponseService from './services/webhook-response-service'
 (globalThis as any).testTicketWithCustomerLoading = testTicketWithCustomerLoading;
 (globalThis as any).cleanupTestData = cleanupTestData;
 
+// Funções globais para debug de vinculação
+(globalThis as any).debugTicketAssignment = debugTicketAssignment;
+(globalThis as any).debugCurrentTicket = debugCurrentTicket;
+(globalThis as any).forceTicketReload = forceTicketReload;
+
 // Helper para debug de vinculação
 (globalThis as any).debugCustomerAssignment = () => {
-  console.log('🔍 Status das funções de teste de vinculação:');
+  console.log('🔍 Status das funções de teste e debug de vinculação:');
+  console.log('\n📋 Funções de teste:');
   console.log('- testCustomerAssignment:', typeof (globalThis as any).testCustomerAssignment);
   console.log('- testTicketWithCustomerLoading:', typeof (globalThis as any).testTicketWithCustomerLoading);
   console.log('- cleanupTestData:', typeof (globalThis as any).cleanupTestData);
-  console.log('✅ Todas as funções de teste estão disponíveis');
-  console.log('\n🧪 Para testar vinculação, execute:');
+  
+  console.log('\n🔍 Funções de debug:');
+  console.log('- debugTicketAssignment:', typeof (globalThis as any).debugTicketAssignment);
+  console.log('- debugCurrentTicket:', typeof (globalThis as any).debugCurrentTicket);
+  console.log('- forceTicketReload:', typeof (globalThis as any).forceTicketReload);
+  
+  console.log('\n✅ Todas as funções estão disponíveis');
+  console.log('\n🧪 Para testar vinculação:');
   console.log('testCustomerAssignment()');
+  console.log('\n🔍 Para debugar vinculação:');
+  console.log('debugTicketAssignment() // Busca tickets com clientes');
+  console.log('debugTicketAssignment("ticket-id") // Debug de ticket específico');
+  console.log('debugCurrentTicket() // Analisa estado atual');
 };
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

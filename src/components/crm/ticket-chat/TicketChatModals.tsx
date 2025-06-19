@@ -47,7 +47,7 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
   const { toast } = useToast();
   const { customers, loading: loadingCustomers } = useCustomers();
   const { assignCustomerToTicket } = useTicketsDB();
-  const { assignCustomer, removeAssignment } = useTicketCustomerAssignment();
+  const { assignCustomer, removeAssignment, verifyAssignment } = useTicketCustomerAssignment();
   const [newAssignee, setNewAssignee] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [newTag, setNewTag] = useState('');
@@ -533,17 +533,46 @@ export const TicketChatModals: React.FC<TicketChatModalsProps> = ({
                         ticketId, 
                         selectedCustomer,
                         (updatedTicket) => {
-                          // Callback de sucesso - atualizar estado local
+                          // Callback de sucesso - atualizar estado local com dados completos
                           setCurrentTicket((prev: any) => ({
                             ...prev,
                             ...updatedTicket,
                             customer_id: selectedCustomer.id,
                             client: selectedCustomer.name,
                             customerEmail: selectedCustomer.email,
-                            customerPhone: selectedCustomer.phone
+                            customerPhone: selectedCustomer.phone,
+                            // Forçar refresh para mostrar vinculação
+                            _refreshToken: Date.now()
                           }));
                           
                           console.log('🔄 [VINCULAÇÃO] Estado local atualizado com dados do banco');
+                          
+                          // Recarregar dados do ticket para mostrar vinculação
+                          setTimeout(async () => {
+                            try {
+                              console.log('🔄 [VINCULAÇÃO] Recarregando dados para verificar vinculação...');
+                              
+                              // Verificar se vinculação está visível
+                              const verification = await verifyAssignment(ticketId);
+                              if (verification.customerId) {
+                                console.log('✅ [VINCULAÇÃO] Vinculação confirmada e visível');
+                                
+                                // Atualizar novamente o estado com dados verificados
+                                setCurrentTicket((prev: any) => ({
+                                  ...prev,
+                                  customer_id: verification.customerId,
+                                  client: (verification.customerData as any)?.name || selectedCustomer.name,
+                                  customerEmail: (verification.customerData as any)?.email || selectedCustomer.email,
+                                  customerPhone: selectedCustomer.phone,
+                                  _lastVerified: Date.now()
+                                }));
+                              } else {
+                                console.warn('⚠️ [VINCULAÇÃO] Vinculação não aparece ainda, pode aparecer após recarregar a página');
+                              }
+                            } catch (error) {
+                              console.error('❌ [VINCULAÇÃO] Erro na verificação:', error);
+                            }
+                          }, 1500);
                         }
                       );
                       
