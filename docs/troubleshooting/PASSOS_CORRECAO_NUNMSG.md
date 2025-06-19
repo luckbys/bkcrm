@@ -95,7 +95,7 @@ node webhook-evolution-complete-corrigido.js
 ### **API Key inválida**
 Verifique se o webhook usa a service role key:
 ```javascript
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNTk0NDk0MywiZXhwIjoyMDUxNTIwOTQzfQ.6CShPE-LsKHhM-K6mhMlV8CZqMGZhNTHJLZI5C4Lf5k';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU';
 ```
 
 ### **Tickets antigos sem nunmsg**
