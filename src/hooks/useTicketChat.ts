@@ -7,6 +7,7 @@ import { useToast } from './use-toast';
 import { supabase } from '../lib/supabase';
 import { LocalMessage, QuickTemplate, UseTicketChatReturn } from '../types/ticketChat';
 import { useEvolutionSender } from './useEvolutionSender';
+import { useRealtimeMessages } from './useRealtimeMessages';
 
 // FUNÇÃO APRIMORADA PARA EXTRAIR INFORMAÇÕES DO CLIENTE COM DADOS ENRIQUECIDOS
 const extractClientInfo = (ticket: any) => {
@@ -274,6 +275,26 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     /* evolutionMessages – ainda não utilizado internamente */
     loadEvolutionMessages,
   } = useWebhookResponses(ticket?.id?.toString() || '');
+
+  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL PERFORMÁTICO
+  const {
+    messages: realTimeMessages,
+    isLoading: isLoadingHistory,
+    isConnected: isRealtimeConnected,
+    lastUpdateTime,
+    unreadCount: realtimeUnreadCount,
+    refreshMessages,
+    markAsRead,
+    addMessage,
+    updateMessage,
+    connectionStatus
+  } = useRealtimeMessages({
+    ticketId: currentTicket?.originalId || currentTicket?.id || null,
+    pollingInterval: 3000, // 3 segundos - mais frequente para responsividade
+    enableRealtime: true,
+    enablePolling: true,
+    maxRetries: 5
+  });
   
   // Estados principais
   const [message, setMessage] = useState('');
@@ -305,10 +326,6 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
-  
-  // Mensagens
-  const [realTimeMessages, setRealTimeMessages] = useState<LocalMessage[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   
   // Sidebar
@@ -344,55 +361,8 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     return result;
   };
 
-  // Função para carregar mensagens existentes do banco
-  const loadExistingMessages = useCallback(async (ticketId: string) => {
-    try {
-      console.log('📥 Carregando mensagens existentes do banco para ticket:', ticketId);
-      setIsLoadingHistory(true);
-
-      const messages = await fetchMessages(ticketId);
-      
-      if (messages && messages.length > 0) {
-        const localMessages: LocalMessage[] = messages.map((msg: any) => ({
-          id: generateUniqueId(msg.id),
-          content: msg.content,
-          sender: msg.sender_id ? 'agent' : 'client',
-          senderName: msg.sender_name || msg.sender?.name || (msg.sender_id ? 'Agente' : 'Cliente'),
-          timestamp: new Date(msg.created_at),
-          type: msg.type || 'text',
-          status: 'sent' as const,
-          isInternal: msg.is_internal || false,
-          attachments: msg.file_url ? [{
-            id: generateUniqueId(msg.id + '_file').toString(),
-            name: msg.file_name || 'Arquivo',
-            url: msg.file_url,
-            type: msg.file_type || 'file',
-            size: (msg.file_size || 0).toString()
-          }] : []
-        }));
-
-        setRealTimeMessages(localMessages);
-        console.log(`✅ ${localMessages.length} mensagens carregadas do banco`);
-        
-        toast({
-          title: "📥 Mensagens carregadas",
-          description: `${localMessages.length} mensagens encontradas no histórico`,
-        });
-      } else {
-        console.log('📭 Nenhuma mensagem encontrada no banco para este ticket');
-        setRealTimeMessages([]);
-      }
-    } catch (error) {
-      console.error('❌ Erro ao carregar mensagens do banco:', error);
-      toast({
-        title: "❌ Erro ao carregar histórico",
-        description: "Não foi possível carregar as mensagens anteriores",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }, [fetchMessages, toast]);
+  // 📥 CARREGAMENTO DE MENSAGENS AGORA DELEGADO PARA useRealtimeMessages
+  // A função loadExistingMessages não é mais necessária - o hook gerencia automaticamente
 
   // Função para obter o ticket ID real (UUID do banco de dados)
   const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
@@ -550,7 +520,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
         attachments: []
       };
 
-      setRealTimeMessages(prev => [...prev, localMessage]);
+      addMessage(localMessage);
       setLastSentMessage(Date.now());
       setMessage('');
       
@@ -601,13 +571,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
             console.log('✅ Mensagem enviada via WhatsApp:', evolutionResult.messageId);
             
             // Atualizar status da mensagem local
-            setRealTimeMessages(prev => 
-              prev.map(msg => 
-                msg.id === localMessage.id 
-                  ? { ...msg, status: 'delivered' as const }
-                  : msg
-              )
-            );
+            updateMessage(localMessage.id, { status: 'delivered' as const });
 
             toast({
               title: "📱 Enviado via WhatsApp!",
@@ -845,50 +809,27 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     return () => window.removeEventListener('resize', handleResize);
   }, [showSidebar, toast]);
 
-  // Carregar mensagens quando ticket é aberto
+  // 🚀 CARREGAMENTO DE MENSAGENS AUTOMATIZADO
+  // O useRealtimeMessages já gerencia automaticamente o carregamento baseado no ticketId
+  // Apenas sincronizar quando ticket muda
   useEffect(() => {
-    const loadTicketMessages = async () => {
-      if (!ticket?.id) {
-        setIsLoadingHistory(false);
-        return;
-      }
-
-      try {
-        // Se o ticket tem originalId (UUID do banco), usar diretamente
-        if (ticket.originalId) {
-          console.log('🎯 Carregando mensagens para ticket UUID:', ticket.originalId);
-          await loadExistingMessages(ticket.originalId);
-          return;
-        }
-
-        // Se é um ID numérico, tentar mapear para UUID
-        if (typeof ticket.id === 'number') {
-          const realId = await getRealTicketId(ticket.id);
+    if (ticket?.id) {
+      console.log('🔄 [REALTIME] Ticket mudou, sincronizando mensagens:', ticket.id);
+      
+      // Se é um ID numérico, tentar mapear para UUID para o hook
+      if (typeof ticket.id === 'number') {
+        getRealTicketId(ticket.id).then(realId => {
           if (realId) {
-            console.log('🎯 Ticket mapeado para UUID:', realId);
+            console.log('🎯 [REALTIME] Ticket mapeado para UUID:', realId);
             setCurrentTicket((prev: any) => ({ ...prev, id: realId, originalId: realId }));
-            await loadExistingMessages(realId);
-            loadEvolutionMessages(realId);
-          } else {
-            console.log('📭 Ticket não encontrado no banco (dados mock)');
-            setIsLoadingHistory(false);
           }
-        } else if (typeof ticket.id === 'string' && ticket.id.includes('-')) {
-          // É um UUID direto
-          console.log('🎯 Carregando mensagens para UUID direto:', ticket.id);
-          await loadExistingMessages(ticket.id);
-        } else {
-          console.log('📭 Formato de ID não reconhecido:', ticket.id);
-          setIsLoadingHistory(false);
-        }
-      } catch (error) {
-        console.error('❌ Erro ao carregar mensagens do ticket:', error);
-        setIsLoadingHistory(false);
+        });
       }
-    };
-
-    loadTicketMessages();
-  }, [ticket?.id, ticket?.originalId, getRealTicketId, loadExistingMessages, loadEvolutionMessages]);
+      
+      // Marcar mensagens como lidas quando ticket é aberto
+      markAsRead();
+    }
+  }, [ticket?.id, ticket?.originalId, getRealTicketId, markAsRead]);
 
   return {
     // Estados principais
@@ -945,6 +886,12 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     // WhatsApp
     whatsappStatus,
     whatsappInstance,
+    
+    // 🚀 Realtime
+    isRealtimeConnected,
+    lastUpdateTime,
+    connectionStatus,
+    refreshMessages,
     
     // Funções
     handleSendMessage,

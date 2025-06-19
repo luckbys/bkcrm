@@ -85,6 +85,12 @@ export interface UseTicketChatReturn {
   whatsappStatus: 'connected' | 'disconnected' | 'unknown';
   whatsappInstance: string | null;
   
+  // 🚀 Realtime
+  isRealtimeConnected: boolean;
+  lastUpdateTime: Date | null;
+  connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
+  refreshMessages: () => Promise<void>;
+  
   // Funções
   handleSendMessage: () => Promise<void>;
   toggleMinimize: () => void;

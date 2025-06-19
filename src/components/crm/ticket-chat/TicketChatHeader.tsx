@@ -11,6 +11,7 @@ import { ChatAnimations, ResponsiveAnimations } from './chatAnimations';
 import { useTicketsDB } from '../../../hooks/useTicketsDB';
 import { useToast } from '../../../hooks/use-toast';
 import { supabase } from '../../../lib/supabase';
+import { RealtimeConnectionIndicator } from './RealtimeConnectionIndicator';
 
 interface TicketChatHeaderProps {
   currentTicket: any;
@@ -360,6 +361,15 @@ export const TicketChatHeader: React.FC<TicketChatHeaderProps> = ({
             <X className="w-3 h-3" />
           </Button>
         </div>
+
+        {/* Realtime Connection Indicator */}
+        <RealtimeConnectionIndicator
+          isConnected={chatState.isRealtimeConnected}
+          connectionStatus={chatState.connectionStatus}
+          lastUpdateTime={chatState.lastUpdateTime}
+          messageCount={messageCounts.total}
+          onRefresh={chatState.refreshMessages}
+        />
 
         {/* Filter controls */}
         <div className="flex items-center gap-2">
