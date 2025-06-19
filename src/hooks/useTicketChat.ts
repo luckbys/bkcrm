@@ -173,19 +173,35 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const { sendMessage, createTicket, fetchMessages } = useTicketsDB();
   const { sendMessage: sendEvolutionMessage, validateMessageData } = useEvolutionSender();
 
-  // Estados do ticket – precisa vir antes do hook de mensagens Evolution
+  // Estados do ticket – inicialização mais defensiva
   const [currentTicket, setCurrentTicket] = useState(() => {
-    if (!ticket) return {};
+    if (!ticket) {
+      console.log('⚠️ [TICKET_CHAT] Ticket é null, retornando objeto vazio');
+      return {};
+    }
     
-    // Extrair informações do cliente e enriquecer o ticket
-    const clientInfo = extractClientInfo(ticket);
-    return {
-      ...ticket,
-      client: clientInfo.clientName,
-      customerPhone: clientInfo.clientPhone,
-      customerEmail: ticket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : ticket.email),
-      isWhatsApp: clientInfo.isWhatsApp
-    };
+    try {
+      // Extrair informações do cliente e enriquecer o ticket
+      const clientInfo = extractClientInfo(ticket);
+      const enrichedTicket = {
+        ...ticket,
+        client: clientInfo.clientName,
+        customerPhone: clientInfo.clientPhone,
+        customerEmail: ticket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : ticket.email),
+        isWhatsApp: clientInfo.isWhatsApp
+      };
+      
+      console.log('✅ [TICKET_CHAT] Ticket inicializado:', {
+        id: enrichedTicket.id,
+        client: enrichedTicket.client,
+        isWhatsApp: enrichedTicket.isWhatsApp
+      });
+      
+      return enrichedTicket;
+    } catch (error) {
+      console.error('❌ [TICKET_CHAT] Erro ao inicializar ticket:', error);
+      return { ...ticket, client: 'Cliente', isWhatsApp: false };
+    }
   });
 
   // Função para recarregar dados completos do ticket incluindo cliente vinculado
@@ -276,7 +292,25 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     loadEvolutionMessages,
   } = useWebhookResponses(ticket?.id?.toString() || '');
 
-  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL PERFORMÁTICO
+  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL PERFORMÁTICO - DEFENSIVO
+  const ticketIdForRealtime = (() => {
+    try {
+      const rawId = currentTicket?.originalId || currentTicket?.id;
+      if (!rawId) {
+        console.log('⚠️ [REALTIME] Nenhum ID de ticket disponível');
+        return null;
+      }
+      
+      const ticketId = rawId.toString();
+      console.log('📡 [REALTIME] Usando ticket ID:', ticketId);
+      return ticketId;
+    } catch (error) {
+      console.error('❌ [REALTIME] Erro ao processar ticket ID:', error);
+      return null;
+    }
+  })();
+
+  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL OTIMIZADO
   const {
     messages: realTimeMessages,
     isLoading: isLoadingHistory,
@@ -289,11 +323,11 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     updateMessage,
     connectionStatus
   } = useRealtimeMessages({
-    ticketId: currentTicket?.originalId || currentTicket?.id || null,
-    pollingInterval: 3000, // 3 segundos - mais frequente para responsividade
+    ticketId: ticketIdForRealtime,
+    pollingInterval: 10000, // 10 segundos - conservador e estável
     enableRealtime: true,
     enablePolling: true,
-    maxRetries: 5
+    maxRetries: 2 // Máximo 2 tentativas para evitar loops
   });
   
   // Estados principais

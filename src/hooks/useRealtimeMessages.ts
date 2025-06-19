@@ -21,7 +21,7 @@ interface RealtimeMessage {
 
 interface UseRealtimeMessagesOptions {
   ticketId: string | null;
-  pollingInterval?: number; // Em milissegundos
+  pollingInterval?: number;
   enableRealtime?: boolean;
   enablePolling?: boolean;
   maxRetries?: number;
@@ -40,15 +40,70 @@ interface UseRealtimeMessagesReturn {
   connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
 }
 
+// 🛡️ CIRCUIT BREAKER PARA EVITAR LOOPS INFINITOS
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailureTime = 0;
+  private state: 'closed' | 'open' | 'half-open' = 'closed';
+  
+  constructor(
+    private maxFailures = 3,
+    private timeoutMs = 30000 // 30 segundos
+  ) {}
+
+  canExecute(): boolean {
+    if (this.state === 'closed') return true;
+    
+    if (this.state === 'open') {
+      if (Date.now() - this.lastFailureTime > this.timeoutMs) {
+        this.state = 'half-open';
+        return true;
+      }
+      return false;
+    }
+    
+    return true;
+  }
+
+  onSuccess(): void {
+    this.failures = 0;
+    this.state = 'closed';
+  }
+
+  onFailure(): void {
+    this.failures++;
+    this.lastFailureTime = Date.now();
+    
+    if (this.failures >= this.maxFailures) {
+      this.state = 'open';
+    }
+  }
+}
+
 export const useRealtimeMessages = (options: UseRealtimeMessagesOptions): UseRealtimeMessagesReturn => {
   const { toast } = useToast();
   const {
     ticketId,
-    pollingInterval = 5000, // 5 segundos por padrão
+    pollingInterval = 10000, // 10 segundos - mais conservador
     enableRealtime = true,
     enablePolling = true,
-    maxRetries = 3
+    maxRetries = 2
   } = options;
+
+  // 🔒 VALIDAÇÃO DE ENTRADA
+  const isValidTicketId = useCallback((id: string | null): boolean => {
+    if (!id || typeof id !== 'string') return false;
+    if (id.trim().length === 0) return false;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const numberRegex = /^\d+$/;
+    return uuidRegex.test(id) || numberRegex.test(id);
+  }, []);
+
+  // 🛡️ REFS DE CONTROLE
+  const circuitBreakerRef = useRef(new CircuitBreaker(3, 30000));
+  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const subscriptionRef = useRef<any>(null);
+  const mountedRef = useRef(true);
 
   // Estados
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -58,141 +113,126 @@ export const useRealtimeMessages = (options: UseRealtimeMessagesOptions): UseRea
   const [unreadCount, setUnreadCount] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'error'>('disconnected');
 
-  // Refs para controle
-  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const subscriptionRef = useRef<any>(null);
-  const retryCountRef = useRef(0);
-  const lastMessageCountRef = useRef(0);
-  const isVisibleRef = useRef(true);
-
-  // Função para gerar ID único para mensagens
+  // 🎯 FUNÇÃO PARA GERAR ID ÚNICO
   const generateUniqueId = useCallback((messageId: string): number => {
-    return Math.abs(messageId.split('').reduce((hash, char) => {
-      const chr = char.charCodeAt(0);
-      hash = ((hash << 5) - hash) + chr;
-      return hash & hash;
-    }, 0));
+    try {
+      const numMatch = messageId.match(/\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0]);
+        if (!isNaN(num) && num > 0) return num;
+      }
+      
+      let hash = 0;
+      for (let i = 0; i < Math.min(messageId.length, 10); i++) {
+        hash = ((hash << 5) - hash) + messageId.charCodeAt(i);
+        hash = hash & hash;
+      }
+      
+      return Math.abs(hash) || Date.now();
+    } catch (error) {
+      return Date.now();
+    }
   }, []);
 
-  // Converter mensagem do banco para LocalMessage
+  // 🔄 CONVERSÃO DE MENSAGEM
   const convertToLocalMessage = useCallback((msg: RealtimeMessage): LocalMessage => {
-    return {
-      id: generateUniqueId(msg.id),
-      content: msg.content,
-      sender: msg.sender_id ? 'agent' : 'client',
-      senderName: msg.sender_name || (msg.sender_id ? 'Agente' : 'Cliente'),
-      timestamp: new Date(msg.created_at),
-      type: msg.type as any || 'text',
-      status: 'sent' as const,
-      isInternal: msg.is_internal || false,
-      attachments: msg.file_url ? [{
-        id: generateUniqueId(msg.id + '_file').toString(),
-        name: msg.file_name || 'Arquivo',
-        url: msg.file_url,
-        type: msg.file_type || 'file',
-        size: (msg.file_size || 0).toString()
-      }] : []
-    };
+    try {
+      return {
+        id: generateUniqueId(msg.id),
+        content: msg.content || '',
+        sender: msg.sender_id ? 'agent' : 'client',
+        senderName: msg.sender_name || (msg.sender_id ? 'Agente' : 'Cliente'),
+        timestamp: new Date(msg.created_at),
+        type: (msg.type as any) || 'text',
+        status: 'sent' as const,
+        isInternal: Boolean(msg.is_internal),
+        attachments: msg.file_url ? [{
+          id: `${generateUniqueId(msg.id)}_file`,
+          name: msg.file_name || 'Arquivo',
+          url: msg.file_url,
+          type: msg.file_type || 'file',
+          size: (msg.file_size || 0).toString()
+        }] : []
+      };
+    } catch (error) {
+      return {
+        id: Date.now(),
+        content: 'Erro ao carregar mensagem',
+        sender: 'system' as any,
+        senderName: 'Sistema',
+        timestamp: new Date(),
+        type: 'text',
+        status: 'error' as any,
+        isInternal: false,
+        attachments: []
+      };
+    }
   }, [generateUniqueId]);
 
-  // Função para carregar mensagens do banco
+  // 📥 CARREGAMENTO DE MENSAGENS
   const loadMessages = useCallback(async (silent = false) => {
-    if (!ticketId) {
-      setMessages([]);
-      setIsLoading(false);
+    if (!mountedRef.current) return;
+    if (!isValidTicketId(ticketId)) {
+      if (!silent) setMessages([]);
+      return;
+    }
+    if (!circuitBreakerRef.current.canExecute()) {
+      setConnectionStatus('error');
       return;
     }
 
-    if (!silent) {
-      setIsLoading(true);
-    }
+    if (!silent) setIsLoading(true);
 
     try {
-      console.log('📥 [REALTIME] Carregando mensagens para ticket:', ticketId);
-
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select('*')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: true })
-        .limit(100); // Limitar para performance
+        .limit(50);
 
       if (error) {
-        console.error('❌ [REALTIME] Erro ao carregar mensagens:', error);
+        circuitBreakerRef.current.onFailure();
         setConnectionStatus('error');
         throw error;
       }
 
-      const localMessages = (messagesData || []).map(convertToLocalMessage);
-      
-      // Otimização: só atualizar se houve mudanças
-      if (localMessages.length !== lastMessageCountRef.current) {
-        setMessages(localMessages);
-        setLastUpdateTime(new Date());
-        lastMessageCountRef.current = localMessages.length;
-        
-        // Calcular não lidas (mensagens de clientes)
-        const unread = localMessages.filter(msg => 
-          msg.sender === 'client' && 
-          !isVisibleRef.current
-        ).length;
-        setUnreadCount(unread);
+      if (!mountedRef.current) return;
 
-        console.log(`✅ [REALTIME] ${localMessages.length} mensagens carregadas (${unread} não lidas)`);
-        
-        if (!silent && localMessages.length > 0) {
-          toast({
-            title: "📥 Mensagens atualizadas",
-            description: `${localMessages.length} mensagens carregadas`,
-          });
-        }
-      }
+      const localMessages = (messagesData || [])
+        .map(convertToLocalMessage)
+        .filter(msg => msg.id && msg.content);
 
+      setMessages(localMessages);
+      setLastUpdateTime(new Date());
       setConnectionStatus('connected');
-      retryCountRef.current = 0; // Reset contador de tentativas
+      circuitBreakerRef.current.onSuccess();
 
     } catch (error) {
-      console.error('❌ [REALTIME] Erro ao carregar mensagens:', error);
+      if (!mountedRef.current) return;
+      circuitBreakerRef.current.onFailure();
       setConnectionStatus('error');
-      
-      // Retry logic
-      if (retryCountRef.current < maxRetries) {
-        retryCountRef.current++;
-        console.log(`🔄 [REALTIME] Tentativa ${retryCountRef.current}/${maxRetries}`);
-        
-        setTimeout(() => {
-          loadMessages(silent);
-        }, 2000 * retryCountRef.current); // Backoff exponencial
-      } else {
-        toast({
-          title: "❌ Erro de conexão",
-          description: "Não foi possível carregar mensagens após várias tentativas",
-          variant: "destructive"
-        });
-      }
     } finally {
-      if (!silent) {
+      if (!silent && mountedRef.current) {
         setIsLoading(false);
       }
     }
-  }, [ticketId, toast, convertToLocalMessage, maxRetries]);
+  }, [ticketId, convertToLocalMessage, isValidTicketId]);
 
-  // Configurar realtime subscription
+  // 🔌 REALTIME SUBSCRIPTION
   const setupRealtimeSubscription = useCallback(() => {
-    if (!ticketId || !enableRealtime) {
+    if (!isValidTicketId(ticketId) || !enableRealtime || !mountedRef.current) {
       return;
     }
 
-    console.log('🔌 [REALTIME] Configurando subscription para ticket:', ticketId);
     setConnectionStatus('connecting');
 
     try {
-      // Remover subscription anterior se existir
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
       }
 
-      // Criar nova subscription
       subscriptionRef.current = supabase
         .channel(`ticket_messages_${ticketId}`)
         .on('postgres_changes', {
@@ -200,176 +240,125 @@ export const useRealtimeMessages = (options: UseRealtimeMessagesOptions): UseRea
           schema: 'public',
           table: 'messages',
           filter: `ticket_id=eq.${ticketId}`
-        }, (payload) => {
-          console.log('📨 [REALTIME] Nova mensagem recebida:', payload.new);
-          
-          const newMessage = convertToLocalMessage(payload.new as RealtimeMessage);
-          
-          setMessages(prev => {
-            // Verificar se mensagem já existe (evitar duplicatas)
-            const exists = prev.some(msg => msg.id === newMessage.id);
-            if (exists) {
-              console.log('⚠️ [REALTIME] Mensagem duplicada ignorada:', newMessage.id);
-              return prev;
-            }
-            
-            const updated = [...prev, newMessage];
-            console.log(`✅ [REALTIME] Mensagem adicionada (${updated.length} total)`);
-            
-            // Atualizar não lidas se não estiver visível
-            if (newMessage.sender === 'client' && !isVisibleRef.current) {
-              setUnreadCount(prev => prev + 1);
-            }
-            
-            return updated;
-          });
-          
-          setLastUpdateTime(new Date());
-          
-          // Notificação para novas mensagens de clientes
-          if (newMessage.sender === 'client') {
-            toast({
-              title: "📱 Nova mensagem",
-              description: `${newMessage.senderName}: ${newMessage.content.substring(0, 50)}...`,
-            });
+        }, () => {
+          if (mountedRef.current) {
+            setTimeout(() => loadMessages(true), 1000);
           }
         })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages',
-          filter: `ticket_id=eq.${ticketId}`
-        }, (payload) => {
-          console.log('📝 [REALTIME] Mensagem atualizada:', payload.new);
-          
-          const updatedMessage = convertToLocalMessage(payload.new as RealtimeMessage);
-          
-          setMessages(prev => prev.map(msg => 
-            msg.id === updatedMessage.id ? updatedMessage : msg
-          ));
-          
-          setLastUpdateTime(new Date());
-        })
         .subscribe((status) => {
-          console.log('🔌 [REALTIME] Status da subscription:', status);
+          if (!mountedRef.current) return;
           
           if (status === 'SUBSCRIBED') {
             setIsConnected(true);
             setConnectionStatus('connected');
-            console.log('✅ [REALTIME] Conectado ao realtime');
-          } else if (status === 'CHANNEL_ERROR') {
+          } else if (status === 'CLOSED') {
             setIsConnected(false);
-            setConnectionStatus('error');
-            console.error('❌ [REALTIME] Erro na subscription');
+            setConnectionStatus('disconnected');
           }
         });
 
     } catch (error) {
-      console.error('❌ [REALTIME] Erro ao configurar subscription:', error);
+      circuitBreakerRef.current.onFailure();
       setConnectionStatus('error');
+      setIsConnected(false);
     }
-  }, [ticketId, enableRealtime, convertToLocalMessage, toast]);
+  }, [ticketId, enableRealtime, loadMessages, isValidTicketId]);
 
-  // Configurar polling como fallback
+  // ⏰ POLLING
   const setupPolling = useCallback(() => {
-    if (!ticketId || !enablePolling) {
+    if (!isValidTicketId(ticketId) || !enablePolling || !mountedRef.current) {
       return;
     }
 
-    console.log(`⏰ [POLLING] Iniciando polling a cada ${pollingInterval}ms`);
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
 
     const poll = () => {
-      if (ticketId) {
-        loadMessages(true); // Silent loading para polling
+      if (!mountedRef.current || !circuitBreakerRef.current.canExecute()) {
+        return;
       }
+
+      loadMessages(true).finally(() => {
+        if (mountedRef.current && enablePolling) {
+          pollingTimeoutRef.current = setTimeout(poll, pollingInterval);
+        }
+      });
     };
 
-    // Primeira carga
-    poll();
+    pollingTimeoutRef.current = setTimeout(poll, pollingInterval);
+  }, [ticketId, enablePolling, pollingInterval, loadMessages, isValidTicketId]);
 
-    // Configurar interval
-    pollingTimeoutRef.current = setInterval(poll, pollingInterval);
+  // 🎯 EFEITO PRINCIPAL
+  useEffect(() => {
+    if (!mountedRef.current || !isValidTicketId(ticketId)) {
+      setMessages([]);
+      setConnectionStatus('disconnected');
+      return;
+    }
 
-  }, [ticketId, enablePolling, pollingInterval, loadMessages]);
+    loadMessages(false);
 
-  // Função para marcar como lidas
-  const markAsRead = useCallback(() => {
-    setUnreadCount(0);
-    isVisibleRef.current = true;
+    if (enableRealtime) {
+      setupRealtimeSubscription();
+    }
+
+    if (enablePolling) {
+      setupPolling();
+    }
+
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+      
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = null;
+      }
+      
+      setIsConnected(false);
+      setConnectionStatus('disconnected');
+    };
+  }, [ticketId, enableRealtime, enablePolling, isValidTicketId, loadMessages, setupRealtimeSubscription, setupPolling]);
+
+  // 🧹 CLEANUP
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  // Função para adicionar mensagem localmente
+  // 📤 FUNÇÕES EXPOSTAS
+  const refreshMessages = useCallback(async () => {
+    await loadMessages(false);
+  }, [loadMessages]);
+
+  const markAsRead = useCallback(() => {
+    setUnreadCount(0);
+  }, []);
+
   const addMessage = useCallback((message: LocalMessage) => {
+    if (!mountedRef.current) return;
+    
     setMessages(prev => {
-      // Verificar duplicatas
-      const exists = prev.some(msg => msg.id === message.id);
-      if (exists) return prev;
-      
+      if (prev.some(m => m.id === message.id)) {
+        return prev;
+      }
       return [...prev, message];
     });
     setLastUpdateTime(new Date());
   }, []);
 
-  // Função para atualizar mensagem
   const updateMessage = useCallback((messageId: number, updates: Partial<LocalMessage>) => {
+    if (!mountedRef.current) return;
+    
     setMessages(prev => prev.map(msg => 
       msg.id === messageId ? { ...msg, ...updates } : msg
     ));
-    setLastUpdateTime(new Date());
   }, []);
-
-  // Detectar visibilidade da página
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      isVisibleRef.current = !document.hidden;
-      if (!document.hidden) {
-        markAsRead();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [markAsRead]);
-
-  // Configurar quando ticketId muda
-  useEffect(() => {
-    if (!ticketId) {
-      setMessages([]);
-      setIsLoading(false);
-      setIsConnected(false);
-      setConnectionStatus('disconnected');
-      return;
-    }
-
-    // Limpar timers anteriores
-    if (pollingTimeoutRef.current) {
-      clearInterval(pollingTimeoutRef.current);
-      pollingTimeoutRef.current = null;
-    }
-
-    // Configurar realtime subscription
-    if (enableRealtime) {
-      setupRealtimeSubscription();
-    }
-
-    // Configurar polling como fallback
-    if (enablePolling) {
-      setupPolling();
-    }
-
-    // Carregar mensagens iniciais
-    loadMessages();
-
-    // Cleanup
-    return () => {
-      if (pollingTimeoutRef.current) {
-        clearInterval(pollingTimeoutRef.current);
-      }
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe();
-      }
-    };
-  }, [ticketId, enableRealtime, enablePolling, setupRealtimeSubscription, setupPolling, loadMessages]);
 
   return {
     messages,
@@ -377,7 +366,7 @@ export const useRealtimeMessages = (options: UseRealtimeMessagesOptions): UseRea
     isConnected,
     lastUpdateTime,
     unreadCount,
-    refreshMessages: () => loadMessages(),
+    refreshMessages,
     markAsRead,
     addMessage,
     updateMessage,

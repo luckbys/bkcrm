@@ -1,113 +1,116 @@
 import React from 'react';
-import { Wifi, WifiOff, RotateCcw, AlertTriangle, Clock } from 'lucide-react';
+import { Wifi, WifiOff, RotateCcw, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Button } from '../../ui/button';
 import { cn } from '../../../lib/utils';
 
 interface RealtimeConnectionIndicatorProps {
   isConnected: boolean;
-  connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
   lastUpdateTime: Date | null;
-  messageCount: number;
+  connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
   onRefresh?: () => void;
+  className?: string;
 }
 
 export const RealtimeConnectionIndicator: React.FC<RealtimeConnectionIndicatorProps> = ({
   isConnected,
-  connectionStatus,
   lastUpdateTime,
-  messageCount,
-  onRefresh
+  connectionStatus,
+  onRefresh,
+  className
 }) => {
-  const getStatusConfig = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return {
-          icon: Wifi,
-          color: 'text-green-600',
-          bg: 'bg-green-50',
-          border: 'border-green-200',
-          label: 'Conectado',
-          pulse: false
-        };
-      case 'connecting':
-        return {
-          icon: RotateCcw,
-          color: 'text-blue-600',
-          bg: 'bg-blue-50',
-          border: 'border-blue-200',
-          label: 'Conectando...',
-          pulse: true
-        };
-      case 'error':
-        return {
-          icon: AlertTriangle,
-          color: 'text-red-600',
-          bg: 'bg-red-50',
-          border: 'border-red-200',
-          label: 'Erro de conexão',
-          pulse: false
-        };
-      case 'disconnected':
-      default:
-        return {
-          icon: WifiOff,
-          color: 'text-gray-600',
-          bg: 'bg-gray-50',
-          border: 'border-gray-200',
-          label: 'Desconectado',
-          pulse: false
-        };
+  // 🎨 CONFIGURAÇÕES DE STATUS SIMPLIFICADAS
+  const statusConfig = {
+    connected: {
+      icon: Wifi,
+      color: 'text-green-600',
+      bgColor: 'bg-green-50',
+      borderColor: 'border-green-200',
+      label: 'Conectado',
+      animate: false
+    },
+    connecting: {
+      icon: RotateCcw,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-blue-200',
+      label: 'Conectando',
+      animate: true
+    },
+    error: {
+      icon: AlertTriangle,
+      color: 'text-red-600',
+      bgColor: 'bg-red-50',
+      borderColor: 'border-red-200',
+      label: 'Erro',
+      animate: false
+    },
+    disconnected: {
+      icon: WifiOff,
+      color: 'text-gray-600',
+      bgColor: 'bg-gray-50',
+      borderColor: 'border-gray-200',
+      label: 'Desconectado',
+      animate: false
     }
   };
 
-  const config = getStatusConfig();
-  const Icon = config.icon;
+  const config = statusConfig[connectionStatus];
+  const IconComponent = config.icon;
 
-  const formatLastUpdate = () => {
-    if (!lastUpdateTime) return 'Nunca';
+  // ⏰ FORMATAÇÃO DE TEMPO SIMPLES
+  const formatTime = (date: Date | null): string => {
+    if (!date) return 'Nunca';
     
     const now = new Date();
-    const diff = now.getTime() - lastUpdateTime.getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-
-    if (seconds < 60) return 'Agora';
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    
+    if (minutes < 1) return 'Agora';
     if (minutes < 60) return `${minutes}m atrás`;
+    
+    const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h atrás`;
-    return lastUpdateTime.toLocaleDateString();
+    
+    return date.toLocaleDateString();
   };
 
   return (
     <div className={cn(
-      "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all duration-200",
-      config.bg,
-      config.border,
-      config.color
+      "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-200",
+      config.bgColor,
+      config.borderColor,
+      className
     )}>
-      <Icon className={cn(
-        "w-4 h-4",
-        config.pulse && "animate-spin"
-      )} />
+      <IconComponent 
+        className={cn(
+          "w-4 h-4",
+          config.color,
+          config.animate && "animate-spin"
+        )} 
+      />
       
-      <div className="flex flex-col gap-0.5">
-        <span className="leading-none">{config.label}</span>
-        <div className="flex items-center gap-3 text-xs opacity-70">
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {formatLastUpdate()}
+      <div className="flex items-center gap-2">
+        <span className={cn("font-medium", config.color)}>
+          {config.label}
+        </span>
+        
+        {lastUpdateTime && (
+          <span className="text-gray-500 text-xs">
+            • {formatTime(lastUpdateTime)}
           </span>
-          <span>{messageCount} msgs</span>
-        </div>
+        )}
       </div>
 
       {(connectionStatus === 'error' || connectionStatus === 'disconnected') && onRefresh && (
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onRefresh}
-          className="ml-2 p-1 rounded hover:bg-white/50 transition-colors"
+          className="h-6 w-6 p-0 hover:bg-white/50"
           title="Tentar reconectar"
         >
-          <RotateCcw className="w-3 h-3" />
-        </button>
+          <RefreshCw className="w-3 h-3" />
+        </Button>
       )}
     </div>
   );
