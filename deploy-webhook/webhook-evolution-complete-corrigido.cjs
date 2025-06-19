@@ -11,7 +11,7 @@ app.use(cors());
 
 // CONFIGURAÇÕES DO SUPABASE
 const supabaseUrl = 'https://ajlgjjjvuglwgfnyqqvb.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg5NzI4MDAsImV4cCI6MjAyNDU0ODgwMH0.OuXzKuYAGxnlT8kGgpVRjWLZGEo_eDhPjXGHLLrHUWE';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTU0MzE2NiwiZXhwIjoyMDY1MTE5MTY2fQ.dfIdvOZijcwmRW-6yAchp0CVPIytCKMAjezJxz5YXCU';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // CONFIGURAÇÕES DA EVOLUTION API
@@ -197,6 +197,7 @@ async function createTicketAutomaticallyEnhanced(ticketInfo) {
       channel: 'whatsapp',
       customer_id: ticketInfo.customerId,
       department_id: null, // Será atualizado depois
+      nunmsg: ticketInfo.clientPhone.startsWith('+') ? ticketInfo.clientPhone : `+${ticketInfo.clientPhone}`,
       metadata: {
         client_name: ticketInfo.clientName,
         client_phone: ticketInfo.clientPhone,
