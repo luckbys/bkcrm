@@ -100,9 +100,10 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
       const ticket = existingTickets[0];
       console.log(`✅ Ticket existente encontrado: ${ticket.id}`);
       
-      // 📞 ATUALIZAR TELEFONE NO TICKET EXISTENTE
+      // 📞 ATUALIZAR TELEFONE NO TICKET EXISTENTE (incluindo campo nunmsg)
       const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
       const updateData = {
+        nunmsg: phoneFormatted, // 📱 CAMPO PRINCIPAL PARA NÚMERO DA MENSAGEM
         metadata: {
           ...ticket.metadata,
           whatsapp_phone: phoneFormatted,
@@ -118,7 +119,7 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
         channel: 'whatsapp'
       };
       
-      console.log(`📱 Vinculando telefone ${phoneFormatted} ao ticket existente ${ticket.id}`);
+      console.log(`📱 Vinculando telefone ${phoneFormatted} ao ticket existente ${ticket.id} no campo nunmsg`);
       
       const { error: updateError } = await supabase
         .from('tickets')
@@ -128,7 +129,7 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
       if (updateError) {
         console.error('⚠️ Erro ao atualizar telefone no ticket:', updateError);
       } else {
-        console.log(`✅ Telefone vinculado automaticamente ao ticket: ${phoneFormatted}`);
+        console.log(`✅ Telefone vinculado automaticamente ao ticket no campo nunmsg: ${phoneFormatted}`);
       }
       
       return ticket.id;
@@ -146,7 +147,8 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
       priority: 'medium',
       customer_id: customerId,
       channel: 'whatsapp',
-      // 📞 CAMPOS DIRETOS PARA ACESSO FÁCIL DO FRONTEND
+      nunmsg: phoneFormatted, // 📱 CAMPO PRINCIPAL PARA NÚMERO DA MENSAGEM
+      // 📞 CAMPOS DIRETOS PARA ACESSO FÁCIL DO FRONTEND (mantidos para compatibilidade)
       client_phone: phoneFormatted,
       customerPhone: phoneFormatted,
       isWhatsApp: true,
@@ -171,7 +173,7 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
       return null;
     }
 
-    console.log(`✅ Ticket criado: ${newTicket.id} com telefone: ${phoneFormatted}`);
+    console.log(`✅ Ticket criado: ${newTicket.id} com telefone salvo no campo nunmsg: ${phoneFormatted}`);
     return newTicket.id;
 
   } catch (error) {
@@ -189,6 +191,7 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
         priority: 'medium',
         customer_id: customerId,
         channel: 'whatsapp',
+        nunmsg: phoneFormatted, // 📱 CAMPO PRINCIPAL PARA NÚMERO DA MENSAGEM (sempre incluir)
         metadata: {
           whatsapp_phone: phoneFormatted,
           client_phone: phoneFormatted,
@@ -211,7 +214,7 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
           return null;
         }
         
-        console.log(`✅ Ticket básico criado: ${basicTicket.id} com telefone nos metadados`);
+        console.log(`✅ Ticket básico criado: ${basicTicket.id} com telefone no campo nunmsg`);
         return basicTicket.id;
         
       } catch (basicErr) {

@@ -36,7 +36,8 @@ const extractClientInfo = (ticket: any) => {
     metadata.created_from_whatsapp || 
     metadata.whatsapp_phone || 
     metadata.anonymous_contact || 
-    ticket.channel === 'whatsapp'
+    ticket.channel === 'whatsapp' ||
+    ticket.nunmsg // 📱 NOVO: Detectar por campo nunmsg
   );
 
   let clientName = 'Cliente Anônimo';
@@ -52,7 +53,8 @@ const extractClientInfo = (ticket: any) => {
     console.log('📱 [EXTRAÇÃO] Processando ticket WhatsApp:', {
       enhanced: metadata.enhanced_processing,
       hasPhoneInfo: !!metadata.phone_info,
-      hasResponseData: !!metadata.response_data
+      hasResponseData: !!metadata.response_data,
+      hasNunmsg: !!ticket.nunmsg // 📱 NOVO: Verificar campo nunmsg
     });
 
     // EXTRAIR NOME COM PRIORIDADE PARA DADOS ENRIQUECIDOS
@@ -63,8 +65,20 @@ const extractClientInfo = (ticket: any) => {
                 ticket.whatsapp_contact_name ||
                 'Cliente WhatsApp';
 
-    // EXTRAIR TELEFONES COM SISTEMA APRIMORADO
-    if (metadata.enhanced_processing && metadata.phone_formatted) {
+    // 📱 PRIORIZAR CAMPO NUNMSG PARA EXTRAÇÃO DE TELEFONE
+    if (ticket.nunmsg) {
+      // Usar campo nunmsg como fonte principal
+      clientPhoneRaw = ticket.nunmsg;
+      clientPhoneFormatted = ticket.nunmsg;
+      clientPhone = ticket.nunmsg;
+      canReply = true; // Se tem nunmsg, pode responder
+      
+      console.log('✅ [EXTRAÇÃO] Telefone extraído do campo nunmsg:', {
+        nunmsg: ticket.nunmsg,
+        canReply: true
+      });
+      
+    } else if (metadata.enhanced_processing && metadata.phone_formatted) {
       // Dados do sistema aprimorado
       clientPhoneRaw = metadata.client_phone;
       clientPhoneFormatted = metadata.phone_formatted;

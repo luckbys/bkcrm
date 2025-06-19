@@ -242,6 +242,72 @@ export function useEvolutionSender() {
   };
 
   /**
+   * Extrair número de telefone do ticket priorizando campo nunmsg
+   */
+  const extractPhoneFromTicket = (ticket: any): string | null => {
+    console.log('📱 [EXTRAÇÃO] Extraindo telefone do ticket:', ticket?.id);
+    
+    if (!ticket) {
+      console.warn('⚠️ [EXTRAÇÃO] Ticket não fornecido');
+      return null;
+    }
+
+    // 🎯 PRIORIDADE 1: Campo nunmsg (novo campo específico para número da mensagem)
+    if (ticket.nunmsg) {
+      console.log('✅ [EXTRAÇÃO] Telefone encontrado no campo nunmsg:', ticket.nunmsg);
+      return ticket.nunmsg;
+    }
+
+    // 🎯 PRIORIDADE 2: Metadados WhatsApp
+    const metadata = ticket.metadata || {};
+    
+    if (metadata.whatsapp_phone) {
+      console.log('✅ [EXTRAÇÃO] Telefone encontrado em metadata.whatsapp_phone:', metadata.whatsapp_phone);
+      return metadata.whatsapp_phone;
+    }
+
+    if (metadata.client_phone) {
+      console.log('✅ [EXTRAÇÃO] Telefone encontrado em metadata.client_phone:', metadata.client_phone);
+      return metadata.client_phone;
+    }
+
+    // 🎯 PRIORIDADE 3: Campos de compatibilidade
+    if (ticket.client_phone) {
+      console.log('✅ [EXTRAÇÃO] Telefone encontrado em ticket.client_phone:', ticket.client_phone);
+      return ticket.client_phone;
+    }
+
+    if (ticket.customerPhone) {
+      console.log('✅ [EXTRAÇÃO] Telefone encontrado em ticket.customerPhone:', ticket.customerPhone);
+      return ticket.customerPhone;
+    }
+
+    // 🎯 PRIORIDADE 4: Campos alternativos
+    if (ticket.phone) {
+      console.log('✅ [EXTRAÇÃO] Telefone encontrado em ticket.phone:', ticket.phone);
+      return ticket.phone;
+    }
+
+    // 🎯 PRIORIDADE 5: Anonymous contact se for objeto
+    if (metadata.anonymous_contact && typeof metadata.anonymous_contact === 'object') {
+      const phone = metadata.anonymous_contact.phone;
+      if (phone) {
+        console.log('✅ [EXTRAÇÃO] Telefone encontrado em metadata.anonymous_contact.phone:', phone);
+        return phone;
+      }
+    }
+
+    console.warn('⚠️ [EXTRAÇÃO] Nenhum telefone encontrado no ticket:', {
+      ticketId: ticket.id,
+      hasNunmsg: !!ticket.nunmsg,
+      hasMetadata: !!ticket.metadata,
+      metadataKeys: ticket.metadata ? Object.keys(ticket.metadata) : []
+    });
+
+    return null;
+  };
+
+  /**
    * Formatar número para envio
    */
   const formatPhoneForSending = (phone: string): string => {
@@ -286,6 +352,7 @@ export function useEvolutionSender() {
     replyToMessage,
     sendMultipleMessages,
     checkServerHealth,
+    extractPhoneFromTicket,
     formatPhoneForSending,
     validateMessageData,
     isLoading

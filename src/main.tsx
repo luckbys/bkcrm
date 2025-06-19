@@ -126,6 +126,9 @@ import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js';
   console.log('debugCurrentTicket() // Analisa estado atual');
 };
 
+// 📱 Importar testes do campo nunmsg
+import './utils/test-nunmsg-integration'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
