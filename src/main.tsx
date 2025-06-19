@@ -101,6 +101,9 @@ import webhookResponseService from './services/webhook-response-service'
 (globalThis as any).debugCurrentTicket = debugCurrentTicket;
 (globalThis as any).forceTicketReload = forceTicketReload;
 
+// Importar e registrar funções de teste de vinculação automática
+import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js';
+
 // Helper para debug de vinculação
 (globalThis as any).debugCustomerAssignment = () => {
   console.log('🔍 Status das funções de teste e debug de vinculação:');
