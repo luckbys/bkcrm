@@ -57,23 +57,139 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
   const [isLoading, setIsLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
+  // Função para obter o UUID correto do ticket
+  const getTicketUUID = React.useCallback(() => {
+    if (!ticket) return null;
+    
+    // Verificar se já é UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    // 1. Tentar originalId primeiro (UUID real do banco)
+    const originalId = (ticket as any)?.originalId;
+    if (originalId && uuidPattern.test(originalId)) {
+      return originalId;
+    }
+    
+    // 2. Verificar se o próprio id é UUID
+    const ticketId = String(ticket.id);
+    if (uuidPattern.test(ticketId)) {
+      return ticketId;
+    }
+    
+    // 3. Se nenhum UUID válido foi encontrado
+    console.warn('⚠️ Nenhum UUID válido encontrado para o ticket:', { 
+      id: ticket.id, 
+      originalId,
+      ticketObject: ticket 
+    });
+    return null;
+  }, [ticket]);
+
+  // Função para criar ticket no banco se necessário (dados mock)
+  const ensureTicketInDatabase = React.useCallback(async () => {
+    const ticketUUID = getTicketUUID();
+    
+    // Se já tem UUID válido, não precisa criar
+    if (ticketUUID) {
+      return ticketUUID;
+    }
+    
+    console.log('🔄 Ticket sem UUID detectado, tentando criar no banco...');
+    
+    try {
+      // Verificar se já existe um ticket no banco com dados similares
+      const { data: existingTickets, error: searchError } = await supabase
+        .from('tickets')
+        .select('id')
+        .eq('title', ticket.subject || `Ticket #${ticket.id}`)
+        .limit(1);
+      
+      if (searchError) {
+        console.warn('⚠️ Erro ao buscar tickets existentes:', searchError);
+      }
+      
+      if (existingTickets && existingTickets.length > 0) {
+        console.log('✅ Ticket encontrado no banco:', existingTickets[0].id);
+        return existingTickets[0].id;
+      }
+      
+      // Criar novo ticket no banco
+      const newTicketData = {
+        title: ticket.subject || `Ticket #${ticket.id}`,
+        description: `Ticket migrado do sistema legacy`,
+        status: ticket.status || 'pendente',
+        priority: ticket.priority || 'normal',
+        channel: ticket.channel || 'chat',
+        metadata: {
+          legacy_id: ticket.id,
+          client_name: ticket.client,
+          migrated: true,
+          created_from: 'chat_modal'
+        },
+        tags: ticket.tags || [],
+        unread: ticket.unread || false,
+        is_internal: false,
+        last_message_at: new Date().toISOString()
+      };
+      
+      const { data: newTicket, error: createError } = await supabase
+        .from('tickets')
+        .insert([newTicketData])
+        .select('id')
+        .single();
+      
+      if (createError) {
+        console.error('❌ Erro ao criar ticket no banco:', createError);
+        return null;
+      }
+      
+      console.log('✅ Novo ticket criado no banco:', newTicket.id);
+      return newTicket.id;
+      
+    } catch (error) {
+      console.error('❌ Erro ao garantir ticket no banco:', error);
+      return null;
+    }
+  }, [ticket, getTicketUUID]);
+
   // Função para carregar mensagens do banco
   const loadMessages = React.useCallback(async () => {
-    if (!ticket?.id) return;
+    let ticketUUID = getTicketUUID();
+    
+    // Se não tem UUID, tentar criar/encontrar ticket no banco
+    if (!ticketUUID) {
+      console.log('🔄 Tentando garantir ticket no banco...');
+      ticketUUID = await ensureTicketInDatabase();
+    }
+    
+    if (!ticketUUID) {
+      console.warn('❌ Não foi possível obter UUID do ticket');
+      toast({
+        title: "⚠️ Aviso",
+        description: "Não foi possível carregar mensagens - ticket não encontrado no banco",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    console.log('📨 Carregando mensagens para ticket UUID:', ticketUUID);
     
     setIsLoading(true);
     try {
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('ticket_id', ticket.id)
+        .eq('ticket_id', ticketUUID)
         .order('created_at', { ascending: true })
         .limit(50);
 
       if (error) {
-        console.error('Erro ao carregar mensagens:', error);
+        console.error('❌ Erro ao carregar mensagens:', error);
+        setMessages([]);
         return;
       }
+
+      console.log('✅ Mensagens carregadas:', messagesData?.length || 0);
 
       const formattedMessages: SimpleMessage[] = (messagesData || []).map((msg, index) => ({
         id: index + 1,
@@ -86,22 +202,43 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
 
       setMessages(formattedMessages);
     } catch (error) {
-      console.error('Erro ao buscar mensagens:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [ticket?.id]);
+      console.error('❌ Erro ao buscar mensagens:', error);
+      setMessages([]);
+          } finally {
+        setIsLoading(false);
+      }
+    }, [getTicketUUID, ensureTicketInDatabase, toast]);
 
   // Função para enviar mensagem
   const handleSendMessage = React.useCallback(async () => {
-    if (!newMessage.trim() || !ticket?.id) return;
+    if (!newMessage.trim()) return;
+
+    let ticketUUID = getTicketUUID();
+    
+    // Se não tem UUID, tentar criar/encontrar ticket no banco
+    if (!ticketUUID) {
+      console.log('🔄 Tentando garantir ticket no banco antes do envio...');
+      ticketUUID = await ensureTicketInDatabase();
+    }
+    
+    if (!ticketUUID) {
+      console.warn('❌ Não foi possível obter UUID do ticket para envio');
+      toast({
+        title: "❌ Erro",
+        description: "Não foi possível enviar mensagem - ticket não encontrado no banco",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    console.log('📤 Enviando mensagem para ticket UUID:', ticketUUID);
 
     try {
       const messageData = {
-        ticket_id: ticket.id,
+        ticket_id: ticketUUID,
         content: newMessage.trim(),
         sender_id: isInternal ? user?.id : null,
-        sender_name: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket.client || 'Cliente'),
+        sender_name: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket?.client || 'Cliente'),
         type: 'text',
         is_internal: isInternal,
         metadata: {
@@ -110,6 +247,8 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
         }
       };
 
+      console.log('📋 Dados da mensagem:', messageData);
+
       const { data, error } = await supabase
         .from('messages')
         .insert([messageData])
@@ -117,15 +256,18 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
         .single();
 
       if (error) {
+        console.error('❌ Erro ao salvar mensagem:', error);
         throw error;
       }
+
+      console.log('✅ Mensagem salva no banco:', data);
 
       // Adicionar mensagem localmente
       const newMsg: SimpleMessage = {
         id: Date.now(),
         content: newMessage.trim(),
         sender: isInternal ? 'agent' : 'client',
-        senderName: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket.client || 'Cliente'),
+        senderName: isInternal ? (user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente') : (ticket?.client || 'Cliente'),
         timestamp: new Date(),
         isInternal
       };
@@ -138,14 +280,14 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
         description: `Mensagem ${isInternal ? 'interna' : 'pública'} enviada com sucesso`,
       });
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
+      console.error('❌ Erro ao enviar mensagem:', error);
       toast({
         title: "❌ Erro ao enviar",
-        description: "Não foi possível enviar a mensagem",
+        description: `Não foi possível enviar a mensagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: "destructive"
-      });
-    }
-  }, [newMessage, ticket?.id, isInternal, user, toast]);
+              });
+      }
+    }, [newMessage, getTicketUUID, ensureTicketInDatabase, isInternal, user, toast]);
 
   // Função para formatar data
   const formatTime = React.useCallback((date: Date) => {
@@ -157,15 +299,23 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
 
   // Carregar mensagens ao abrir - useEffect sempre executado
   useEffect(() => {
-    if (isOpen && ticket?.id) {
+    if (isOpen && ticket) {
       loadMessages();
     }
-  }, [isOpen, ticket?.id, loadMessages]);
+  }, [isOpen, ticket, loadMessages]);
 
   // Early return APÓS todos os hooks serem definidos
   if (!ticket || !isOpen) {
     return null;
   }
+
+  // Debug: verificar estrutura do ticket
+  console.log('🎫 Ticket recebido no modal:', {
+    id: ticket.id,
+    originalId: (ticket as any)?.originalId,
+    client: ticket.client,
+    status: ticket.status
+  });
 
   return (
     <Dialog 
