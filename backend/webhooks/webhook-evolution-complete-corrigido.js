@@ -17,7 +17,7 @@ const BASE_URL = 'https://bkcrm.devsible.com.br';
 
 // Configurar Supabase
 const supabaseUrl = 'https://ajlgjjjvuglwgfnyqqvb.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNTk0NDk0MywiZXhwIjoyMDUxNTIwOTQzfQ.6CShPE-LsKHhM-K6mhMlV8CZqMGZhNTHJLZI5C4Lf5k';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Logging middleware
@@ -112,10 +112,6 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
           is_whatsapp: true,
           phone_updated_at: new Date().toISOString()
         },
-        // Atualizar campos diretos do ticket para facilitar acesso do frontend
-        client_phone: phoneFormatted,
-        customerPhone: phoneFormatted,
-        isWhatsApp: true,
         channel: 'whatsapp'
       };
       
@@ -148,10 +144,6 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
       customer_id: customerId,
       channel: 'whatsapp',
       nunmsg: phoneFormatted, // 📱 CAMPO PRINCIPAL PARA NÚMERO DA MENSAGEM
-      // 📞 CAMPOS DIRETOS PARA ACESSO FÁCIL DO FRONTEND (mantidos para compatibilidade)
-      client_phone: phoneFormatted,
-      customerPhone: phoneFormatted,
-      isWhatsApp: true,
       metadata: {
         whatsapp_phone: phoneFormatted,
         client_phone: phoneFormatted,
