@@ -73,7 +73,7 @@ export const useWebSocketMessages = ({
 
   // 🔧 Configurações
   const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
-    ? 'https://bkcrm.devsible.com.br' 
+    ? 'https://bkcrm.devsible.com.br:4000' 
     : 'http://localhost:4000';
     
   console.log(`🔗 [WS] Ambiente: ${process.env.NODE_ENV}, URL: ${WEBSOCKET_URL}`);
