@@ -5,41 +5,41 @@
 @layer base {
   :root {
     /* Cores de fundo aprimoradas */
-    --background: 240 10% 99%;
-    --foreground: 240 10% 8%;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
 
     /* Cards com melhor profundidade */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 8%;
+    --card-foreground: 222.2 84% 4.9%;
 
     /* Popovers mais elegantes */
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 8%;
+    --popover-foreground: 222.2 84% 4.9%;
 
     /* Primary com azul moderno */
-    --primary: 214 84% 56%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
 
     /* Secondary mais suave */
-    --secondary: 214 15% 96%;
-    --secondary-foreground: 240 10% 8%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
 
     /* Muted com melhor contraste */
-    --muted: 220 13% 95%;
-    --muted-foreground: 240 6% 50%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
     /* Accent harmonioso */
-    --accent: 214 25% 94%;
-    --accent-foreground: 240 10% 8%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
 
     /* Destructive mais visível */
-    --destructive: 0 75% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
     /* Borders mais definidas */
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 214 84% 56%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
 
@@ -100,33 +100,33 @@
   }
 
   .dark {
-    --background: 240 10% 4%;
-    --foreground: 240 5% 95%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
 
-    --card: 240 10% 6%;
-    --card-foreground: 240 5% 95%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 240 10% 6%;
-    --popover-foreground: 240 5% 95%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 214 84% 56%;
-    --primary-foreground: 240 10% 4%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 240 8% 12%;
-    --secondary-foreground: 240 5% 95%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 240 8% 12%;
-    --muted-foreground: 240 5% 65%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 240 8% 12%;
-    --accent-foreground: 240 5% 95%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 75% 60%;
-    --destructive-foreground: 240 5% 95%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 240 8% 18%;
-    --input: 240 8% 18%;
-    --ring: 214 84% 56%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
 
     --sidebar-background: 240 10% 6%;
     --sidebar-foreground: 240 5% 90%;
@@ -250,4 +250,693 @@
   .border-soft {
     border-color: hsl(220 13% 92%);
   }
+}
+
+/* Animações personalizadas para o chat */
+@keyframes slideInMessage {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes typingDots {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+/* Classes personalizadas para o chat */
+.chat-message-enter {
+  animation: slideInMessage 0.3s ease-out;
+}
+
+.chat-loading {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.chat-input-focus {
+  animation: pulseGlow 2s infinite;
+}
+
+.typing-indicator {
+  animation: typingDots 1.4s infinite ease-in-out;
+}
+
+.shimmer-loading {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Scrollbar personalizada */
+.chat-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Hover effects para mensagens */
+.message-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+/* Animação para botões */
+.btn-bounce:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
+/* Gradiente animado para o header */
+.gradient-animated {
+  background: linear-gradient(-45deg, #3b82f6, #1d4ed8, #2563eb, #1e40af);
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Status indicators */
+.status-online {
+  position: relative;
+}
+
+.status-online::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border: 2px solid white;
+  border-radius: 50%;
+  animation: pulseGlow 2s infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chat-sidebar {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    z-index: 50;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .chat-sidebar.open {
+    transform: translateX(0);
+  }
+}
+
+/* Accessibility improvements */
+.focus-visible:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Loading states */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Message animations */
+.message-slide-in {
+  animation: slideInMessage 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.message-fade-in {
+  animation: fadeInUp 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Novas animações avançadas para funcionalidades */
+@keyframes typingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Classes para aplicar as animações */
+.typing-dot {
+  animation: typingDot 1.4s infinite ease-in-out;
+}
+
+.scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+.slide-in-right {
+  animation: slideInFromRight 0.3s ease-out;
+}
+
+.heartbeat {
+  animation: heartbeat 1.5s ease-in-out infinite;
+}
+
+.bounce-in {
+  animation: bounceIn 0.6s ease-out;
+}
+
+.fade-in-scale {
+  animation: fadeInScale 0.2s ease-out;
+}
+
+.slide-in-bottom {
+  animation: slideInFromBottom 0.3s ease-out;
+}
+
+/* Efeitos hover avançados */
+.hover-lift {
+  transition: all 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.hover-glow {
+  transition: all 0.3s ease;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+/* Efeitos de reação */
+.reaction-button {
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.reaction-button:hover {
+  transform: scale(1.1);
+}
+
+.reaction-button:active {
+  transform: scale(0.95);
+}
+
+/* Template cards */
+.template-card {
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.template-card:hover {
+  transform: translateY(-1px);
+  border-color: rgb(59, 130, 246);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+/* Emoji picker */
+.emoji-picker {
+  animation: slideInFromBottom 0.2s ease-out;
+}
+
+.emoji-button {
+  transition: all 0.15s ease;
+}
+
+.emoji-button:hover {
+  transform: scale(1.2);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Sidebar avançada */
+.sidebar-section {
+  transition: all 0.3s ease;
+}
+
+.sidebar-section:hover {
+  background: rgba(59, 130, 246, 0.02);
+}
+
+/* Indicadores de status */
+.status-indicator {
+  position: relative;
+}
+
+.status-indicator::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  border: 2px solid white;
+  animation: pulseGlow 2s infinite;
+}
+
+/* Tooltip avançado */
+.tooltip-advanced {
+  position: relative;
+}
+
+.tooltip-advanced::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 1000;
+}
+
+.tooltip-advanced:hover::after {
+  opacity: 1;
+}
+
+/* Animações premium para interface atraente */
+@keyframes animate-gradient-x {
+  0%, 100% {
+    background-size: 200% 200%;
+    background-position: left center;
+  }
+  50% {
+    background-size: 200% 200%;
+    background-position: right center;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.6);
+  }
+}
+
+@keyframes shimmerGlow {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+/* Classes utilitárias premium */
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: animate-gradient-x 15s ease infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+.shimmer-effect {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmerGlow 2s infinite;
+}
+
+/* Efeitos glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Bordas animadas */
+.border-animated {
+  position: relative;
+  overflow: hidden;
+}
+
+.border-animated::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+  animation: borderSlide 2s linear infinite;
+}
+
+@keyframes borderSlide {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Efeitos de partículas */
+.particles {
+  position: relative;
+  overflow: hidden;
+}
+
+.particles::before,
+.particles::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 50%;
+  animation: particleFloat 8s infinite ease-in-out;
+}
+
+.particles::before {
+  top: 20%;
+  left: 20%;
+  animation-delay: 0s;
+}
+
+.particles::after {
+  top: 60%;
+  right: 20%;
+  animation-delay: 4s;
+}
+
+@keyframes particleFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: translateY(-20px) rotate(180deg);
+    opacity: 1;
+  }
+}
+
+/* Efeitos de hover premium */
+.hover-scale {
+  transition: transform 0.3s ease;
+}
+
+.hover-scale:hover {
+  transform: scale(1.05);
+}
+
+.hover-rotate {
+  transition: transform 0.3s ease;
+}
+
+.hover-rotate:hover {
+  transform: rotate(5deg);
+}
+
+.hover-shadow {
+  transition: box-shadow 0.3s ease;
+}
+
+.hover-shadow:hover {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+}
+
+/* Gradientes animados */
+.gradient-text {
+  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #06b6d4);
+  background-size: 200% 200%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: animate-gradient-x 3s ease infinite;
+}
+
+/* Efeitos de loading premium */
+.loading-premium {
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-premium::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  animation: loadingSlide 1.5s infinite;
+}
+
+@keyframes loadingSlide {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* CSS específico para layout do chat - Correção do input cortado */
+.chat-container {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.chat-main-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.chat-messages-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-input-area {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+/* Mobile keyboard viewport fix */
+@media (max-width: 768px) {
+  .chat-container {
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height para mobile */
+  }
+  
+  .chat-input-area {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    background: white;
+    position: sticky;
+    bottom: 0;
+  }
+}
+
+/* Sidebar responsiva */
+@media (max-width: 1024px) {
+  .chat-sidebar-overlay {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    z-index: 50;
+  }
+}
+
+/* Garantir que flexbox funcione corretamente */
+.chat-layout-fix {
+  min-height: 0;
+  flex-basis: 0;
+}
+
+/* Prevenir scroll indesejado */
+.chat-no-scroll {
+  overflow: hidden;
 }

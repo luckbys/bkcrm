@@ -22,9 +22,8 @@ interface RealtimeMessage {
 interface UseRealtimeMessagesOptions {
   ticketId: string | null;
   pollingInterval?: number;
-  enableRealtime?: boolean;
-  enablePolling?: boolean;
   maxRetries?: number;
+  enabled?: boolean;
 }
 
 interface UseRealtimeMessagesReturn {
@@ -32,116 +31,108 @@ interface UseRealtimeMessagesReturn {
   isLoading: boolean;
   isConnected: boolean;
   lastUpdateTime: Date | null;
-  unreadCount: number;
   refreshMessages: () => Promise<void>;
-  markAsRead: () => void;
   addMessage: (message: LocalMessage) => void;
-  updateMessage: (messageId: number, updates: Partial<LocalMessage>) => void;
   connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
-}
-
-// 🛡️ CIRCUIT BREAKER PARA EVITAR LOOPS INFINITOS
-class CircuitBreaker {
-  private failures = 0;
-  private lastFailureTime = 0;
-  private state: 'closed' | 'open' | 'half-open' = 'closed';
-  
-  constructor(
-    private maxFailures = 3,
-    private timeoutMs = 30000 // 30 segundos
-  ) {}
-
-  canExecute(): boolean {
-    if (this.state === 'closed') return true;
-    
-    if (this.state === 'open') {
-      if (Date.now() - this.lastFailureTime > this.timeoutMs) {
-        this.state = 'half-open';
-        return true;
-      }
-      return false;
-    }
-    
-    return true;
-  }
-
-  onSuccess(): void {
-    this.failures = 0;
-    this.state = 'closed';
-  }
-
-  onFailure(): void {
-    this.failures++;
-    this.lastFailureTime = Date.now();
-    
-    if (this.failures >= this.maxFailures) {
-      this.state = 'open';
-    }
-  }
+  retryCount: number;
 }
 
 export const useRealtimeMessages = (options: UseRealtimeMessagesOptions): UseRealtimeMessagesReturn => {
   const { toast } = useToast();
   const {
     ticketId,
-    pollingInterval = 10000, // 10 segundos - mais conservador
-    enableRealtime = true,
-    enablePolling = true,
-    maxRetries = 2
+    pollingInterval = 10000, // Aumentado para 10 segundos para reduzir carga
+    maxRetries = 3,
+    enabled = true
   } = options;
 
-  // 🔒 VALIDAÇÃO DE ENTRADA
-  const isValidTicketId = useCallback((id: string | null): boolean => {
-    if (!id || typeof id !== 'string') return false;
-    if (id.trim().length === 0) return false;
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const numberRegex = /^\d+$/;
-    return uuidRegex.test(id) || numberRegex.test(id);
-  }, []);
-
-  // 🛡️ REFS DE CONTROLE
-  const circuitBreakerRef = useRef(new CircuitBreaker(3, 30000));
-  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const subscriptionRef = useRef<any>(null);
-  const mountedRef = useRef(true);
-
-  // Estados
+  // Estados principais
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'error'>('disconnected');
+  const [retryCount, setRetryCount] = useState(0);
 
-  // 🎯 FUNÇÃO PARA GERAR ID ÚNICO
+  // Refs para controle crítico
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
+  const lastMessageCountRef = useRef(0);
+  const lastTicketIdRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSuccessfulFetchRef = useRef<Date | null>(null);
+
+  // ✅ CORREÇÃO 1: Validação rigorosa de ticket ID
+  const isValidTicketId = useCallback((id: string | null): boolean => {
+    if (!id || typeof id !== 'string') return false;
+    const trimmedId = id.trim();
+    if (trimmedId.length === 0) return false;
+    
+    // Aceitar apenas UUIDs válidos ou IDs numéricos
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmedId);
+    const isNumeric = /^\d+$/.test(trimmedId);
+    
+    return isUUID || isNumeric;
+  }, []);
+
+  // 🚀 CORREÇÃO: Garantir que loading seja false quando ticket/enabled é inválido
+  useEffect(() => {
+    if (!enabled || !isValidTicketId(ticketId)) {
+      setIsLoading(false);
+      setConnectionStatus('disconnected');
+    }
+  }, [enabled, ticketId, isValidTicketId]);
+
+  // ✅ CORREÇÃO 2: Geração de ID mais robusta
   const generateUniqueId = useCallback((messageId: string): number => {
     try {
+      // Cache para evitar recálculos
+      const cacheKey = `id_${messageId}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const cachedId = parseInt(cached);
+        if (!isNaN(cachedId)) return cachedId;
+      }
+
+      // Tentar extrair número do ID
       const numMatch = messageId.match(/\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0]);
-        if (!isNaN(num) && num > 0) return num;
+        if (!isNaN(num) && num > 0) {
+          sessionStorage.setItem(cacheKey, num.toString());
+          return num;
+        }
       }
       
+      // Fallback: hash determinístico
       let hash = 0;
-      for (let i = 0; i < Math.min(messageId.length, 10); i++) {
+      for (let i = 0; i < messageId.length; i++) {
         hash = ((hash << 5) - hash) + messageId.charCodeAt(i);
         hash = hash & hash;
       }
       
-      return Math.abs(hash) || Date.now();
+      const result = Math.abs(hash) || Date.now();
+      sessionStorage.setItem(cacheKey, result.toString());
+      return result;
     } catch (error) {
+      console.error('❌ [ID_GEN] Erro ao gerar ID:', error);
       return Date.now();
     }
   }, []);
 
-  // 🔄 CONVERSÃO DE MENSAGEM
-  const convertToLocalMessage = useCallback((msg: RealtimeMessage): LocalMessage => {
+  // ✅ CORREÇÃO 3: Conversão de mensagem com tratamento de erro robusto
+  const convertToLocalMessage = useCallback((msg: RealtimeMessage): LocalMessage | null => {
     try {
+      if (!msg || !msg.id || !msg.content) {
+        console.warn('⚠️ [CONVERT] Mensagem inválida ignorada:', msg);
+        return null;
+      }
+
       return {
         id: generateUniqueId(msg.id),
-        content: msg.content || '',
+        content: msg.content.trim(),
         sender: msg.sender_id ? 'agent' : 'client',
-        senderName: msg.sender_name || (msg.sender_id ? 'Agente' : 'Cliente'),
+        senderName: msg.sender_name?.trim() || (msg.sender_id ? 'Agente' : 'Cliente'),
         timestamp: new Date(msg.created_at),
         type: (msg.type as any) || 'text',
         status: 'sent' as const,
@@ -155,221 +146,215 @@ export const useRealtimeMessages = (options: UseRealtimeMessagesOptions): UseRea
         }] : []
       };
     } catch (error) {
-      return {
-        id: Date.now(),
-        content: 'Erro ao carregar mensagem',
-        sender: 'system' as any,
-        senderName: 'Sistema',
-        timestamp: new Date(),
-        type: 'text',
-        status: 'error' as any,
-        isInternal: false,
-        attachments: []
-      };
+      console.error('❌ [CONVERT] Erro ao converter mensagem:', error, msg);
+      return null;
     }
   }, [generateUniqueId]);
 
-  // 📥 CARREGAMENTO DE MENSAGENS
+  // ✅ CORREÇÃO 4: Sistema anti-loop com debounce e limite de frequência
   const loadMessages = useCallback(async (silent = false) => {
-    if (!mountedRef.current) return;
-    if (!isValidTicketId(ticketId)) {
-      if (!silent) setMessages([]);
+    // Proteções contra loops
+    if (!mountedRef.current || !enabled) return;
+    if (isLoadingRef.current) {
+      console.log('🚫 [POLLING] Já carregando, ignorando requisição duplicada');
       return;
     }
-    if (!circuitBreakerRef.current.canExecute()) {
-      setConnectionStatus('error');
+    
+    if (!isValidTicketId(ticketId)) {
+      console.log('⚠️ [POLLING] Ticket ID inválido:', ticketId);
+      if (!silent) {
+        setMessages([]);
+        setConnectionStatus('disconnected');
+        setIsLoading(false); // 🚀 CORREÇÃO: Sempre definir loading como false para tickets inválidos
+      }
       return;
     }
 
-    if (!silent) setIsLoading(true);
+    // Limite de frequência: mínimo 5 segundos entre requests
+    const now = new Date();
+    if (lastSuccessfulFetchRef.current) {
+      const timeSinceLastFetch = now.getTime() - lastSuccessfulFetchRef.current.getTime();
+      if (timeSinceLastFetch < 5000 && silent) {
+        console.log('🚫 [POLLING] Request muito frequente, ignorando');
+        return;
+      }
+    }
+
+    isLoadingRef.current = true;
+    
+    if (!silent) {
+      setIsLoading(true);
+      setConnectionStatus('connecting');
+    }
 
     try {
+      console.log('🔄 [POLLING] Carregando mensagens para ticket:', ticketId);
+      
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select('*')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: true })
-        .limit(50);
+        .limit(100);
 
       if (error) {
-        circuitBreakerRef.current.onFailure();
+        console.error('❌ [POLLING] Erro ao carregar mensagens:', error);
         setConnectionStatus('error');
-        throw error;
+        setRetryCount(prev => prev + 1);
+        
+        if (!silent && retryCount < maxRetries) {
+          toast({
+            title: "Erro ao carregar mensagens",
+            description: `Tentativa ${retryCount + 1}/${maxRetries}`,
+            variant: "destructive",
+          });
+        }
+        return;
       }
 
       if (!mountedRef.current) return;
 
-      const localMessages = (messagesData || [])
+      // Filtrar e converter mensagens válidas
+      const validMessages = (messagesData || [])
         .map(convertToLocalMessage)
-        .filter(msg => msg.id && msg.content);
+        .filter(Boolean) as LocalMessage[];
+      
+      // ✅ CORREÇÃO 5: Verificação inteligente de mudanças
+      const currentCount = validMessages.length;
+      const hasNewMessages = currentCount !== lastMessageCountRef.current;
+      
+      if (hasNewMessages || !silent) {
+        console.log(`✅ [POLLING] ${currentCount} mensagens carregadas (anterior: ${lastMessageCountRef.current})`);
+        setMessages(validMessages);
+        lastMessageCountRef.current = currentCount;
+        setLastUpdateTime(now);
+        lastSuccessfulFetchRef.current = now;
+      }
 
-      setMessages(localMessages);
-      setLastUpdateTime(new Date());
       setConnectionStatus('connected');
-      circuitBreakerRef.current.onSuccess();
-
+      setRetryCount(0); // Reset retry count on success
+      
     } catch (error) {
-      if (!mountedRef.current) return;
-      circuitBreakerRef.current.onFailure();
+      console.error('❌ [POLLING] Erro inesperado:', error);
       setConnectionStatus('error');
+      setRetryCount(prev => prev + 1);
     } finally {
+      isLoadingRef.current = false;
       if (!silent && mountedRef.current) {
         setIsLoading(false);
       }
     }
-  }, [ticketId, convertToLocalMessage, isValidTicketId]);
+  }, [ticketId, isValidTicketId, convertToLocalMessage, toast, enabled, retryCount, maxRetries]);
 
-  // 🔌 REALTIME SUBSCRIPTION
-  const setupRealtimeSubscription = useCallback(() => {
-    if (!isValidTicketId(ticketId) || !enableRealtime || !mountedRef.current) {
-      return;
-    }
-
-    setConnectionStatus('connecting');
-
-    try {
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe();
-        subscriptionRef.current = null;
-      }
-
-      subscriptionRef.current = supabase
-        .channel(`ticket_messages_${ticketId}`)
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `ticket_id=eq.${ticketId}`
-        }, () => {
-          if (mountedRef.current) {
-            setTimeout(() => loadMessages(true), 1000);
-          }
-        })
-        .subscribe((status) => {
-          if (!mountedRef.current) return;
-          
-          if (status === 'SUBSCRIBED') {
-            setIsConnected(true);
-            setConnectionStatus('connected');
-          } else if (status === 'CLOSED') {
-            setIsConnected(false);
-            setConnectionStatus('disconnected');
-          }
-        });
-
-    } catch (error) {
-      circuitBreakerRef.current.onFailure();
-      setConnectionStatus('error');
-      setIsConnected(false);
-    }
-  }, [ticketId, enableRealtime, loadMessages, isValidTicketId]);
-
-  // ⏰ POLLING
-  const setupPolling = useCallback(() => {
-    if (!isValidTicketId(ticketId) || !enablePolling || !mountedRef.current) {
-      return;
-    }
-
-    if (pollingTimeoutRef.current) {
-      clearTimeout(pollingTimeoutRef.current);
-      pollingTimeoutRef.current = null;
-    }
-
-    const poll = () => {
-      if (!mountedRef.current || !circuitBreakerRef.current.canExecute()) {
-        return;
-      }
-
-      loadMessages(true).finally(() => {
-        if (mountedRef.current && enablePolling) {
-          pollingTimeoutRef.current = setTimeout(poll, pollingInterval);
-        }
-      });
-    };
-
-    pollingTimeoutRef.current = setTimeout(poll, pollingInterval);
-  }, [ticketId, enablePolling, pollingInterval, loadMessages, isValidTicketId]);
-
-  // 🎯 EFEITO PRINCIPAL
-  useEffect(() => {
-    if (!mountedRef.current || !isValidTicketId(ticketId)) {
-      setMessages([]);
-      setConnectionStatus('disconnected');
-      return;
-    }
-
-    loadMessages(false);
-
-    if (enableRealtime) {
-      setupRealtimeSubscription();
-    }
-
-    if (enablePolling) {
-      setupPolling();
-    }
-
-    return () => {
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe();
-        subscriptionRef.current = null;
-      }
-      
-      if (pollingTimeoutRef.current) {
-        clearTimeout(pollingTimeoutRef.current);
-        pollingTimeoutRef.current = null;
-      }
-      
-      setIsConnected(false);
-      setConnectionStatus('disconnected');
-    };
-  }, [ticketId, enableRealtime, enablePolling, isValidTicketId, loadMessages, setupRealtimeSubscription, setupPolling]);
-
-  // 🧹 CLEANUP
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // 📤 FUNÇÕES EXPOSTAS
-  const refreshMessages = useCallback(async () => {
-    await loadMessages(false);
-  }, [loadMessages]);
-
-  const markAsRead = useCallback(() => {
-    setUnreadCount(0);
-  }, []);
-
+  // ✅ CORREÇÃO 6: Adicionar mensagem com verificação de duplicatas aprimorada
   const addMessage = useCallback((message: LocalMessage) => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || !message || !message.content) return;
     
+    console.log('➕ [POLLING] Adicionando mensagem local:', message.content.substring(0, 50));
     setMessages(prev => {
-      if (prev.some(m => m.id === message.id)) {
+      // Verificação de duplicata mais rigorosa
+      const exists = prev.some(m => 
+        m.id === message.id || 
+        (m.content === message.content && 
+         Math.abs(m.timestamp.getTime() - message.timestamp.getTime()) < 1000)
+      );
+      
+      if (exists) {
+        console.log('🚫 [POLLING] Mensagem duplicada ignorada');
         return prev;
       }
-      return [...prev, message];
+      
+      const newMessages = [...prev, message];
+      lastMessageCountRef.current = newMessages.length;
+      return newMessages;
     });
     setLastUpdateTime(new Date());
   }, []);
 
-  const updateMessage = useCallback((messageId: number, updates: Partial<LocalMessage>) => {
-    if (!mountedRef.current) return;
+  // ✅ CORREÇÃO 7: Controle de polling com limpeza rigorosa
+  useEffect(() => {
+    // Cleanup anterior antes de iniciar novo
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
     
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId ? { ...msg, ...updates } : msg
-    ));
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
+    if (!enabled || !isValidTicketId(ticketId)) {
+      console.log('⚠️ [POLLING] Polling desabilitado ou ticket inválido');
+      setMessages([]);
+      setConnectionStatus('disconnected');
+      setIsLoading(false); // 🚀 CORREÇÃO: Garantir que loading seja false
+      lastTicketIdRef.current = null;
+      return;
+    }
+
+    // Verificar se o ticket mudou
+    const ticketChanged = lastTicketIdRef.current !== ticketId;
+    if (ticketChanged) {
+      console.log('🚀 [POLLING] Iniciando polling para novo ticket:', ticketId);
+      lastTicketIdRef.current = ticketId;
+      lastMessageCountRef.current = 0;
+      setRetryCount(0);
+      
+      // Carregamento inicial
+      loadMessages(false);
+    }
+
+    // Configurar polling com intervalo aumentado
+    pollingIntervalRef.current = setInterval(() => {
+      if (mountedRef.current && enabled) {
+        loadMessages(true);
+      }
+    }, pollingInterval);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [ticketId, pollingInterval, loadMessages, isValidTicketId, enabled]);
+
+  // ✅ CORREÇÃO 8: Cleanup rigoroso no unmount
+  useEffect(() => {
+    return () => {
+      console.log('🧹 [POLLING] Limpeza completa do hook');
+      mountedRef.current = false;
+      isLoadingRef.current = false;
+      
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    };
   }, []);
+
+  // ✅ CORREÇÃO 9: Refresh otimizado
+  const refreshMessages = useCallback(async () => {
+    if (!enabled) return;
+    console.log('🔄 [REFRESH] Refresh manual solicitado');
+    setRetryCount(0);
+    await loadMessages(false);
+  }, [loadMessages, enabled]);
 
   return {
     messages,
     isLoading,
-    isConnected,
+    isConnected: connectionStatus === 'connected',
     lastUpdateTime,
-    unreadCount,
     refreshMessages,
-    markAsRead,
     addMessage,
-    updateMessage,
-    connectionStatus
+    connectionStatus,
+    retryCount
   };
 }; 

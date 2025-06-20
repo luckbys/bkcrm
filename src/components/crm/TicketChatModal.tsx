@@ -93,6 +93,9 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
   const [unreadCount, setUnreadCount] = useState(0);
   const [isMinimized, setIsMinimized] = useState(false);
 
+  // Novo: referência para a área de rolagem e controles de rolagem
+  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
+
   // Função para obter o UUID correto do ticket
   const getTicketUUID = React.useCallback(() => {
     if (!ticket) return null;
@@ -351,6 +354,34 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
       minute: '2-digit' 
     });
   }, []);
+
+  // Função para controlar exibição do botão "descer" conforme posição da rolagem
+  const handleScroll = React.useCallback(() => {
+    if (!scrollAreaRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollAreaRef.current;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setShowScrollDown(!atBottom);
+    if (atBottom) setUnreadCount(0);
+  }, []);
+
+  // Auto-scroll inteligente quando novas mensagens chegam
+  useEffect(() => {
+    if (!scrollAreaRef.current || messages.length === 0) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = scrollAreaRef.current;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 100;
+    const lastMsg = messages[messages.length - 1];
+
+    if (lastMsg.sender === 'agent' || atBottom) {
+      // Sempre descer se agente enviou ou se usuário já está perto do fim
+      scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+      setShowScrollDown(false);
+    } else {
+      // Cliente enviou e usuário não está no fim – mostrar indicador
+      setUnreadCount((prev) => prev + 1);
+      setShowScrollDown(true);
+    }
+  }, [messages]);
 
   // Carregar mensagens ao abrir - useEffect sempre executado
   useEffect(() => {
@@ -665,7 +696,7 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
 
             {/* Área de mensagens aprimorada */}
             <div className="chat-messages-area">
-              <ScrollArea className="chat-scroll-container p-4">
+              <ScrollArea ref={scrollAreaRef} onScroll={handleScroll} className="chat-scroll-container p-4">
                 {isLoading ? (
                   <div className="flex items-center justify-center h-32">
                     <div className="text-center">
@@ -948,8 +979,12 @@ export const TicketChatModal: React.FC<TicketChatModalProps> = ({ ticket, onClos
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      // Scroll para baixo (será implementado)
+                      scrollAreaRef.current?.scrollTo({
+                        top: scrollAreaRef.current.scrollHeight,
+                        behavior: 'smooth'
+                      });
                       setShowScrollDown(false);
+                      setUnreadCount(0);
                     }}
                     className="h-10 w-10 rounded-full shadow-lg bg-white border-gray-200 hover:bg-gray-50"
                   >

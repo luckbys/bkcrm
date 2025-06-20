@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+
 
 import { 
   Search,
@@ -38,7 +40,6 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { TicketChatModal } from './TicketChatModal';
 import { MinimizedChatsDrawer } from './ticket-chat/MinimizedChatsDrawer';
 import { TicketHeader } from './ticket-management/TicketHeader';
 import { TicketFilters } from './ticket-management/TicketFilters';
@@ -48,6 +49,7 @@ import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useUserDepartment } from '@/hooks/useUserDepartment';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
+import TicketChatRefactored from './TicketChatRefactored';
 
 interface TicketManagementProps {
   sector: any;
@@ -890,12 +892,25 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
         </TabsContent>
       </Tabs>
 
-      {/* Sistema de Chat Aprimorado */}
-      <TicketChatModal 
-        ticket={selectedTicket} 
-        onClose={() => setSelectedTicket(null)}
-        isOpen={!!selectedTicket}
-      />
+      {/* Sistema de Chat Aprimorado – versão modular */}
+      <Dialog 
+        open={!!selectedTicket}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTicket(null);
+        }}
+      >
+        <DialogContent className="max-w-[98vw] w-full h-[95vh] p-0 overflow-hidden">
+          <DialogTitle className="sr-only">
+            Chat do Ticket - {selectedTicket?.client || 'Cliente'}
+          </DialogTitle>
+          {selectedTicket && (
+            <TicketChatRefactored
+              ticket={selectedTicket}
+              onClose={() => setSelectedTicket(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Drawer de Chats Minimizados */}
       <MinimizedChatsDrawer />

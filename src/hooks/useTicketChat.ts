@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTicketsDB } from './useTicketsDB';
 import { useAuth } from './useAuth';
-import { useWebhookResponses } from './useWebhookResponses';
+// import { useWebhookResponses } from './useWebhookResponses'; // Desabilitado
 import { useToast } from './use-toast';
 // import { useMinimizedState } from './useMinimizedState'; // Temporariamente removido
 import { supabase } from '../lib/supabase';
 import { LocalMessage, QuickTemplate, UseTicketChatReturn } from '../types/ticketChat';
 import { useEvolutionSender } from './useEvolutionSender';
-import { useRealtimeMessages } from './useRealtimeMessages';
+import { useWebSocketMessages } from './useWebSocketMessages';
 
 // FUNÇÃO APRIMORADA PARA EXTRAIR INFORMAÇÕES DO CLIENTE COM DADOS ENRIQUECIDOS
 const extractClientInfo = (ticket: any) => {
@@ -181,7 +181,52 @@ const extractClientInfo = (ticket: any) => {
   return result;
 };
 
+// 🔧 FUNÇÃO PARA CORRIGIR DADOS DO TICKET SE NECESSÁRIO (FORA DO HOOK)
+const fixTicketData = (ticket: any) => {
+  if (!ticket) return ticket;
+
+  const metadata = ticket.metadata || {};
+  
+  // Detectar se deveria ser WhatsApp
+  const shouldBeWhatsApp = Boolean(
+    metadata.whatsapp_phone ||
+    metadata.is_whatsapp ||
+    metadata.client_phone ||
+    ticket.client_phone ||
+    ticket.customerPhone ||
+    ticket.channel === 'whatsapp'
+  );
+
+  // Corrigir dados se necessário
+  const fixed = { ...ticket };
+  
+  if (shouldBeWhatsApp && ticket.channel !== 'whatsapp') {
+    console.log('🔧 Corrigindo dados do ticket para WhatsApp:', ticket.id);
+    
+    fixed.channel = 'whatsapp';
+    fixed.isWhatsApp = true;
+    
+    // Enriquecer metadata
+    if (!fixed.metadata) fixed.metadata = {};
+    
+    if (!fixed.metadata.client_phone && (ticket.client_phone || ticket.customerPhone)) {
+      fixed.metadata.client_phone = ticket.client_phone || ticket.customerPhone;
+    }
+    
+    if (!fixed.metadata.client_name && ticket.client) {
+      fixed.metadata.client_name = ticket.client;
+    }
+    
+    if (!fixed.metadata.is_whatsapp) {
+      fixed.metadata.is_whatsapp = true;
+    }
+  }
+
+  return fixed;
+};
+
 export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
+  // 🚀 TODOS OS HOOKS DEVEM SER CHAMADOS ANTES DE QUALQUER EARLY RETURN
   const { toast } = useToast();
   const { user } = useAuth();
   const { sendMessage, createTicket, fetchMessages } = useTicketsDB();
@@ -218,132 +263,6 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     }
   });
 
-  // Função para recarregar dados completos do ticket incluindo cliente vinculado
-  const loadFullTicketData = useCallback(async (ticketId: string) => {
-    try {
-      console.log('🔄 [TICKET] Carregando dados completos do ticket:', ticketId);
-
-      const { data: fullTicket, error } = await supabase
-        .from('tickets')
-        .select(`
-          *,
-          customer:profiles!tickets_customer_id_fkey (
-            id,
-            name,
-            email,
-            metadata
-          )
-        `)
-        .eq('id', ticketId)
-        .single();
-
-      if (error) {
-        console.error('❌ [TICKET] Erro ao carregar dados completos:', error);
-        return null;
-      }
-
-      if (fullTicket) {
-        console.log('✅ [TICKET] Dados completos carregados:', {
-          ticketId: fullTicket.id,
-          hasCustomer: !!fullTicket.customer_id,
-          customerName: fullTicket.customer ? (fullTicket.customer as any).name : null
-        });
-
-        // Enriquecer ticket com dados do cliente se vinculado
-        let enrichedTicket = { ...fullTicket };
-
-        if (fullTicket.customer_id && fullTicket.customer) {
-          const customerData = fullTicket.customer as any;
-          enrichedTicket = {
-            ...fullTicket,
-            client: customerData.name || 'Cliente',
-            customerEmail: customerData.email || 'Email não informado',
-            customerPhone: customerData.metadata?.phone || 'Telefone não informado',
-            // Manter dados originais do WhatsApp se existirem
-            originalClient: fullTicket.metadata?.client_name || null,
-            originalClientPhone: fullTicket.metadata?.client_phone || null
-          };
-
-          console.log('👤 [TICKET] Dados do cliente aplicados:', {
-            client: enrichedTicket.client,
-            customerEmail: enrichedTicket.customerEmail,
-            customerPhone: enrichedTicket.customerPhone
-          });
-        } else {
-          // Usar dados originais do ticket/WhatsApp
-          const clientInfo = extractClientInfo(fullTicket);
-          enrichedTicket = {
-            ...fullTicket,
-            client: clientInfo.clientName,
-            customerPhone: clientInfo.clientPhone,
-            customerEmail: fullTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fullTicket.email),
-            isWhatsApp: clientInfo.isWhatsApp
-          };
-
-          console.log('📱 [TICKET] Dados WhatsApp/originais aplicados:', {
-            client: enrichedTicket.client,
-            customerPhone: enrichedTicket.customerPhone,
-            isWhatsApp: enrichedTicket.isWhatsApp
-          });
-        }
-
-        // Atualizar estado local
-        setCurrentTicket(enrichedTicket);
-        return enrichedTicket;
-      }
-
-      return null;
-
-    } catch (error) {
-      console.error('❌ [TICKET] Erro no carregamento completo:', error);
-      return null;
-    }
-  }, []);
-
-  // Hook para mensagens Evolution, usando o ID do ticket (que pode mudar após migração)
-  const {
-    /* evolutionMessages – ainda não utilizado internamente */
-    loadEvolutionMessages,
-  } = useWebhookResponses(ticket?.id?.toString() || '');
-
-  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL PERFORMÁTICO - DEFENSIVO
-  const ticketIdForRealtime = (() => {
-    try {
-      const rawId = currentTicket?.originalId || currentTicket?.id;
-      if (!rawId) {
-        console.log('⚠️ [REALTIME] Nenhum ID de ticket disponível');
-        return null;
-      }
-      
-      const ticketId = rawId.toString();
-      console.log('📡 [REALTIME] Usando ticket ID:', ticketId);
-      return ticketId;
-    } catch (error) {
-      console.error('❌ [REALTIME] Erro ao processar ticket ID:', error);
-      return null;
-    }
-  })();
-
-  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL OTIMIZADO
-  const {
-    messages: realTimeMessages,
-    isLoading: isLoadingHistory,
-    isConnected: isRealtimeConnected,
-    lastUpdateTime,
-    unreadCount: realtimeUnreadCount,
-    refreshMessages,
-    markAsRead,
-    addMessage,
-    updateMessage,
-    connectionStatus
-  } = useRealtimeMessages({
-    ticketId: ticketIdForRealtime,
-    pollingInterval: 10000, // 10 segundos - conservador e estável
-    enableRealtime: true,
-    enablePolling: true,
-    maxRetries: 2 // Máximo 2 tentativas para evitar loops
-  });
-  
   // Estados principais
   const [message, setMessage] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -362,8 +281,8 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const [messageSearchTerm, setMessageSearchTerm] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [filteredMessages, setFilteredMessages] = useState<LocalMessage[]>([]);
-  const [messageFilter, setMessageFilter] = useState<'all' | 'internal' | 'public'>('all');
-  const [favoriteMessages, setFavoriteMessages] = useState<Set<number>>(new Set());
+  const [messageFilter, setMessageFilter] = useState<'all' | 'public' | 'internal'>('all');
+  const [favoriteMessages, setFavoriteMessages] = useState(new Set<number>());
   const [quickReplyVisible, setQuickReplyVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
@@ -374,22 +293,178 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   
-  // NOVO: Estado para modal de validação de telefone
+  // Estados para modal de validação de telefone
   const [showPhoneValidationModal, setShowPhoneValidationModal] = useState(false);
-  const [pendingMessage, setPendingMessage] = useState<string>('');
-  const [pendingIsInternal, setPendingIsInternal] = useState<boolean>(false);
+  const [pendingMessage, setPendingMessage] = useState('');
+  const [pendingIsInternal, setPendingIsInternal] = useState(false);
   
-  // Sidebar
+  // Estados de sidebar
   const [showSidebar, setShowSidebar] = useState(true);
   
-  // WhatsApp
+  // Estados WhatsApp
   const [whatsappStatus, setWhatsappStatus] = useState<'connected' | 'disconnected' | 'unknown'>('unknown');
   const [whatsappInstance, setWhatsappInstance] = useState<string | null>(null);
 
-  // Função helper para gerar ID único e válido
-  const generateUniqueId = (messageId: string): number => {
+  // Função para carregar dados completos do ticket do banco
+  const loadFullTicketData = useCallback(async (ticketId: string) => {
+    try {
+      console.log('📋 [BANCO] Carregando dados completos do ticket:', ticketId);
+      
+      const { data: fullTicket, error } = await supabase
+        .from('tickets')
+        .select('*, customer:profiles!tickets_customer_id_fkey(id, name, email, metadata)')
+        .eq('id', ticketId)
+        .single();
+
+      if (error || !fullTicket) {
+        console.log('⚠️ [BANCO] Ticket não encontrado ou erro:', error?.message);
+        return null;
+      }
+
+      console.log('✅ [BANCO] Dados completos carregados:', {
+        id: fullTicket.id,
+        hasCustomer: !!fullTicket.customer,
+        title: fullTicket.title
+      });
+
+      // Enriquecer ticket com dados do cliente se disponível
+      let enrichedTicket = { ...fullTicket };
+
+      if (fullTicket.customer_id && fullTicket.customer) {
+        const customerData = fullTicket.customer as any;
+        enrichedTicket = {
+          ...fullTicket,
+          client: customerData.name || 'Cliente',
+          customerEmail: customerData.email || 'Email não informado',
+          customerPhone: customerData.metadata?.phone || 'Telefone não informado',
+          // Manter dados originais do WhatsApp se existirem
+          originalClient: fullTicket.metadata?.client_name || null,
+          originalClientPhone: fullTicket.metadata?.client_phone || null
+        };
+
+        console.log('👤 [BANCO] Dados do cliente aplicados:', {
+          client: enrichedTicket.client,
+          customerEmail: enrichedTicket.customerEmail,
+          customerPhone: enrichedTicket.customerPhone
+        });
+      } else {
+        // Usar dados originais do ticket/WhatsApp
+        const clientInfo = extractClientInfo(fullTicket);
+        enrichedTicket = {
+          ...fullTicket,
+          client: clientInfo.clientName,
+          customerPhone: clientInfo.clientPhone,
+          customerEmail: fullTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fullTicket.email),
+          isWhatsApp: clientInfo.isWhatsApp
+        };
+
+        console.log('📱 [BANCO] Dados WhatsApp/originais aplicados:', {
+          client: enrichedTicket.client,
+          customerPhone: enrichedTicket.customerPhone,
+          isWhatsApp: enrichedTicket.isWhatsApp
+        });
+      }
+
+      // Atualizar estado local apenas uma vez
+      setCurrentTicket(enrichedTicket);
+      return enrichedTicket;
+
+    } catch (error) {
+      console.error('❌ [BANCO] Erro no carregamento completo:', error);
+      return null;
+    }
+  }, []); // 🚀 CORREÇÃO: Sem dependências para evitar loops
+
+  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL OTIMIZADO - CALCULAR ID PRIMEIRO
+  const ticketIdForRealtime = (() => {
+    try {
+      const rawId = currentTicket?.originalId || currentTicket?.id;
+      if (!rawId) {
+        console.log('⚠️ [REALTIME] Nenhum ID de ticket disponível');
+        return null;
+      }
+      
+      const ticketId = rawId.toString();
+      console.log('📡 [REALTIME] Usando ticket ID:', ticketId);
+      return ticketId;
+    } catch (error) {
+      console.error('❌ [REALTIME] Erro ao processar ticket ID:', error);
+      return null;
+    }
+  })();
+
+  // Hook para mensagens Evolution, usando o ID do ticket (que pode mudar após migração)
+  // TEMPORARIAMENTE DESABILITADO PARA DEBUG
+  /*
+  const {
+    loadEvolutionMessages,
+  } = useWebhookResponses(ticket?.id?.toString() || '');
+  */
+  const loadEvolutionMessages = () => Promise.resolve(); // Placeholder
+
+  // 🔗 SISTEMA WEBSOCKET MESSAGES (Substitui realtime do Supabase)
+  const {
+    messages: realTimeMessages,
+    isLoading: isLoadingHistory,
+    isConnected: isRealtimeConnected,
+    lastUpdateTime,
+    refreshMessages,
+    sendMessage: sendWebSocketMessage,
+    connectionStatus,
+    connectionStats
+  } = useWebSocketMessages({
+    ticketId: ticketIdForRealtime,
+    userId: user?.id,
+    enabled: Boolean(ticket && ticketIdForRealtime) // Só ativar se tiver ticket válido
+  });
+
+  // Função para obter o ticket ID real (UUID do banco de dados)
+  const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
+    try {
+      if (typeof ticketCompatibilityId === 'string' && ticketCompatibilityId.includes('-')) {
+        return ticketCompatibilityId;
+      }
+
+      if (ticket?.originalId) {
+        console.log('🎯 Usando originalId do ticket:', ticket.originalId);
+        return ticket.originalId;
+      }
+
+      // Só tenta consulta se houver sessão e role apropriado (evita erros RLS 400)
+      if (!user) {
+        console.log('❌ Usuário não autenticado, não é possível consultar ticket real');
+        return null;
+      }
+
+      console.log('🔍 Buscando ticket no banco com ID compatibilidade:', ticketCompatibilityId);
+      
+      const { data: tickets, error } = await supabase
+        .from('tickets')
+        .select('id')
+        .or(`metadata->>compatibility_id.eq.${ticketCompatibilityId},id.eq.${ticketCompatibilityId}`)
+        .limit(1);
+
+      if (error) {
+        console.error('❌ Erro ao buscar ticket real:', error.message);
+        return null;
+      }
+
+      if (tickets && tickets.length > 0) {
+        console.log('✅ Ticket real encontrado:', tickets[0].id);
+        return tickets[0].id;
+      }
+
+      console.log('⚠️ Ticket real não encontrado para:', ticketCompatibilityId);
+      return null;
+    } catch (error) {
+      console.error('❌ Erro ao obter ticket ID real:', error);
+      return null;
+    }
+  }, [ticket?.originalId, user]);
+
+  // Funções de utilidade
+  const generateUniqueId = useCallback((messageId: string): number => {
     const numericPart = messageId.match(/\d+/);
     if (numericPart) {
       const id = parseInt(numericPart[0]);
@@ -412,452 +487,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     }
     
     return result;
-  };
-
-  // 📥 CARREGAMENTO DE MENSAGENS AGORA DELEGADO PARA useRealtimeMessages
-  // A função loadExistingMessages não é mais necessária - o hook gerencia automaticamente
-
-  // Função para obter o ticket ID real (UUID do banco de dados)
-  const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
-    try {
-      if (typeof ticketCompatibilityId === 'string' && ticketCompatibilityId.includes('-')) {
-        return ticketCompatibilityId;
-      }
-
-      if (ticket?.originalId) {
-        console.log('🎯 Usando originalId do ticket:', ticket.originalId);
-        return ticket.originalId;
-      }
-
-      // Só tenta consulta se houver sessão e role apropriado (evita erros RLS 400)
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        // Sem sessão, impossível consultar tickets
-        return null;
-      }
-
-      const { data: existingTickets, error } = await supabase
-        .from('tickets')
-        .select('id, title, description, metadata')
-        .limit(100);
-
-      if (error) {
-        // Erros de RLS ou schema são ignorados silenciosamente para evitar poluição de log
-        if (error.code && error.code.toString().startsWith('40')) {
-          // 400/403/404 etc.
-          return null;
-        }
-        console.error('Erro ao buscar tickets:', error);
-        return null;
-      }
-
-      const matchingTicket = existingTickets?.find(t => 
-        t.title === currentTicket.subject || 
-        t.title === currentTicket.title ||
-        t.description === currentTicket.subject ||
-        t.metadata?.client_name === currentTicket.client
-      );
-
-      if (matchingTicket) {
-        console.log('🎯 Ticket encontrado no banco:', matchingTicket.id);
-        return matchingTicket.id;
-      }
-
-      console.log('⚠️ Ticket não encontrado no banco (dados mock)');
-      return null;
-    } catch (error) {
-      console.error('Erro ao obter ticket ID real:', error);
-      return null;
-    }
-  }, [currentTicket, ticket]);
-
-  // Função principal para enviar mensagens
-  const handleSendMessage = async () => {
-    if (!message.trim() || isSending || !user || !ticket?.id) return;
-    
-    setIsSending(true);
-    
-    try {
-      console.log('📤 Enviando mensagem:', { 
-        content: message, 
-        isInternal, 
-        ticketId: ticket.id,
-        senderId: user.id 
-      });
-
-      let realTicketId = await getRealTicketId(ticket.id);
-      
-      if (!realTicketId) {
-        console.log('🆕 Criando novo ticket no banco...');
-        
-        try {
-          const newTicketData = {
-            title: currentTicket.subject || currentTicket.title || `Conversa ${currentTicket.client}`,
-            description: currentTicket.subject || `Ticket migrado - Cliente: ${currentTicket.client}`,
-            status: (['pendente', 'atendimento', 'finalizado', 'cancelado'].includes(currentTicket.status) 
-              ? currentTicket.status 
-              : 'pendente') as 'pendente' | 'atendimento' | 'finalizado' | 'cancelado',
-            priority: (currentTicket.priority === 'alta' ? 'alta' : 
-                      currentTicket.priority === 'baixa' ? 'baixa' : 
-                      'normal') as 'baixa' | 'normal' | 'alta' | 'urgente',
-            channel: (['email', 'telefone', 'chat', 'site', 'indicacao'].includes(currentTicket.channel) 
-              ? currentTicket.channel 
-              : 'chat') as 'email' | 'telefone' | 'chat' | 'site' | 'indicacao',
-            metadata: {
-              client_name: currentTicket.client,
-              anonymous_contact: currentTicket.client_email || currentTicket.client || 'Cliente Anônimo',
-              client_phone: currentTicket.client_phone || '(11) 99999-9999',
-              original_id: ticket.id,
-              migrated_from_mock: true,
-              migration_timestamp: new Date().toISOString()
-            },
-            unread: currentTicket.unread !== undefined ? currentTicket.unread : true,
-            tags: Array.isArray(currentTicket.tags) ? currentTicket.tags : [],
-            is_internal: false,
-            last_message_at: new Date().toISOString()
-          };
-
-          console.log('📤 Enviando dados para createTicket:', newTicketData);
-          
-          const createdTicket = await createTicket(newTicketData);
-          if (createdTicket?.id) {
-            realTicketId = createdTicket.id;
-            console.log('✅ Novo ticket criado com ID:', realTicketId);
-
-            // Atualiza ticket local com o UUID criado
-            setCurrentTicket((prev: any) => ({ ...prev, id: realTicketId }));
-            loadEvolutionMessages(realTicketId as string);
-          } else {
-            throw new Error('Ticket criado mas ID não retornado');
-          }
-        
-          toast({
-            title: "💾 Ticket salvo no banco",
-            description: `Ticket "${currentTicket.subject}" migrado com sucesso`,
-          });
-        } catch (createError: any) {
-          console.error('❌ Erro ao criar ticket:', createError);
-          throw new Error(`Não foi possível criar ticket: ${createError?.message || 'Erro desconhecido'}`);
-        }
-      }
-      
-      if (!realTicketId) {
-        throw new Error('Não foi possível obter ID válido do ticket');
-      }
-
-      // ✅ USAR FUNÇÃO ESPECIALIZADA PARA EXTRAIR TELEFONE (prioriza campo nunmsg)
-      const clientPhone = extractPhoneFromTicket(currentTicket);
-      const clientInfo = extractClientInfo(currentTicket);
-      
-      // Validar telefone usando a função especializada
-      const hasValidPhone = clientPhone && 
-                           clientPhone !== 'Telefone não informado' && 
-                           clientPhone.replace(/\D/g, '').length >= 10;
-      
-      console.log('🔍 DEBUG - Verificando condições de envio WhatsApp:', {
-        isInternal,
-        clientPhone, // 📱 Telefone extraído com prioridade do campo nunmsg
-        hasValidPhone,
-        clientInfo,
-        currentTicket: {
-          id: currentTicket?.id,
-          client: currentTicket?.client,
-          channel: currentTicket?.channel,
-          isWhatsApp: currentTicket?.isWhatsApp,
-          nunmsg: currentTicket?.nunmsg, // 📱 Campo nunmsg
-          metadata: currentTicket?.metadata
-        }
-      });
-      
-      const isWhatsAppTicket = Boolean(clientInfo.isWhatsApp);
-      
-      // NOVA LÓGICA: Verificar se precisa de telefone válido ANTES de continuar
-      if (!isInternal && isWhatsAppTicket && !hasValidPhone) {
-        console.log('🚨 Telefone WhatsApp não válido, abrindo modal de validação...');
-        
-        // Guardar mensagem e estado para envio posterior
-        setPendingMessage(message);
-        setPendingIsInternal(isInternal);
-        setShowPhoneValidationModal(true);
-        
-        // Parar execução aqui - continuará após validação
-        setIsSending(false);
-        return;
-      }
-
-      // Criar mensagem no banco de dados
-      const messageData = {
-        ticket_id: realTicketId,
-        sender_id: user.id,
-        content: message,
-        type: 'text' as const,
-        is_internal: isInternal,
-        sender_name: currentUserProfile?.name || user.email?.split('@')[0] || 'Usuário',
-        sender_email: user.email,
-        metadata: {}
-      };
-
-      const newMessage = await sendMessage(messageData);
-      console.log('✅ Mensagem salva no banco:', newMessage);
-
-      // Adicionar mensagem localmente
-      const localMessage: LocalMessage = {
-        id: generateUniqueId(newMessage.id),
-        content: message,
-        sender: 'agent' as const,
-        senderName: currentUserProfile?.name || user.email?.split('@')[0] || 'Agente',
-        timestamp: new Date(),
-        type: 'text' as const,
-        status: 'sent' as const,
-        isInternal,
-        attachments: []
-      };
-
-      addMessage(localMessage);
-      setLastSentMessage(Date.now());
-      setMessage('');
-      
-      setTimeout(() => setLastSentMessage(null), 2000);
-
-      // Enviar via Evolution API se não for mensagem interna e tiver telefone do cliente
-      if (!isInternal && hasValidPhone && isWhatsAppTicket) {
-        try {
-          console.log('📱 Enviando mensagem via WhatsApp:', {
-            phone: clientPhone, // 📱 Usar telefone extraído com prioridade do campo nunmsg
-            message: message.substring(0, 50) + '...',
-            isWhatsApp: clientInfo.isWhatsApp,
-            nunmsg: currentTicket?.nunmsg
-          });
-
-          const evolutionResult = await sendEvolutionMessage({
-            phone: clientPhone, // 📱 Usar telefone correto do campo nunmsg
-            text: message,
-            instance: 'atendimento-ao-cliente-suporte', // SEMPRE usar instância que existe
-            options: {
-              delay: 1000,
-              presence: 'composing'
-            }
-          });
-
-          if (evolutionResult.success) {
-            console.log('✅ Mensagem enviada via WhatsApp:', evolutionResult.messageId);
-            
-            // Atualizar status da mensagem local
-            updateMessage(localMessage.id, { status: 'delivered' as const });
-
-            toast({
-              title: "📱 Enviado via WhatsApp!",
-              description: "Mensagem entregue ao cliente via WhatsApp",
-            });
-          } else {
-            console.warn('⚠️ Falha no envio via WhatsApp:', evolutionResult.error);
-            toast({
-              title: "⚠️ Salvo localmente",
-              description: "Mensagem salva mas não foi possível enviar via WhatsApp",
-              variant: "default"
-            });
-          }
-        } catch (evolutionError) {
-          console.error('❌ Erro no envio via Evolution API:', evolutionError);
-          // Não interrompe o fluxo principal - mensagem já foi salva
-        }
-      } else {
-        console.log('❌ DEBUG - Não enviando via WhatsApp. Motivos:', {
-          isInternal: isInternal ? 'Mensagem é interna' : 'OK',
-          hasValidPhone: hasValidPhone ? 'OK' : 'Telefone inválido ou não informado',
-          isWhatsApp: clientInfo.isWhatsApp ? 'OK' : 'Ticket não é do WhatsApp',
-          clientPhone: clientPhone, // 📱 Telefone correto do campo nunmsg
-          phoneLength: clientPhone?.replace(/\D/g, '').length,
-          nunmsg: currentTicket?.nunmsg
-        });
-        
-        toast({
-          title: "✅ Mensagem enviada",
-          description: isInternal ? "Nota interna salva" : "Mensagem salva no histórico",
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro ao enviar mensagem:', error);
-      toast({
-        title: "❌ Erro ao enviar",
-        description: "Não foi possível enviar a mensagem. Tente novamente.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  // NOVA FUNÇÃO: Continuar envio após validação de telefone
-  const handleContinueSendAfterValidation = async (validatedPhone: string, phoneFormatted: string) => {
-    if (!pendingMessage.trim() || !user || !ticket?.id) {
-      console.error('❌ Dados pendentes inválidos para continuar envio');
-      return;
-    }
-
-    setIsSending(true);
-    
-    try {
-      console.log('📱 Continuando envio com telefone validado:', {
-        phone: validatedPhone,
-        phoneFormatted,
-        message: pendingMessage.substring(0, 50) + '...'
-      });
-
-      const realTicketId = await getRealTicketId(ticket.id);
-      if (!realTicketId) {
-        throw new Error('ID do ticket não encontrado');
-      }
-
-      // Criar mensagem no banco
-      const messageData = {
-        ticket_id: realTicketId,
-        sender_id: user.id,
-        content: pendingMessage,
-        type: 'text' as const,
-        is_internal: pendingIsInternal,
-        sender_name: currentUserProfile?.name || user.email?.split('@')[0] || 'Usuário',
-        sender_email: user.email,
-        metadata: {
-          validated_phone: validatedPhone,
-          phone_formatted: phoneFormatted
-        }
-      };
-
-      const newMessage = await sendMessage(messageData);
-      console.log('✅ Mensagem salva no banco com telefone validado:', newMessage);
-
-      // Adicionar mensagem localmente
-      const localMessage: LocalMessage = {
-        id: generateUniqueId(newMessage.id),
-        content: pendingMessage,
-        sender: 'agent' as const,
-        senderName: currentUserProfile?.name || user.email?.split('@')[0] || 'Agente',
-        timestamp: new Date(),
-        type: 'text' as const,
-        status: 'sent' as const,
-        isInternal: pendingIsInternal,
-        attachments: []
-      };
-
-      addMessage(localMessage);
-      setLastSentMessage(Date.now());
-      setMessage(''); // Limpar input
-      
-      setTimeout(() => setLastSentMessage(null), 2000);
-
-      // Atualizar ticket local com telefone validado
-      setCurrentTicket((prev: any) => ({
-        ...prev,
-        metadata: {
-          ...prev.metadata,
-          whatsapp_phone: validatedPhone,
-          phone_formatted: phoneFormatted,
-          client_phone: validatedPhone,
-          is_whatsapp: true,
-          can_reply_whatsapp: true
-        }
-      }));
-
-      // Enviar via Evolution API se não for mensagem interna
-      if (!pendingIsInternal) {
-        try {
-          const evolutionResult = await sendEvolutionMessage({
-            phone: validatedPhone,
-            text: pendingMessage,
-            instance: 'atendimento-ao-cliente-suporte',
-            options: {
-              delay: 1000,
-              presence: 'composing'
-            }
-          });
-
-          if (evolutionResult.success) {
-            console.log('✅ Mensagem enviada via WhatsApp com telefone validado:', evolutionResult.messageId);
-            
-            updateMessage(localMessage.id, { status: 'delivered' as const });
-
-            toast({
-              title: "📱 Enviado via WhatsApp!",
-              description: `Mensagem entregue para ${phoneFormatted}`,
-            });
-          } else {
-            console.warn('⚠️ Falha no envio via WhatsApp:', evolutionResult.error);
-            toast({
-              title: "⚠️ Salvo localmente",
-              description: "Mensagem salva mas não foi possível enviar via WhatsApp",
-              variant: "default"
-            });
-          }
-        } catch (evolutionError) {
-          console.error('❌ Erro no envio via Evolution API:', evolutionError);
-          toast({
-            title: "⚠️ Erro no WhatsApp",
-            description: "Mensagem salva mas houve erro no envio via WhatsApp",
-            variant: "default"
-          });
-        }
-      } else {
-        toast({
-          title: "✅ Nota interna salva",
-          description: "Nota interna salva com telefone validado",
-        });
-      }
-
-      // Limpar dados pendentes
-      setPendingMessage('');
-      setPendingIsInternal(false);
-      
-    } catch (error) {
-      console.error('❌ Erro ao continuar envio:', error);
-      toast({
-        title: "❌ Erro ao enviar",
-        description: "Não foi possível enviar a mensagem. Tente novamente.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  // Função para aplicar template
-  const handleTemplateSelect = (template: QuickTemplate) => {
-    setMessage(template.content);
-    
-    toast({
-      title: "📝 Template aplicado",
-      description: `Template "${template.title}" foi adicionado`,
-    });
-  };
-
-  // Função de atalhos de teclado
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  // Função para toggle favorito
-  const toggleMessageFavorite = (messageId: number) => {
-    setFavoriteMessages(prev => {
-      const newFavorites = new Set(prev);
-      if (newFavorites.has(messageId)) {
-        newFavorites.delete(messageId);
-        toast({ title: "⭐ Removido dos favoritos" });
-      } else {
-        newFavorites.add(messageId);
-        toast({ title: "⭐ Adicionado aos favoritos" });
-      }
-      return newFavorites;
-    });
-  };
-
-  // Função para toggle sidebar
-  const toggleSidebar = () => {
-    setShowSidebar(prev => !prev);
-  };
+  }, []);
 
   // Função para busca em tempo real
   const searchMessages = useCallback((term: string) => {
@@ -876,6 +506,250 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     setShowSearchResults(true);
   }, [realTimeMessages]);
 
+  // Funções de ação
+  const handleSendMessage = useCallback(async () => {
+    if (!message.trim() || isSending) return;
+
+    try {
+      setIsSending(true);
+      
+      // Se é mensagem para WhatsApp (não interna) e ticket tem telefone, validar antes
+      if (!isInternal && currentTicket?.channel?.toLowerCase() === 'whatsapp') {
+        const extractedPhone = extractPhoneFromTicket(currentTicket);
+        
+        if (!extractedPhone || extractedPhone === 'Telefone não informado') {
+          console.log('📞 [VALIDAÇÃO] Telefone não encontrado, solicitando validação');
+          setPendingMessage(message);
+          setPendingIsInternal(isInternal);
+          setShowPhoneValidationModal(true);
+          setIsSending(false);
+          return;
+        }
+      }
+
+      // Continuar com envio normal
+      await _sendMessageInternal(message, isInternal);
+    } catch (error) {
+      console.error('❌ [ENVIO] Erro no envio:', error);
+      toast({
+        title: "❌ Erro ao enviar mensagem",
+        description: "Tente novamente em alguns segundos",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSending(false);
+    }
+  }, [message, isInternal, isSending, currentTicket, extractPhoneFromTicket, toast]);
+
+  // Função interna para envio de mensagem
+  const _sendMessageInternal = useCallback(async (messageText: string, internal: boolean) => {
+    if (!messageText.trim()) return;
+
+    const isWhatsAppTicket = currentTicket?.channel?.toLowerCase() === 'whatsapp';
+    const ticketId = currentTicket?.originalId || currentTicket?.id;
+
+    console.log('📨 [ENVIO] Preparando mensagem:', {
+      text: messageText.substring(0, 50) + '...',
+      isInternal: internal,
+      isWhatsApp: isWhatsAppTicket,
+      ticketId
+    });
+
+    // Criar objeto da mensagem
+    const newMessage = {
+      content: messageText,
+      sender: 'agent' as const,
+      senderName: user?.name || 'Agente',
+      sender_id: user?.id,
+      isInternal: internal,
+      timestamp: new Date(),
+      messageType: 'text' as const,
+      status: 'sending' as const
+    };
+
+    try {
+      // Enviar mensagem via WebSocket (que já salva no banco automaticamente)
+      const success = await sendWebSocketMessage(messageText, internal);
+      
+              if (!success) {
+          throw new Error('Falha ao enviar via WebSocket');
+        }
+        
+        console.log('✅ [WEBSOCKET] Mensagem enviada via WebSocket');
+        
+        // Se não é nota interna e é ticket WhatsApp, tentar enviar via Evolution API
+        if (!internal && isWhatsAppTicket) {
+          try {
+            // Garantir que temos dados WhatsApp válidos
+            const fixedTicket = fixTicketData(currentTicket);
+            const phoneNumber = extractPhoneFromTicket(fixedTicket);
+            
+            if (phoneNumber && phoneNumber !== 'Telefone não informado') {
+              console.log('📤 [WHATSAPP] Enviando via Evolution API...');
+              
+              const evolutionResponse = await sendEvolutionMessage(
+                fixedTicket,
+                messageText,
+                { type: 'text' }
+              );
+              
+              if (evolutionResponse?.success) {
+                console.log('✅ [WHATSAPP] Enviado via Evolution API');
+                toast({
+                  title: "✅ Mensagem enviada",
+                  description: `Enviada via WhatsApp para ${phoneNumber}`
+                });
+              } else {
+                console.error('❌ [WHATSAPP] Falha Evolution API:', evolutionResponse?.error);
+                toast({
+                  title: "⚠️ Mensagem salva localmente",
+                  description: "Erro ao enviar via WhatsApp, mas mensagem foi salva",
+                  variant: "destructive"
+                });
+              }
+            } else {
+              console.log('⚠️ [WHATSAPP] Telefone não disponível, apenas salvo no CRM');
+              toast({
+                title: "💾 Mensagem salva",
+                description: "Telefone indisponível para WhatsApp"
+              });
+            }
+          } catch (evolutionError) {
+            console.error('❌ [WHATSAPP] Erro Evolution API:', evolutionError);
+            toast({
+              title: "⚠️ Enviado parcialmente",
+              description: "Salvo no CRM, erro no WhatsApp",
+              variant: "destructive"
+            });
+          }
+        } else {
+          // Mensagem interna ou canal diferente de WhatsApp
+          toast({
+            title: internal ? "📝 Nota interna salva" : "✅ Mensagem enviada",
+            description: internal ? "Apenas a equipe pode ver" : "Mensagem salva com sucesso"
+          });
+        }
+        
+        // Atualizar estado local
+        setLastSentMessage(Date.now());
+      
+    } catch (error) {
+      console.error('❌ [ENVIO] Erro completo:', error);
+      toast({
+        title: "❌ Erro ao enviar mensagem",
+        description: error.message || "Tente novamente",
+        variant: "destructive"
+      });
+      throw error;
+    } finally {
+      // Limpar input
+      setMessage('');
+      setIsTyping(false);
+    }
+  }, [currentTicket, user, sendMessage, sendEvolutionMessage, extractPhoneFromTicket, fixTicketData, addMessage, toast]);
+
+  const handleContinueSendAfterValidation = useCallback(async (validatedPhone: string, phoneFormatted: string) => {
+    try {
+      console.log('✅ [VALIDAÇÃO] Telefone validado, continuando envio:', {
+        phone: validatedPhone,
+        formatted: phoneFormatted,
+        pendingMessage: pendingMessage.substring(0, 50) + '...'
+      });
+
+      // Atualizar ticket com telefone validado
+      const updatedTicket = {
+        ...currentTicket,
+        metadata: {
+          ...currentTicket.metadata,
+          whatsapp_phone: validatedPhone,
+          client_phone: validatedPhone,
+          phone_validated: true,
+          phone_formatted: phoneFormatted
+        },
+        customerPhone: phoneFormatted,
+        // Garantir que é identificado como WhatsApp
+        channel: 'whatsapp',
+        isWhatsApp: true
+      };
+      
+      setCurrentTicket(updatedTicket);
+
+      // Tentar salvar telefone no ticket do banco
+      try {
+        const ticketId = currentTicket?.originalId || currentTicket?.id;
+        if (ticketId) {
+          const { error: updateError } = await supabase
+            .from('tickets')
+            .update({ 
+              metadata: updatedTicket.metadata,
+              nunmsg: validatedPhone // Campo dedicado para número WhatsApp
+            })
+            .eq('id', ticketId);
+
+          if (!updateError) {
+            console.log('✅ [BANCO] Telefone salvo no ticket');
+          } else {
+            console.warn('⚠️ [BANCO] Erro ao salvar telefone:', updateError.message);
+          }
+        }
+      } catch (updateError) {
+        console.warn('⚠️ [BANCO] Falha ao atualizar telefone no banco:', updateError);
+      }
+
+      // Enviar mensagem pendente
+      await _sendMessageInternal(pendingMessage, pendingIsInternal);
+      
+      // Limpar estados pendentes
+      setPendingMessage('');
+      setPendingIsInternal(false);
+      setShowPhoneValidationModal(false);
+      
+      toast({
+        title: "✅ Telefone validado e mensagem enviada",
+        description: `Enviada para ${phoneFormatted}`
+      });
+
+    } catch (error) {
+      console.error('❌ [VALIDAÇÃO] Erro ao continuar envio:', error);
+      toast({
+        title: "❌ Erro após validação",
+        description: "Tente enviar novamente",
+        variant: "destructive"
+      });
+    }
+  }, [pendingMessage, pendingIsInternal, currentTicket, _sendMessageInternal, toast]);
+
+  const handleTemplateSelect = useCallback((template: QuickTemplate) => {
+    setMessage(template.content);
+    setQuickReplyVisible(false);
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  }, [handleSendMessage]);
+
+  const toggleMessageFavorite = useCallback((messageId: number) => {
+    setFavoriteMessages(prev => {
+      const newFavorites = new Set(prev);
+      if (newFavorites.has(messageId)) {
+        newFavorites.delete(messageId);
+        toast({ title: "⭐ Removido dos favoritos" });
+      } else {
+        newFavorites.add(messageId);
+        toast({ title: "⭐ Adicionado aos favoritos" });
+      }
+      return newFavorites;
+    });
+  }, [toast]);
+
+  // Função para toggle sidebar
+  const toggleSidebar = useCallback(() => {
+    setShowSidebar(prev => !prev);
+  }, []);
+
   // Effect para busca em tempo real
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -885,9 +759,54 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     return () => clearTimeout(timeoutId);
   }, [messageSearchTerm, searchMessages]);
 
-  // Effect para carregar dados do WhatsApp quando componente monta
+  // Effect para reprocessar dados do ticket quando ticket prop mudar
   useEffect(() => {
-    if (currentTicket) {
+    const initializeTicket = async () => {
+      if (!ticket) {
+        console.log('⚠️ [INIT] Ticket é null, limpando estado');
+        setCurrentTicket({});
+        return;
+      }
+
+      // Usar ID do ticket como chave para evitar re-inicializações desnecessárias
+      const ticketKey = ticket.originalId || ticket.id;
+      
+      console.log('🎯 [INIT] Inicializando ticket:', ticketKey);
+
+      // Primeiro, corrigir dados do ticket se necessário
+      const fixedTicket = fixTicketData(ticket);
+      
+      // Se temos um UUID válido, carregar dados completos do banco
+      const ticketId = fixedTicket.originalId || fixedTicket.id;
+      
+      if (typeof ticketId === 'string' && ticketId.includes('-')) {
+        console.log('🔄 [INIT] Carregando dados completos do banco...');
+        const fullTicketData = await loadFullTicketData(ticketId);
+        
+        if (fullTicketData) {
+          console.log('✅ [INIT] Ticket inicializado com dados completos');
+          return; // loadFullTicketData já atualizou o currentTicket
+        }
+      }
+
+      // Fallback: usar dados básicos do ticket prop
+      console.log('📋 [INIT] Usando dados básicos do ticket prop');
+      const clientInfo = extractClientInfo(fixedTicket);
+      setCurrentTicket({
+        ...fixedTicket,
+        client: clientInfo.clientName,
+        customerPhone: clientInfo.clientPhone,
+        customerEmail: fixedTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fixedTicket.email),
+        isWhatsApp: clientInfo.isWhatsApp
+      });
+    };
+
+    initializeTicket();
+  }, [ticket?.id, ticket?.originalId, loadFullTicketData]); // 🚀 CORREÇÃO: Dependências específicas para evitar loops
+
+  // Effect para carregar dados do WhatsApp quando ticket muda
+  useEffect(() => {
+    if (currentTicket?.id || currentTicket?.originalId) {
       // FORÇA SEMPRE A INSTÂNCIA CORRETA QUE EXISTE NA EVOLUTION API
       const instanceName = 'atendimento-ao-cliente-suporte'; // Instância que realmente existe
       
@@ -897,7 +816,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
         console.warn('⚠️ [CORREÇÃO] Instância incorreta detectada no metadata:', {
           incorreta: metadataInstance,
           corrigida: instanceName,
-          ticketId: currentTicket.id
+          ticketId: currentTicket.id || currentTicket.originalId
         });
       }
       
@@ -910,89 +829,20 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
         forced: true
       });
     }
-  }, [currentTicket]);
+  }, [currentTicket?.id, currentTicket?.originalId]); // 🚀 CORREÇÃO: Dependências específicas
 
-  // Função para corrigir dados do ticket se necessário
-  const fixTicketData = useCallback((ticket: any) => {
-    if (!ticket) return ticket;
-
-    const metadata = ticket.metadata || {};
-    
-    // Detectar se deveria ser WhatsApp
-    const shouldBeWhatsApp = Boolean(
-      metadata.whatsapp_phone ||
-      metadata.is_whatsapp ||
-      metadata.client_phone ||
-      ticket.client_phone ||
-      ticket.customerPhone ||
-      ticket.channel === 'whatsapp'
-    );
-
-    // Corrigir dados se necessário
-    const fixed = { ...ticket };
-    
-    if (shouldBeWhatsApp && ticket.channel !== 'whatsapp') {
-      console.log('🔧 Corrigindo dados do ticket para WhatsApp:', ticket.id);
+  // Effect para sincronizar mensagens quando ticket real muda
+  useEffect(() => {
+    if (ticket?.id && realTimeMessages.length > 0) {
+      console.log('🔄 [REALTIME] Ticket mudou, sincronizando mensagens:', ticket.id);
       
-      fixed.channel = 'whatsapp';
-      fixed.isWhatsApp = true;
-      
-      // Enriquecer metadata
-      if (!fixed.metadata) fixed.metadata = {};
-      
-      if (!fixed.metadata.client_phone && (ticket.client_phone || ticket.customerPhone)) {
-        fixed.metadata.client_phone = ticket.client_phone || ticket.customerPhone;
-      }
-      
-      if (!fixed.metadata.client_name && ticket.client) {
-        fixed.metadata.client_name = ticket.client;
-      }
-      
-      if (!fixed.metadata.is_whatsapp) {
-        fixed.metadata.is_whatsapp = true;
+      // Mapear para UUID se necessário para realtime
+      const ticketId = ticket.originalId || ticket.id;
+      if (typeof ticketId === 'string' && ticketId.includes('-')) {
+        console.log('🎯 [REALTIME] Ticket mapeado para UUID:', ticketId);
       }
     }
-
-    return fixed;
-  }, []);
-
-  // Effect para reprocessar dados do ticket quando ticket prop mudar
-  useEffect(() => {
-    const initializeTicket = async () => {
-      if (ticket) {
-        console.log('🎯 [INIT] Inicializando ticket:', ticket.id);
-
-        // Primeiro, corrigir dados do ticket se necessário
-        const fixedTicket = fixTicketData(ticket);
-        
-        // Se temos um UUID válido, carregar dados completos do banco
-        const ticketId = fixedTicket.originalId || fixedTicket.id;
-        
-        if (typeof ticketId === 'string' && ticketId.includes('-')) {
-          console.log('🔄 [INIT] Carregando dados completos do banco...');
-          const fullTicketData = await loadFullTicketData(ticketId);
-          
-          if (fullTicketData) {
-            console.log('✅ [INIT] Ticket inicializado com dados completos');
-            return; // loadFullTicketData já atualizou o currentTicket
-          }
-        }
-
-        // Fallback: usar dados básicos do ticket prop
-        console.log('📋 [INIT] Usando dados básicos do ticket prop');
-        const clientInfo = extractClientInfo(fixedTicket);
-        setCurrentTicket({
-          ...fixedTicket,
-          client: clientInfo.clientName,
-          customerPhone: clientInfo.clientPhone,
-          customerEmail: fixedTicket.customerEmail || (clientInfo.isWhatsApp ? 'Email não informado' : fixedTicket.email),
-          isWhatsApp: clientInfo.isWhatsApp
-        });
-      }
-    };
-
-    initializeTicket();
-  }, [ticket, fixTicketData, loadFullTicketData]);
+  }, [ticket?.id, realTimeMessages.length]); // 🚀 CORREÇÃO: Dependências específicas para evitar loops
 
   // Effect para responsividade da sidebar
   useEffect(() => {
@@ -1014,28 +864,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     return () => window.removeEventListener('resize', handleResize);
   }, [showSidebar, toast]);
 
-  // 🚀 CARREGAMENTO DE MENSAGENS AUTOMATIZADO
-  // O useRealtimeMessages já gerencia automaticamente o carregamento baseado no ticketId
-  // Apenas sincronizar quando ticket muda
-  useEffect(() => {
-    if (ticket?.id) {
-      console.log('🔄 [REALTIME] Ticket mudou, sincronizando mensagens:', ticket.id);
-      
-      // Se é um ID numérico, tentar mapear para UUID para o hook
-      if (typeof ticket.id === 'number') {
-        getRealTicketId(ticket.id).then(realId => {
-          if (realId) {
-            console.log('🎯 [REALTIME] Ticket mapeado para UUID:', realId);
-            setCurrentTicket((prev: any) => ({ ...prev, id: realId, originalId: realId }));
-          }
-        });
-      }
-      
-      // Marcar mensagens como lidas quando ticket é aberto
-      markAsRead();
-    }
-  }, [ticket?.id, ticket?.originalId, getRealTicketId, markAsRead]);
-
+  // 🚀 RETURN FINAL DO HOOK - SEMPRE EXECUTADO
   return {
     // Estados principais
     message,
@@ -1080,7 +909,6 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     showCustomerModal,
     setShowCustomerModal,
     
-    // NOVO: Estado para modal de validação de telefone
     showPhoneValidationModal,
     setShowPhoneValidationModal,
     pendingMessage,
@@ -1100,7 +928,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     whatsappStatus,
     whatsappInstance,
     
-    // 🚀 Realtime
+    // Realtime
     isRealtimeConnected,
     lastUpdateTime,
     connectionStatus,
@@ -1115,6 +943,6 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     handleKeyDown,
     getRealTicketId,
     handleContinueSendAfterValidation,
-    extractClientInfo
+    extractClientInfo: () => ticket ? extractClientInfo(ticket) : {}
   };
 }; 

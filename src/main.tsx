@@ -1,8 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
-import { Toaster } from '@/components/ui/toaster'
 
 // Importar helpers para desenvolvimento
 import './utils/dev-helpers'
@@ -129,9 +129,16 @@ import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js';
 // 📱 Importar testes do campo nunmsg
 import './utils/test-nunmsg-integration'
 
+// 🚀 Importar teste da correção do realtime
+import './utils/test-realtime-fix'
+
+// 🔗 Importar testes do sistema WebSocket
+import './utils/test-websocket-system'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
-    <Toaster />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </React.StrictMode>,
 )

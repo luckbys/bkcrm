@@ -1,0 +1,943 @@
+import React, { useState, useEffect } from 'react';
+import { Send, Minimize2, X, Phone, Mail, User, Clock, MessageSquare, Paperclip, Smile, MoreVertical, Search, Star, Settings, Zap, Copy, Reply, Heart, ThumbsUp, Filter, FileText, Image, Video, Mic, Plus, ChevronLeft, ChevronRight, Eye, EyeOff, Info } from 'lucide-react';
+
+interface TicketChatProps {
+  ticket: any;
+  onClose: () => void;
+  onMinimize?: () => void;
+}
+
+const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMinimize }) => {
+  const [message, setMessage] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredMessages, setFilteredMessages] = useState([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  
+  // Templates de resposta rápida
+  const quickTemplates = [
+    { id: 1, title: 'Saudação', content: 'Olá! Como posso ajudá-lo hoje?', category: 'greeting' },
+    { id: 2, title: 'Aguarde', content: 'Um momento, por favor. Estou verificando as informações...', category: 'status' },
+    { id: 3, title: 'Informações', content: 'Preciso de algumas informações adicionais para melhor atendê-lo.', category: 'request' },
+    { id: 4, title: 'Finalização', content: 'Obrigado por entrar em contato! Há mais alguma coisa em que posso ajudar?', category: 'closing' },
+    { id: 5, title: 'Transferir', content: 'Vou transferir seu atendimento para um especialista que poderá ajudá-lo melhor.', category: 'transfer' },
+    { id: 6, title: 'Agendamento', content: 'Vamos agendar um horário para resolver sua questão. Qual seria o melhor dia e horário?', category: 'schedule' }
+  ];
+
+  // Emojis disponíveis
+  const availableEmojis = ['👍', '❤️', '😊', '😢', '😮', '😡', '🎉', '👏', '🔥', '💯'];
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      content: "Olá! Preciso de ajuda com meu pedido.",
+      sender: 'client',
+      timestamp: new Date(Date.now() - 300000),
+      senderName: ticket?.client || 'Cliente',
+      type: 'text',
+      status: 'delivered',
+      reactions: [],
+      isStarred: false
+    },
+    {
+      id: 2,
+      content: "Olá! Claro, vou ajudá-lo. Qual é o número do seu pedido?",
+      sender: 'agent',
+      timestamp: new Date(Date.now() - 240000),
+      senderName: 'Agente',
+      type: 'text',
+      status: 'read',
+      reactions: [{ emoji: '👍', count: 1, users: ['client'] }],
+      isStarred: false
+    },
+    {
+      id: 3,
+      content: "É o pedido #12345. Está atrasado e preciso de uma previsão.",
+      sender: 'client', 
+      timestamp: new Date(Date.now() - 180000),
+      senderName: ticket?.client || 'Cliente',
+      type: 'text',
+      status: 'delivered',
+      reactions: [],
+      isStarred: true
+    },
+    {
+      id: 4,
+      content: "Vou verificar o status do seu pedido. Um momento...",
+      sender: 'agent',
+      timestamp: new Date(Date.now() - 120000),
+      senderName: 'Agente',
+      type: 'text',
+      status: 'read',
+      reactions: [],
+      isStarred: false
+    }
+  ]);
+  
+  // Inicialização segura do componente
+  useEffect(() => {
+    try {
+      console.log('🔄 [CHAT_REFACTORED] Inicializando componente...');
+      
+      if (!ticket) {
+        console.warn('⚠️ [CHAT_REFACTORED] Ticket é null/undefined');
+        setError('Ticket não fornecido');
+        return;
+      }
+      
+      console.log('✅ [CHAT_REFACTORED] Ticket válido recebido:', {
+        id: ticket.id,
+        client: ticket.client,
+        subject: ticket.subject,
+        channel: ticket.channel,
+        status: ticket.status,
+        hasAllRequiredFields: !!(ticket.id && ticket.client)
+      });
+      
+      setIsInitialized(true);
+      setError(null);
+      
+    } catch (err) {
+      console.error('❌ [CHAT_REFACTORED] Erro durante inicialização:', err);
+      setError(err instanceof Error ? err.message : 'Erro desconhecido na inicialização');
+    }
+  }, [ticket]);
+
+  // Se há erro, mostrar tela de erro
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full w-full bg-red-50">
+        <div className="text-center p-8 max-w-md">
+          <h2 className="text-red-600 text-xl mb-4">❌ Erro no Chat</h2>
+          <p className="text-red-500 mb-4">{error}</p>
+          <div className="bg-red-100 p-3 rounded mb-4 text-left text-xs">
+            <strong>Debug Info:</strong><br/>
+            Ticket ID: {ticket?.id || 'N/A'}<br/>
+            Cliente: {ticket?.client || 'N/A'}<br/>
+            Status: {ticket?.status || 'N/A'}
+          </div>
+          <button 
+            onClick={onClose}
+            className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Se não inicializou ainda, mostrar loading elegante
+  if (!isInitialized) {
+    return (
+      <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center p-8">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-500 mx-auto mb-4"></div>
+            <div className="absolute inset-0 rounded-full h-12 w-12 border-4 border-transparent border-t-blue-300 animate-ping mx-auto"></div>
+          </div>
+          <p className="text-blue-700 font-medium mb-2">Inicializando chat...</p>
+          <p className="text-sm text-blue-600">Conectando com {ticket?.client || 'cliente'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ⚠️ VERIFICAÇÃO DEFENSIVA PARA TICKET NULL (dupla verificação)
+  if (!ticket) {
+    console.log('⚠️ [CHAT_REFACTORED] Ticket é null após inicialização');
+    return (
+      <div className="flex items-center justify-center h-full w-full bg-gray-50">
+        <div className="text-center">
+          <p className="text-gray-500 mb-4">Nenhum ticket selecionado</p>
+          <button 
+            onClick={onClose}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleSendMessage = () => {
+    try {
+      if (!message.trim()) return;
+      
+      const newMessage = {
+        id: messages.length + 1,
+        content: message,
+        sender: 'agent',
+        timestamp: new Date(),
+        senderName: 'Você',
+        type: 'text',
+        status: 'sent',
+        reactions: [],
+        isStarred: false
+      };
+      
+      setMessages(prev => [...prev, newMessage]);
+      setMessage('');
+      
+      console.log('📤 [CHAT] Mensagem enviada:', {
+        message,
+        ticketId: ticket.id,
+        client: ticket.client
+      });
+      
+    } catch (err) {
+      console.error('❌ [CHAT] Erro ao enviar mensagem:', err);
+      setError('Erro ao enviar mensagem');
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'pendente': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'atendimento': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'finalizado': return 'bg-green-100 text-green-800 border-green-200';
+      case 'cancelado': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getChannelIcon = (channel: string) => {
+    switch (channel?.toLowerCase()) {
+      case 'whatsapp': return '📱';
+      case 'email': return '📧';
+      case 'phone': return '📞';
+      case 'web': return '🌐';
+      default: return '💬';
+    }
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  // Funções avançadas do chat
+  const handleReaction = (messageId: number, emoji: string) => {
+    setMessages(prev => prev.map(msg => {
+      if (msg.id === messageId) {
+        const existingReaction = msg.reactions.find(r => r.emoji === emoji);
+        if (existingReaction) {
+          return {
+            ...msg,
+            reactions: msg.reactions.map(r => 
+              r.emoji === emoji 
+                ? { ...r, count: r.count + 1, users: [...r.users, 'current-user'] }
+                : r
+            )
+          };
+        } else {
+          return {
+            ...msg,
+            reactions: [...msg.reactions, { emoji, count: 1, users: ['current-user'] }]
+          };
+        }
+      }
+      return msg;
+    }));
+  };
+
+  const toggleStarMessage = (messageId: number) => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, isStarred: !msg.isStarred } : msg
+    ));
+  };
+
+  const copyMessage = (content: string) => {
+    navigator.clipboard.writeText(content);
+    // Toast notification seria adicionado aqui
+  };
+
+  const replyToMessage = (messageId: number) => {
+    const messageToReply = messages.find(m => m.id === messageId);
+    if (messageToReply) {
+      setMessage(`@${messageToReply.senderName}: `);
+    }
+  };
+
+  const handleTemplateSelect = (template: any) => {
+    setMessage(template.content);
+    setShowTemplates(false);
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
+  const simulateTyping = () => {
+    setIsTyping(true);
+    setTimeout(() => {
+      setIsTyping(false);
+      const autoReply = {
+        id: messages.length + 1,
+        content: "Obrigado pela resposta rápida!",
+        sender: 'client',
+        timestamp: new Date(),
+        senderName: ticket?.client || 'Cliente',
+        type: 'text',
+        status: 'delivered',
+        reactions: [],
+        isStarred: false
+      };
+      setMessages(prev => [...prev, autoReply]);
+    }, 2000);
+  };
+
+  // Filtrar mensagens baseado na busca
+  const getFilteredMessages = () => {
+    if (!searchTerm) return messages;
+    return messages.filter(msg => 
+      msg.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      msg.senderName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
+
+  console.log('🎨 [CHAT_REFACTORED] Renderizando interface moderna...');
+
+  // INTERFACE MODERNA E ELEGANTE
+  return (
+      <div className="flex h-full w-full bg-gray-50 chat-container">
+        {/* Chat Principal */}
+        <div className="flex-1 flex flex-col bg-white min-w-0">
+          {/* Header Ultra Moderno */}
+          <div className="relative overflow-hidden">
+            {/* Background com gradiente animado e padrão geométrico */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 animate-gradient-x"></div>
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-x-16 -translate-y-16"></div>
+              <div className="absolute top-8 right-8 w-24 h-24 bg-white/20 rounded-full"></div>
+              <div className="absolute bottom-4 left-1/3 w-16 h-16 bg-white/10 rounded-full"></div>
+            </div>
+            
+            <div className="relative z-10 text-white p-6 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                {/* Informações do Cliente Aprimoradas */}
+                <div className="flex items-center space-x-4">
+                  {/* Avatar com gradiente e animação */}
+                  <div className="relative">
+                    <div className="w-16 h-16 bg-gradient-to-br from-white/30 to-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 shadow-2xl hover-lift">
+                      <User className="w-8 h-8 text-white drop-shadow-lg" />
+                    </div>
+                    {/* Indicador de status online animado */}
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-3 border-white shadow-lg">
+                      <div className="w-full h-full bg-green-400 rounded-full animate-ping opacity-75"></div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-xl text-white drop-shadow-lg tracking-wide">
+                      {ticket.client || 'Cliente Premium'}
+                    </h3>
+                    <div className="flex items-center space-x-4 text-sm">
+                      <span className="flex items-center bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
+                        <span className="text-lg mr-2">{getChannelIcon(ticket.channel)}</span>
+                        <span className="font-medium">{ticket.channel || 'Chat'}</span>
+                      </span>
+                      <span className="flex items-center bg-green-400/20 px-3 py-1 rounded-full backdrop-blur-sm border border-green-300/20">
+                        <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+                        <span className="font-medium">Online agora</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Controles do Header Aprimorados */}
+                <div className="flex items-center space-x-3">
+                  {/* Barra de Busca Premium */}
+                  <div className="relative group">
+                    <div className="absolute inset-0 bg-white/10 rounded-xl blur-sm group-focus-within:bg-white/20 transition-all"></div>
+                    <input
+                      type="text"
+                      placeholder="Buscar mensagens..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="relative bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/40 focus:bg-white/20 w-64 backdrop-blur-sm transition-all"
+                    />
+                    <Search className="absolute right-3 top-2.5 w-4 h-4 text-white/60 group-focus-within:text-white/80 transition-colors" />
+                  </div>
+                  
+                  {/* Botões de Ação Premium */}
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={() => setSidebarOpen(!sidebarOpen)}
+                      className="p-3 hover:bg-white/15 rounded-xl transition-all duration-200 backdrop-blur-sm border border-white/10 hover:border-white/20 hover:scale-105 group"
+                      title="Informações do ticket"
+                    >
+                      <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+                    </button>
+                    
+                    <button className="p-3 hover:bg-white/15 rounded-xl transition-all duration-200 backdrop-blur-sm border border-white/10 hover:border-white/20 hover:scale-105 group">
+                      <Phone className="w-5 h-5 group-hover:animate-pulse" />
+                    </button>
+                    
+                    <div className="w-px h-8 bg-white/20"></div>
+                    
+                    {onMinimize && (
+                      <button 
+                        onClick={onMinimize}
+                        className="p-3 hover:bg-white/15 rounded-xl transition-all duration-200 backdrop-blur-sm border border-white/10 hover:border-white/20 hover:scale-105"
+                        title="Minimizar"
+                      >
+                        <Minimize2 className="w-5 h-5" />
+                      </button>
+                    )}
+                    
+                    <button 
+                      onClick={onClose}
+                      className="p-3 hover:bg-red-500/20 rounded-xl transition-all duration-200 backdrop-blur-sm border border-white/10 hover:border-red-400/30 hover:scale-105 group"
+                      title="Fechar"
+                    >
+                      <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informações do Ticket Aprimoradas */}
+              <div className="mt-4 px-6 pb-4 flex items-center justify-between">
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-white/60 rounded-full"></div>
+                    <span className="text-white/80 font-medium">Ticket #{ticket.id}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <MessageSquare className="w-4 h-4 text-white/60" />
+                    <span className="text-white/80">{ticket.subject || 'Atendimento Premium'}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-4 h-4 text-white/60" />
+                    <span className="text-white/80">Iniciado hoje</span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  {/* Badge de Status Premium */}
+                  <div className={`px-4 py-2 rounded-xl font-medium text-sm backdrop-blur-sm border ${
+                    ticket.status === 'ativo' 
+                      ? 'bg-green-400/20 text-green-100 border-green-400/30' 
+                      : 'bg-blue-400/20 text-blue-100 border-blue-400/30'
+                  } shadow-lg`}>
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        ticket.status === 'ativo' ? 'bg-green-400' : 'bg-blue-400'
+                      } animate-pulse`}></div>
+                      <span>{ticket.status || 'Em Atendimento'}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Badge de Prioridade */}
+                  <div className="px-4 py-2 rounded-xl font-medium text-sm bg-amber-400/20 text-amber-100 border border-amber-400/30 backdrop-blur-sm shadow-lg">
+                    <div className="flex items-center space-x-2">
+                      <Star className="w-3 h-3 text-amber-400" />
+                      <span>Alta</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Área de Mensagens Premium */}
+          <div className="flex-1 p-6 overflow-y-auto bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/20 chat-scrollbar chat-messages-area relative">
+            {/* Padrão de fundo sutil */}
+            <div className="absolute inset-0 opacity-5">
+              <div className="absolute top-10 left-10 w-64 h-64 bg-blue-400 rounded-full blur-3xl"></div>
+              <div className="absolute bottom-10 right-10 w-48 h-48 bg-purple-400 rounded-full blur-3xl"></div>
+            </div>
+            <div className="relative z-10 space-y-6 max-w-4xl mx-auto">
+              {/* Indicador de digitação premium */}
+              {isTyping && (
+                <div className="flex justify-start fade-in-scale">
+                  <div className="bg-white/90 backdrop-blur-sm border border-gray-200/50 shadow-xl rounded-3xl px-6 py-4 max-w-xs hover-lift">
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-blue-400 rounded-full typing-dot"></div>
+                        <div className="w-2 h-2 bg-blue-400 rounded-full typing-dot" style={{ animationDelay: '0.2s' }}></div>
+                        <div className="w-2 h-2 bg-blue-400 rounded-full typing-dot" style={{ animationDelay: '0.4s' }}></div>
+                      </div>
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-medium text-blue-600">
+                          {ticket?.client?.charAt(0) || 'C'}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-2 font-medium">
+                      {ticket?.client || 'Cliente'} está digitando...
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {getFilteredMessages().map((msg) => (
+                <div 
+                  key={msg.id}
+                  className={`flex ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'} message-slide-in`}
+                >
+                  <div className={`group max-w-xs lg:max-w-md xl:max-w-lg hover-lift transition-all duration-300 ${
+                    msg.sender === 'agent' 
+                      ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' 
+                      : 'bg-white/90 backdrop-blur-sm border border-gray-200/50 shadow-xl shadow-gray-500/10'
+                  } rounded-3xl px-6 py-4 relative backdrop-blur-sm`}>
+                    
+                    {/* Avatar premium para mensagens do cliente */}
+                    {msg.sender === 'client' && (
+                      <div className="absolute -left-12 top-2 w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg hover:scale-110 transition-transform">
+                        {ticket.client?.charAt(0) || 'C'}
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
+                      </div>
+                    )}
+                    
+                    {/* Avatar premium para mensagens do agente */}
+                    {msg.sender === 'agent' && (
+                      <div className="absolute -right-12 top-2 w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg">
+                        <User className="w-5 h-5" />
+                      </div>
+                    )}
+                    
+                    {/* Conteúdo da mensagem */}
+                    <p className={`text-sm leading-relaxed ${
+                      msg.sender === 'agent' ? 'text-white' : 'text-gray-800'
+                    }`}>
+                      {msg.content}
+                    </p>
+                    
+                    {/* Timestamp */}
+                    <div className={`flex items-center justify-between mt-2 text-xs ${
+                      msg.sender === 'agent' ? 'text-blue-100' : 'text-gray-500'
+                    }`}>
+                      <span>{formatTime(msg.timestamp)}</span>
+                      {msg.sender === 'agent' && (
+                        <div className="flex items-center space-x-1">
+                          <div className="w-1 h-1 bg-blue-200 rounded-full"></div>
+                          <div className="w-1 h-1 bg-blue-200 rounded-full"></div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Estrela para mensagens favoritas */}
+                    {msg.isStarred && (
+                      <div className="absolute -top-2 -right-2">
+                        <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                      </div>
+                    )}
+
+                    {/* Reações */}
+                    {msg.reactions.length > 0 && (
+                      <div className="flex items-center space-x-1 mt-2">
+                        {msg.reactions.map((reaction, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center space-x-1 bg-gray-100 rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-gray-200"
+                            onClick={() => handleReaction(msg.id, reaction.emoji)}
+                          >
+                            <span>{reaction.emoji}</span>
+                            <span>{reaction.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Ações avançadas no hover */}
+                    <div className="absolute -top-10 right-0 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-white rounded-lg shadow-lg border p-1 flex space-x-1 z-10">
+                      <button 
+                        onClick={() => toggleStarMessage(msg.id)}
+                        className={`p-1.5 hover:bg-gray-100 rounded text-gray-600 transition-colors ${
+                          msg.isStarred ? 'text-yellow-500' : ''
+                        }`}
+                        title="Favoritar"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => copyMessage(msg.content)}
+                        className="p-1.5 hover:bg-gray-100 rounded text-gray-600 transition-colors"
+                        title="Copiar"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => replyToMessage(msg.id)}
+                        className="p-1.5 hover:bg-gray-100 rounded text-gray-600 transition-colors"
+                        title="Responder"
+                      >
+                        <Reply className="w-3.5 h-3.5" />
+                      </button>
+                      
+                      {/* Dropdown de reações rápidas */}
+                      <div className="relative group/reactions">
+                        <button className="p-1.5 hover:bg-gray-100 rounded text-gray-600 transition-colors">
+                          <Heart className="w-3.5 h-3.5" />
+                        </button>
+                        <div className="absolute bottom-full right-0 mb-1 opacity-0 group-hover/reactions:opacity-100 transition-opacity bg-white rounded-lg shadow-lg border p-2 flex space-x-1">
+                          {availableEmojis.slice(0, 5).map(emoji => (
+                            <button
+                              key={emoji}
+                              onClick={() => handleReaction(msg.id, emoji)}
+                              className="hover:scale-110 transition-transform text-lg"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </div>
+
+          {/* Área de Input Premium - Responsiva */}
+          <div className="relative border-t border-gray-200/50 chat-input-container chat-input-area">
+            {/* Background com gradiente sutil */}
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-50 via-white to-purple-50"></div>
+            <div className="relative z-10 p-4 sm:p-6 backdrop-blur-sm">
+              <div className="max-w-4xl mx-auto">
+              {/* Templates de Resposta Rápida */}
+              {showTemplates && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Templates de Resposta</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {quickTemplates.map(template => (
+                      <button
+                        key={template.id}
+                        onClick={() => handleTemplateSelect(template)}
+                        className="text-left p-2 bg-white rounded border hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                      >
+                        <div className="font-medium text-sm text-gray-800">{template.title}</div>
+                        <div className="text-xs text-gray-500 truncate">{template.content}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Picker de Emoji */}
+              {showEmojiPicker && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Emojis</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {availableEmojis.map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleEmojiSelect(emoji)}
+                        className="text-xl hover:scale-110 transition-transform p-1 rounded hover:bg-white"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Barra de ferramentas responsiva */}
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <div className="flex items-center space-x-1 sm:space-x-2">
+                  <button 
+                    onClick={() => setShowTemplates(!showTemplates)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showTemplates ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                    title="Templates"
+                  >
+                    <FileText className="w-4 h-4" />
+                  </button>
+                  
+                  <button 
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showEmojiPicker ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                    title="Emojis"
+                  >
+                    <Smile className="w-4 h-4" />
+                  </button>
+                  
+                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hidden sm:block" title="Anexar arquivo">
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                  
+                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hidden sm:block" title="Gravar áudio">
+                    <Mic className="w-4 h-4" />
+                  </button>
+                  
+                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hidden sm:block" title="Imagem">
+                    <Image className="w-4 h-4" />
+                  </button>
+                  
+                  <button 
+                    onClick={simulateTyping}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+                    title="Simular resposta"
+                  >
+                    <Zap className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <div className="text-xs text-gray-500 hidden sm:block">
+                  {message.length}/1000 • {message.split(' ').length} palavras
+                </div>
+                
+                <div className="text-xs text-gray-500 sm:hidden">
+                  {message.length}/1000
+                </div>
+              </div>
+
+              {/* Input principal ultra premium - Responsivo */}
+              <div className="flex items-end space-x-2 sm:space-x-4 relative">
+                {/* Container do input com efeitos glassmorphism */}
+                <div className="flex-1 min-w-0 relative group">
+                  {/* Background com gradiente animado */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-indigo-500/10 rounded-2xl sm:rounded-3xl blur-sm opacity-0 group-focus-within:opacity-100 transition-all duration-500"></div>
+                  
+                  <div className="relative">
+                    <textarea
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder="✨ Digite sua mensagem premium..."
+                      className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-white/90 backdrop-blur-sm border-2 border-gray-200/50 rounded-2xl sm:rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-400 resize-none min-h-[48px] sm:min-h-[56px] max-h-32 sm:max-h-40 transition-all duration-300 shadow-lg focus:shadow-2xl placeholder-gray-400 text-sm sm:text-base"
+                      rows={1}
+                      style={{
+                        height: 'auto',
+                        minHeight: window.innerWidth < 640 ? '48px' : '56px'
+                      }}
+                      onInput={(e) => {
+                        const target = e.target as HTMLTextAreaElement;
+                        target.style.height = 'auto';
+                        target.style.height = target.scrollHeight + 'px';
+                      }}
+                    />
+                    
+                    {/* Indicador de caracteres premium - Responsivo */}
+                    {message.length > 800 && (
+                      <div className={`absolute bottom-2 sm:bottom-3 right-2 sm:right-3 text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-full font-medium backdrop-blur-sm border transition-all duration-300 ${
+                        message.length > 950 
+                          ? 'bg-red-100/80 text-red-700 border-red-200 animate-pulse' 
+                          : 'bg-amber-100/80 text-amber-700 border-amber-200'
+                      }`}>
+                        <span className="font-bold">{1000 - message.length}</span>
+                        <span className="hidden sm:inline"> restantes</span>
+                      </div>
+                    )}
+                    
+                    {/* Barra de progresso sutil */}
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300 ease-out"
+                        style={{ width: `${Math.min((message.length / 1000) * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Botão de envio premium - Responsivo */}
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!message.trim()}
+                  className="group bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 hover:from-blue-600 hover:via-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-400 text-white p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-300 shadow-xl hover:shadow-2xl disabled:cursor-not-allowed flex items-center justify-center min-w-[48px] sm:min-w-[56px] hover:scale-105 disabled:hover:scale-100 animate-glow flex-shrink-0"
+                >
+                  <Send className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200" />
+                </button>
+              </div>
+
+              {/* Atalhos de teclado responsivos */}
+              <div className="mt-2 text-xs text-gray-400 text-center">
+                {/* Versão completa para desktop */}
+                <div className="hidden sm:block">
+                  <span className="inline-flex items-center space-x-1">
+                    <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">Enter</kbd>
+                    <span>Enviar</span>
+                    <span className="mx-2">•</span>
+                    <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">Shift</kbd>
+                    <span>+</span>
+                    <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">Enter</kbd>
+                    <span>Nova linha</span>
+                    <span className="mx-2">•</span>
+                    <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">Ctrl</kbd>
+                    <span>+</span>
+                    <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">T</kbd>
+                    <span>Templates</span>
+                  </span>
+                </div>
+                
+                {/* Versão simplificada para mobile */}
+                <div className="sm:hidden">
+                  <span className="inline-flex items-center space-x-1">
+                    <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono text-xs">Enter</kbd>
+                    <span>Enviar</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar Premium Informativa - Responsiva */}
+        {sidebarOpen && (
+          <div className="w-80 sm:w-80 md:w-96 lg:w-80 xl:w-96 bg-gradient-to-br from-white via-blue-50/30 to-purple-50/20 border-l border-gray-200/50 flex flex-col relative overflow-hidden chat-sidebar">
+            {/* Background decorativo */}
+            <div className="absolute inset-0 opacity-5">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-400 rounded-full -translate-y-16 translate-x-16"></div>
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-400 rounded-full translate-y-12 -translate-x-12"></div>
+            </div>
+            
+            {/* Header da Sidebar Premium */}
+            <div className="relative z-10 p-6 border-b border-gray-200/50 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                    <Info className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Informações</h3>
+                    <p className="text-blue-100 text-sm">Ticket Premium</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-2 hover:bg-white/20 rounded-xl transition-all duration-200 backdrop-blur-sm border border-white/10"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Conteúdo da Sidebar */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Informações do Cliente */}
+              <div>
+                <h4 className="font-medium text-gray-700 mb-3 flex items-center">
+                  <User className="w-4 h-4 mr-2" />
+                  Cliente
+                </h4>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-medium text-blue-600">
+                        {ticket.client?.charAt(0) || 'C'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-800">{ticket.client || 'Cliente Anônimo'}</p>
+                      <p className="text-xs text-gray-500">Online agora</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-center text-gray-600">
+                      <Mail className="w-3 h-3 mr-2" />
+                      <span>cliente@exemplo.com</span>
+                    </div>
+                    <div className="flex items-center text-gray-600">
+                      <Phone className="w-3 h-3 mr-2" />
+                      <span>+55 11 99999-9999</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detalhes do Ticket */}
+              <div>
+                <h4 className="font-medium text-gray-700 mb-3 flex items-center">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Detalhes
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide">ID</label>
+                    <p className="font-medium">#{ticket.id}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide">Assunto</label>
+                    <p className="font-medium">{ticket.subject || 'Atendimento Geral'}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide">Canal</label>
+                    <div className="flex items-center space-x-2">
+                      <span>{getChannelIcon(ticket.channel)}</span>
+                      <span className="font-medium">{ticket.channel || 'Chat'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide">Status</label>
+                    <div className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ticket.status)}`}>
+                      {ticket.status || 'Ativo'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide">Criado em</label>
+                    <p className="font-medium">
+                      {new Date().toLocaleDateString('pt-BR', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Estatísticas do Chat */}
+              <div>
+                <h4 className="font-medium text-gray-700 mb-3">Estatísticas</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <p className="text-xs text-blue-600 uppercase tracking-wide">Mensagens</p>
+                    <p className="text-lg font-bold text-blue-700">{messages.length}</p>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg">
+                    <p className="text-xs text-green-600 uppercase tracking-wide">Favoritas</p>
+                    <p className="text-lg font-bold text-green-700">
+                      {messages.filter(m => m.isStarred).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ações Rápidas */}
+              <div>
+                <h4 className="font-medium text-gray-700 mb-3">Ações Rápidas</h4>
+                <div className="space-y-2">
+                  <button className="w-full text-left p-2 hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-2">
+                    <Phone className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm">Iniciar chamada</span>
+                  </button>
+                  <button className="w-full text-left p-2 hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-2">
+                    <Mail className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm">Enviar e-mail</span>
+                  </button>
+                  <button className="w-full text-left p-2 hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-2">
+                    <User className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm">Ver perfil completo</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+};
+
+export default TicketChatRefactored; 

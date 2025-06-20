@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
@@ -60,13 +60,18 @@ import { useToast } from '../../../hooks/use-toast';
 import { ChatAnimations, ResponsiveAnimations } from './chatAnimations';
 import { supabase } from '../../../lib/supabase';
 
+// Componentes auxiliares
+import { TicketChatSidebarHeader } from './TicketChatSidebarHeader';
+import { TicketChatSidebarSection } from './TicketChatSidebarSection';
+import { TicketChatSidebarActions } from './TicketChatSidebarActions';
+
 interface TicketChatSidebarProps {
   showSidebar: boolean;
   chatState: UseTicketChatReturn;
   onClose?: () => void;
 }
 
-export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
+export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = React.memo(({
   showSidebar,
   chatState,
   onClose
@@ -80,10 +85,12 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
     ticket: true,
     whatsapp: true,
     actions: true,
-    stats: false
+    stats: false,
+    activity: false
   });
   const [isLoadingAction, setIsLoadingAction] = useState(false);
   const [actionType, setActionType] = useState<string | null>(null);
+  
   const {
     currentTicket,
     realTimeMessages,
@@ -105,45 +112,64 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
     setCurrentTicket
   } = chatState;
 
-  // Calcular contadores de mensagens
-  const messageCounts = {
+  // Calcular contadores de mensagens (memoizado para performance)
+  const messageCounts = useMemo(() => ({
     total: realTimeMessages.length,
     public: realTimeMessages.filter(m => !m.isInternal).length,
     internal: realTimeMessages.filter(m => m.isInternal).length
-  };
+  }), [realTimeMessages]);
 
-  // Simular função de verificação de status
-  const checkWhatsAppStatus = () => {
-    console.log('Verificando status do WhatsApp...');
-  };
+  // Calcular progresso do ticket (memoizado)
+  const ticketProgress = useMemo(() => {
+    const statusProgress = {
+      'open': 25,
+      'atendimento': 50,
+      'in_progress': 75,
+      'finalizado': 100,
+      'closed': 100,
+      'resolved': 100
+    };
+    return statusProgress[currentTicket?.status as keyof typeof statusProgress] || 0;
+  }, [currentTicket?.status]);
 
-  // Simular última atividade
-  const lastActivity = currentTicket?.lastActivity || 'Nunca';
+  // Funções otimizadas com useCallback
+  const checkWhatsAppStatus = useCallback(() => {
+    console.log('🔄 Verificando status do WhatsApp...');
+    // Aqui poderia chamar uma API real para verificar status
+  }, []);
 
-  // Funções de modal - usar as disponíveis no chatState
-  const openChangeStatusModal = () => {
-    setShowStatusModal(true);
-  };
+  const refreshData = useCallback(async () => {
+    console.log('🔄 Atualizando dados do sidebar...');
+    try {
+      await refreshTickets();
+      toast({
+        title: "✅ Dados Atualizados",
+        description: "As informações foram atualizadas com sucesso.",
+        variant: "default"
+      });
+    } catch (error) {
+      console.error('❌ Erro ao atualizar dados:', error);
+      toast({
+        title: "❌ Erro",
+        description: "Não foi possível atualizar os dados.",
+        variant: "destructive"
+      });
+    }
+  }, [refreshTickets, toast]);
 
-  const openAssignAgentModal = () => {
-    setShowAssignModal(true);
-  };
-
-  const openTransferModal = () => {
-    setShowTagModal(true);
-  };
-
-  const openCustomerModal = () => {
-    setShowCustomerModal(true);
-  };
-
-  // Função para toggle de seções
-  const toggleSection = (section: keyof typeof expandedSections) => {
+  // Função para toggle de seções (otimizada)
+  const toggleSection = useCallback((section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
     }));
-  };
+  }, []);
+
+  // Simular última atividade
+  const lastActivity = useMemo(() => 
+    currentTicket?.lastActivity || 'Nunca', 
+    [currentTicket?.lastActivity]
+  );
 
   // Função para finalizar ticket rapidamente
   const handleQuickFinishTicket = async () => {
@@ -330,6 +356,26 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
     };
     return statusProgress[currentTicket?.status as keyof typeof statusProgress] || 0;
   };
+
+  // ===== Funções de abertura de modais / ações rápidas =====
+  const openCustomerModal = useCallback(() => {
+    setShowCustomerModal(true);
+  }, [setShowCustomerModal]);
+
+  const openChangeStatusModal = useCallback(() => {
+    setShowStatusModal(true);
+  }, [setShowStatusModal]);
+
+  const openAssignAgentModal = useCallback(() => {
+    setShowAssignModal(true);
+  }, [setShowAssignModal]);
+
+  const openTransferModal = useCallback(() => {
+    toast({
+      title: "🔄 Transferir Ticket",
+      description: "Funcionalidade de transferência será implementada em breve.",
+    });
+  }, [toast]);
 
   if (!showSidebar) {
     return null;
@@ -929,4 +975,4 @@ export const TicketChatSidebar: React.FC<TicketChatSidebarProps> = ({
       </div>
     </TooltipProvider>
   );
-}; 
+}); 
