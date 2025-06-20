@@ -598,6 +598,196 @@ async function processMessage(payload) {
 
 // 🔗 ROTAS DO WEBHOOK
 
+// === ENDPOINT DE ENVIO DE MENSAGENS ===
+// Endpoint para enviar mensagens do TK para WhatsApp
+app.post('/webhook/send-message', async (req, res) => {
+  try {
+    const { phone, text, instance = 'atendimento-ao-cliente-suporte', options = {} } = req.body;
+
+    console.log('📤 [ENVIO] Recebida solicitação de envio:', {
+      phone: phone,
+      text: text?.substring(0, 50) + '...',
+      instance: instance
+    });
+
+    // Validar dados obrigatórios
+    if (!phone || !text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Telefone e texto são obrigatórios',
+        received: true
+      });
+    }
+
+    // Formatação do telefone
+    let formattedPhone = phone.replace(/\D/g, ''); // Remove caracteres não numéricos
+    
+    // Se não começar com código do país, adicionar +55 (Brasil)
+    if (!formattedPhone.startsWith('55') && formattedPhone.length >= 10) {
+      formattedPhone = '55' + formattedPhone;
+    }
+
+    console.log(`📱 [ENVIO] Enviando para ${formattedPhone} via instância ${instance}`);
+
+    // Payload correto conforme documentação Evolution API
+    const payload = {
+      number: formattedPhone,
+      text: text,
+      options: {
+        delay: options.delay || 1000,
+        presence: options.presence || 'composing',
+        linkPreview: options.linkPreview !== false,
+        ...options
+      }
+    };
+
+    console.log('🚀 [ENVIO] Payload:', {
+      number: payload.number,
+      text: payload.text.substring(0, 50) + '...',
+      options: payload.options
+    });
+
+    // Fazer requisição para Evolution API
+    const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const responseData = await evolutionResponse.json();
+
+    if (evolutionResponse.ok) {
+      console.log('✅ [ENVIO] Mensagem enviada com sucesso:', {
+        messageId: responseData.key?.id,
+        status: responseData.status
+      });
+
+      return res.status(200).json({
+        success: true,
+        messageId: responseData.key?.id,
+        status: responseData.status,
+        timestamp: responseData.messageTimestamp,
+        data: responseData
+      });
+    } else {
+      console.error('❌ [ENVIO] Erro da Evolution API:', {
+        status: evolutionResponse.status,
+        error: responseData
+      });
+
+      return res.status(evolutionResponse.status).json({
+        success: false,
+        error: responseData.message || 'Erro na Evolution API',
+        details: responseData,
+        evolutionStatus: evolutionResponse.status
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ [ENVIO] Erro interno:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      details: error.message
+    });
+  }
+});
+
+// === ENDPOINT DE VERIFICAÇÃO DE INSTÂNCIA ===
+app.get('/webhook/check-instance/:instanceName', async (req, res) => {
+  try {
+    const { instanceName } = req.params;
+    
+    console.log(`🔍 [INSTÂNCIA] Verificando instância: ${instanceName}`);
+
+    const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+      method: 'GET',
+      headers: {
+        'apikey': EVOLUTION_API_KEY
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log(`✅ [INSTÂNCIA] Status: ${data.state}`);
+      
+      return res.status(200).json({
+        success: true,
+        instance: instanceName,
+        state: data.state,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      console.error(`❌ [INSTÂNCIA] Erro ao verificar: ${response.status}`);
+      
+      return res.status(response.status).json({
+        success: false,
+        error: 'Erro ao verificar instância',
+        details: data
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ [INSTÂNCIA] Erro interno:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      details: error.message
+    });
+  }
+});
+
+// === ENDPOINT DE TESTE DE ENVIO ===
+app.post('/webhook/test-send', async (req, res) => {
+  try {
+    const { phone = '5511999999999' } = req.body;
+    
+    const testMessage = `🧪 Teste de envio - ${new Date().toLocaleString()}`;
+    
+    console.log(`🧪 [TESTE] Enviando mensagem de teste para ${phone}`);
+
+    const testPayload = {
+      phone,
+      text: testMessage,
+      instance: 'atendimento-ao-cliente-suporte',
+      options: {
+        delay: 1000,
+        presence: 'composing',
+        linkPreview: false
+      }
+    };
+
+    // Reutilizar endpoint de envio
+    const sendResponse = await fetch('http://localhost:4000/webhook/send-message', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(testPayload)
+    });
+
+    const result = await sendResponse.json();
+
+    return res.status(sendResponse.status).json({
+      test: true,
+      payload: testPayload,
+      result
+    });
+
+  } catch (error) {
+    console.error('❌ [TESTE] Erro:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro no teste de envio',
+      details: error.message
+    });
+  }
+});
+
 // Endpoint principal do webhook Evolution
 app.post('/webhook/evolution', async (req, res) => {
   try {
