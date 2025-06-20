@@ -646,7 +646,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       setMessage('');
       setIsTyping(false);
     }
-  }, [currentTicket, user, sendMessage, sendEvolutionMessage, extractPhoneFromTicket, fixTicketData, addMessage, toast]);
+  }, [currentTicket, user, sendMessage, sendEvolutionMessage, extractPhoneFromTicket, fixTicketData, toast]);
 
   const handleContinueSendAfterValidation = useCallback(async (validatedPhone: string, phoneFormatted: string) => {
     try {

@@ -140,11 +140,24 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+  const formatTime = (date: Date | string | number) => {
+    try {
+      // Converter para Date se necessário
+      const dateObj = date instanceof Date ? date : new Date(date);
+      
+      // Verificar se é uma data válida
+      if (isNaN(dateObj.getTime())) {
+        return 'Agora';
+      }
+      
+      return dateObj.toLocaleTimeString('pt-BR', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch (error) {
+      console.warn('⚠️ Erro ao formatar timestamp:', { date, error });
+      return 'Agora';
+    }
   };
 
   return (
@@ -267,7 +280,13 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
             )}
 
             {/* Mensagens REAIS do sistema */}
-            {getFilteredMessages().map((msg) => (
+            {getFilteredMessages().map((msg) => {
+              // Verificação de segurança para evitar erros
+              if (!msg || !msg.id) {
+                return null;
+              }
+
+              return (
               <div 
                 key={msg.id}
                 className={`flex ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'}`}
@@ -302,7 +321,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                         ? 'text-white' 
                         : 'text-gray-800'
                   }`}>
-                    {msg.content}
+                    {msg.content || 'Mensagem sem conteúdo'}
                   </p>
                   
                   {/* Timestamp e status */}
@@ -313,8 +332,8 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                         ? 'text-blue-100' 
                         : 'text-gray-500'
                   }`}>
-                    <span>{formatTime(msg.timestamp)}</span>
-                    <span className="ml-2">{msg.senderName}</span>
+                    <span>{formatTime(msg.timestamp || new Date())}</span>
+                    <span className="ml-2">{msg.senderName || 'Usuário'}</span>
                     {msg.sender === 'agent' && (
                       <span className="ml-2">✓✓</span>
                     )}
@@ -355,7 +374,8 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
