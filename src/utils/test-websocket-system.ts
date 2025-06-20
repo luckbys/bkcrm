@@ -183,9 +183,100 @@ export const monitorWebSocket = () => {
   return interval;
 };
 
+// 🔧 Função para diagnosticar problemas de produção
+export const diagnoseProductionWebSocket = async () => {
+  console.log('🔍 [PROD-DIAGNOSE] Diagnosticando WebSocket em produção...');
+  
+  const isProduction = window.location.hostname !== 'localhost';
+  console.log(`🌐 [PROD-DIAGNOSE] Ambiente: ${isProduction ? 'PRODUÇÃO' : 'LOCAL'}`);
+  console.log(`🌍 [PROD-DIAGNOSE] Hostname atual: ${window.location.hostname}`);
+  console.log(`🌍 [PROD-DIAGNOSE] Origin atual: ${window.location.origin}`);
+  
+  // URLs para testar em produção
+  const urlsToTest = [
+    'https://bkcrm.devsible.com.br/webhook/health', // Proxy na porta 443
+    'https://bkcrm.devsible.com.br:4000/webhook/health', // Direto na porta 4000
+    'http://bkcrm.devsible.com.br:4000/webhook/health', // HTTP na porta 4000
+    'https://bkcrm.devsible.com.br/socket.io/', // Socket.io via proxy
+    'https://bkcrm.devsible.com.br:4000/socket.io/', // Socket.io direto
+  ];
+  
+  console.log('🧪 [PROD-DIAGNOSE] Testando URLs disponíveis...');
+  
+  for (const url of urlsToTest) {
+    try {
+      console.log(`🔄 [PROD-DIAGNOSE] Testando: ${url}`);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Origin': window.location.origin,
+        }
+      });
+      console.log(`✅ [PROD-DIAGNOSE] ${url}: ${response.status} ${response.statusText}`);
+      
+      if (url.includes('/webhook/health')) {
+        const text = await response.text();
+        console.log(`📄 [PROD-DIAGNOSE] Resposta health check: ${text}`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ [PROD-DIAGNOSE] ${url} falhou:`, (error as Error).message);
+    }
+  }
+  
+  // Teste específico de WebSocket
+  console.log('🔌 [PROD-DIAGNOSE] Testando conexão WebSocket direta...');
+  
+  const websocketUrls = [
+    'https://bkcrm.devsible.com.br',
+    'https://bkcrm.devsible.com.br:4000'
+  ];
+  
+  for (const wsUrl of websocketUrls) {
+    console.log(`🌐 [PROD-DIAGNOSE] Testando WebSocket: ${wsUrl}`);
+    
+    try {
+      // @ts-ignore
+      const io = (window as any).io;
+      if (!io) {
+        console.error('❌ [PROD-DIAGNOSE] Socket.io client não disponível');
+        continue;
+      }
+      
+      const socket = io(wsUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 5000,
+        forceNew: true
+      });
+      
+      socket.on('connect', () => {
+        console.log(`✅ [PROD-DIAGNOSE] WebSocket conectado: ${wsUrl}`);
+        socket.disconnect();
+      });
+      
+      socket.on('connect_error', (error: any) => {
+        console.error(`❌ [PROD-DIAGNOSE] WebSocket erro: ${wsUrl}`, error.message);
+        socket.disconnect();
+      });
+      
+      socket.on('disconnect', () => {
+        console.log(`🔌 [PROD-DIAGNOSE] WebSocket desconectado: ${wsUrl}`);
+      });
+      
+    } catch (error) {
+      console.error(`❌ [PROD-DIAGNOSE] Erro ao testar WebSocket ${wsUrl}:`, (error as Error).message);
+    }
+  }
+  
+  console.log('🏁 [PROD-DIAGNOSE] Diagnóstico concluído!');
+  console.log('💡 [PROD-DIAGNOSE] DICA: Se nenhuma URL funcionar, o servidor WebSocket pode não estar rodando em produção');
+  console.log('💡 [PROD-DIAGNOSE] Verifique se o servidor está na porta 4000 e se o proxy está configurado');
+};
+
 // Disponibilizar no window global para facilitar uso
 if (typeof window !== 'undefined') {
   (window as any).testWebSocketSystem = testWebSocketSystem;
   (window as any).diagnoseWebSocketIssues = diagnoseWebSocketIssues;
   (window as any).monitorWebSocket = monitorWebSocket;
+  (window as any).diagnoseProductionWebSocket = diagnoseProductionWebSocket;
 } 
