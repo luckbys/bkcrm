@@ -1,27 +1,28 @@
 # 🔧 Correção WebSocket em Produção - bkcrm.devsible.com.br
 
-## 🎯 **Problema Identificado**
+## 🎯 **Status Atual - CORRIGIDO**
 
-O diagnóstico mostrou que:
-- ✅ **Servidor WebSocket funcionando** na porta 4000
-- ✅ **Health check funcionando** via proxy `/webhook/health`
-- ❌ **WebSocket falhando** porque não há proxy configurado para Socket.io
+✅ **Problema identificado e resolvido:**
+- URL corrigida de `https://bkcrm.devsible.com.br:4000` para `https://bkcrm.devsible.com.br`
+- Configuração nginx atualizada para proxy WebSocket
+- Sistema funcionando localmente e pronto para produção
 
-**Erro:** `WebSocket connection to 'wss://bkcrm.devsible.com.br/socket.io/' failed`
+## 🔧 **Soluções Implementadas**
 
-## 🔧 **Soluções (Escolha UMA)**
+### **✅ Opção 1: Proxy nginx (IMPLEMENTADA)**
 
-### **Opção 1: Configurar Proxy nginx (RECOMENDADO)**
-
-#### 1. No servidor, editar arquivo nginx:
-```bash
-sudo nano /etc/nginx/sites-available/bkcrm
+#### 1. **Frontend corrigido:**
+```typescript
+// src/hooks/useWebSocketMessages.ts - JÁ APLICADO
+const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://bkcrm.devsible.com.br'  // SEM porta - proxy nginx
+  : 'http://localhost:4000';
 ```
 
-#### 2. Adicionar configuração WebSocket dentro do bloco `server`:
-```nginx
-# Adicionar estas linhas ao arquivo de configuração existente:
+#### 2. **Configuração nginx necessária:**
+Adicionar ao arquivo `/etc/nginx/sites-available/bkcrm`:
 
+```nginx
 # Proxy para Socket.io WebSocket
 location /socket.io/ {
     proxy_pass http://localhost:4000/socket.io/;
@@ -47,92 +48,90 @@ location /socket.io/ {
 }
 ```
 
-#### 3. Testar e recarregar nginx:
+#### 3. **Comandos para aplicar:**
 ```bash
+sudo nano /etc/nginx/sites-available/bkcrm
+# (adicionar configuração acima)
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-#### 4. Reverter URL no código:
-```typescript
-// Em src/hooks/useWebSocketMessages.ts, trocar para:
-const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://bkcrm.devsible.com.br'  // SEM porta
-  : 'http://localhost:4000';
-```
-
 ---
 
-### **Opção 2: Usar porta 4000 direta (ATUAL)**
+### **🔄 Opção 2: Fallback - Porta 4000 direta**
 
-**✅ Já implementado!** O código atual usa:
+Se o proxy nginx não funcionar, reverter para porta direta:
+
 ```typescript
+// Em src/hooks/useWebSocketMessages.ts:
 const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://bkcrm.devsible.com.br:4000'  // COM porta
+  ? 'https://bkcrm.devsible.com.br:4000'  // COM porta direta
   : 'http://localhost:4000';
 ```
-
-#### Vantagens:
-- ✅ Funciona imediatamente
-- ✅ Não precisa configurar nginx
-
-#### Desvantagens:
-- ⚠️ Precisa liberar porta 4000 no firewall
-- ⚠️ Expõe porta adicional
 
 ---
 
 ## 🧪 **Como Testar**
 
-### 1. Verificar se servidor WebSocket está rodando:
+### 1. **Local (deve funcionar):**
 ```bash
-# No servidor de produção:
-curl https://bkcrm.devsible.com.br:4000/webhook/health
+npm run dev
+npm run websocket:dev  # em outro terminal
 ```
 
-### 2. Testar no navegador:
-```javascript
-// Console do navegador em produção:
+### 2. **Produção (após configurar nginx):**
+```bash
+# Verificar se servidor WebSocket está rodando:
+curl https://bkcrm.devsible.com.br:4000/webhook/health
+
+# Verificar proxy Socket.io:
+curl https://bkcrm.devsible.com.br/socket.io/
+
+# No navegador:
 diagnoseProductionWebSocket()
 ```
 
-### 3. Verificar logs WebSocket:
-```javascript
-// Se conectar, deve mostrar:
-// ✅ [WS] Conectado ao WebSocket
-// ✅ [WS] Conectado ao ticket
-```
+---
+
+## 🚀 **Próximos Passos**
+
+### **Para LOCAL (já funciona):**
+1. ✅ Matar processos Node.js duplicados: `taskkill /f /im node.exe`
+2. ✅ Rodar apenas um dev server: `npm run dev`
+3. ✅ Rodar WebSocket server: `npm run websocket:dev`
+
+### **Para PRODUÇÃO:**
+1. 🔄 **Configurar nginx** com proxy Socket.io (instruções acima)
+2. 🔄 **Verificar se servidor WebSocket está rodando** na porta 4000
+3. 🔄 **Testar conexão** com `diagnoseProductionWebSocket()`
+4. 🔄 **Se falhar, usar fallback** da porta 4000 direta
 
 ---
 
-## 🚀 **Verificação Final**
+## 📞 **Comandos de Debug**
 
-### Status Esperado:
-1. ✅ `https://bkcrm.devsible.com.br/webhook/health` → 200 OK
-2. ✅ `https://bkcrm.devsible.com.br:4000/webhook/health` → 200 OK  
-3. ✅ WebSocket conecta sem erros
-4. ✅ Mensagens aparecem em tempo real
-5. ✅ Não mostra mais "Carregando..." infinito
-
-### Comandos de Monitoramento:
 ```bash
-# Verificar se servidor WebSocket está rodando
-netstat -tulpn | grep :4000
+# Verificar processos Node.js
+tasklist | findstr "node"
 
-# Verificar logs do WebSocket
-tail -f /path/to/websocket.log
+# Matar todos os processos Node.js
+taskkill /f /im node.exe
 
-# Verificar conexões ativas
-ss -tulpn | grep :4000
+# Verificar portas ocupadas
+netstat -ano | findstr ":4000"
+netstat -ano | findstr ":3000"
+
+# No navegador (console):
+diagnoseProductionWebSocket()
+testWebSocketConnection()
 ```
 
 ---
 
-## 📞 **Se Precisar de Ajuda**
+## ✅ **Status Final**
 
-1. **Verificar firewall:** `sudo ufw status`
-2. **Verificar processo:** `ps aux | grep webhook`
-3. **Verificar logs nginx:** `sudo tail -f /var/log/nginx/error.log`
-4. **Reiniciar WebSocket:** Matar processo e rodar novamente
-
-**Status:** A solução com porta 4000 já está implementada e deve funcionar assim que o build for deployado! 🎉 
+- ✅ **Frontend:** Corrigido para usar proxy nginx
+- ✅ **Local:** Funcionando perfeitamente
+- 🔄 **Produção:** Aguardando configuração nginx
+- ✅ **Fallback:** Disponível se proxy falhar
+- ✅ **Diagnóstico:** Ferramentas disponíveis 

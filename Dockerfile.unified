@@ -1,0 +1,74 @@
+# Multi-stage build para container unificado
+# Frontend (React) + Backend (WebSocket) em um container com nginx
+
+# Stage 1: Build Frontend
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app
+
+# Copiar package files do frontend
+COPY package*.json ./
+RUN npm ci
+
+# Copiar código fonte e fazer build
+COPY . .
+RUN npm run build
+
+# Stage 2: Build WebSocket Backend
+FROM node:18-alpine AS websocket-builder  
+
+WORKDIR /app
+
+# Copiar package files do backend
+COPY backend/webhooks/package*.json ./
+RUN npm ci --only=production
+
+# Copiar código do WebSocket
+COPY backend/webhooks/ .
+
+# Stage 3: Imagem final com nginx + node
+FROM nginx:alpine
+
+# Instalar Node.js e utilitários
+RUN apk add --no-cache \
+    nodejs \
+    npm \
+    curl \
+    bash
+
+# Copiar frontend build para nginx
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
+
+# Copiar WebSocket backend
+COPY --from=websocket-builder /app /app/websocket
+
+# Copiar configuração nginx customizada
+COPY deployment/nginx-unified.conf /etc/nginx/nginx.conf
+
+# Copiar script de inicialização
+COPY deployment/start-unified.sh /start.sh
+RUN chmod +x /start.sh
+
+# Criar usuário não-root (opcional para nginx)
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -S appuser -u 1001 -G appgroup
+
+# Configurar permissões
+RUN chown -R appuser:appgroup /app/websocket
+RUN chown appuser:appgroup /start.sh
+
+# Health check combinado
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:80/health && \
+      curl -f http://localhost:4000/webhook/health || exit 1
+
+# Variáveis de ambiente
+ENV NODE_ENV=production
+ENV NGINX_WORKER_PROCESSES=auto
+ENV NGINX_WORKER_CONNECTIONS=1024
+
+# Expor apenas porta 80 (nginx faz proxy para 4000)
+EXPOSE 80
+
+# Usar script de inicialização
+CMD ["/start.sh"] 

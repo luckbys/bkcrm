@@ -71,9 +71,9 @@ export const useWebSocketMessages = ({
   
   const { toast } = useToast();
 
-  // 🔧 Configurações
+  // 🔧 Configurações para Easypanel
   const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
-    ? 'https://bkcrm.devsible.com.br:4000' 
+    ? 'https://ws.bkcrm.devsible.com.br'  // Subdomínio dedicado no Easypanel
     : 'http://localhost:4000';
     
   console.log(`🔗 [WS] Ambiente: ${process.env.NODE_ENV}, URL: ${WEBSOCKET_URL}`);

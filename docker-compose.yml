@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+      - VITE_WEBSOCKET_URL=https://ws.bkcrm.devsible.com.br
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+  websocket:
+    build:
+      context: .
+      dockerfile: Dockerfile.websocket
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/webhook/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  default:
+    name: bkcrm-network 

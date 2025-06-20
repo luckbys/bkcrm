@@ -1,0 +1,26 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Instalar curl para health checks
+RUN apk add --no-cache curl
+
+# Copiar package.json do diretório webhooks
+COPY backend/webhooks/package*.json ./
+RUN npm ci --only=production
+
+# Copiar código do WebSocket server
+COPY backend/webhooks/ .
+
+# Criar usuário não-root para segurança
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:4000/webhook/health || exit 1
+
+EXPOSE 4000
+CMD ["node", "webhook-evolution-websocket.js"] 
