@@ -29,6 +29,7 @@ interface SendMessageResponse {
   status?: string;
   error?: string;
   timestamp: string;
+  details?: any; // Detalhes do erro da Evolution API
 }
 
 // Detectar ambiente automaticamente
@@ -84,9 +85,26 @@ export function useEvolutionSender() {
       } else {
         console.error('❌ [HOOK] Erro ao enviar mensagem:', result.error);
         
+        // Tratamento específico para diferentes tipos de erro
+        let errorTitle = "Erro ao enviar mensagem ❌";
+        let errorDescription = result.error || 'Erro desconhecido';
+        
+        // Verificar se é erro de número não existente no WhatsApp
+        if (result.details && typeof result.details === 'object') {
+          const details = result.details as any;
+          
+          if (details.status === 400 && details.response?.message) {
+            const messages = details.response.message;
+            if (Array.isArray(messages) && messages.some(msg => msg.exists === false)) {
+              errorTitle = "Número não encontrado no WhatsApp ❌";
+              errorDescription = `O número ${data.phone} não possui WhatsApp ativo ou não está registrado.`;
+            }
+          }
+        }
+        
         toast({
-          title: "Erro ao enviar mensagem ❌",
-          description: result.error || 'Erro desconhecido',
+          title: errorTitle,
+          description: errorDescription,
           variant: "destructive",
           duration: 5000
         });

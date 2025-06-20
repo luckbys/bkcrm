@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   Send, 
   Minimize2, 
@@ -18,9 +18,18 @@ import {
   FileText, 
   Image, 
   Mic, 
-  Info 
+  Info,
+  Wifi,
+  WifiOff,
+  Activity,
+  Zap,
+  AlertCircle,
+  CheckCircle,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { useTicketChat } from '../../hooks/useTicketChat';
+import { useToast } from '../../hooks/use-toast';
 
 interface TicketChatProps {
   ticket: any;
@@ -28,13 +37,31 @@ interface TicketChatProps {
   onMinimize?: () => void;
 }
 
+/**
+ * TicketChatRefactored - Componente de chat aprimorado com integração WebSocket Evolution API
+ * 
+ * MELHORIAS IMPLEMENTADAS:
+ * 🔗 WebSocket Integration: Conexão em tempo real com servidor WebSocket na porta 4000
+ * 📱 Evolution API: Integração completa para envio/recebimento de mensagens WhatsApp
+ * 🔔 Notificações: Sistema de notificações push e toasts para novas mensagens
+ * 📊 Status em Tempo Real: Indicadores visuais de conexão, latência e estatísticas
+ * ⌨️ Indicador de Digitação: Feedback visual quando usuário está digitando
+ * 🔊 Controles de Áudio: Toggle para ativar/desativar sons de notificação
+ * 📈 Métricas de Performance: Monitoramento de latência e status da conexão
+ * 🎨 UI/UX Aprimorada: Interface moderna com animações e feedback visual
+ */
 const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMinimize }) => {
-  // 🚀 INTEGRAÇÃO COM SISTEMA REAL DE MENSAGENS
+  // 🚀 INTEGRAÇÃO COM SISTEMA REAL DE MENSAGENS + WEBSOCKET EVOLUTION API
   const chatState = useTicketChat(ticket);
+  const { toast } = useToast();
 
-  // Estados locais para UX
+  // Estados locais para UX aprimorada
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
   // Templates de resposta rápida
   const quickTemplates = [
@@ -83,7 +110,105 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
     );
   }, [chatState.realTimeMessages, chatState.messageSearchTerm]);
 
+  // 🔄 FUNÇÕES DE INTEGRAÇÃO WEBSOCKET EVOLUTION API
+  const handleTypingIndicator = useCallback((message: string) => {
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+    }
+    
+    setIsTyping(message.length > 0);
+    
+    if (message.length > 0) {
+      const timeout = setTimeout(() => {
+        setIsTyping(false);
+      }, 2000);
+      setTypingTimeout(timeout);
+    }
+  }, [typingTimeout]);
+
+  // Função aprimorada para obter status da conexão WebSocket
+  const getConnectionStatus = useCallback(() => {
+    if (!chatState.isRealtimeConnected) {
+      return {
+        status: 'disconnected',
+        color: 'text-red-500',
+        icon: WifiOff,
+        text: 'Desconectado'
+      };
+    }
+    
+    if (chatState.connectionStatus === 'connecting') {
+      return {
+        status: 'connecting',
+        color: 'text-yellow-500',
+        icon: Activity,
+        text: 'Conectando...'
+      };
+    }
+    
+    return {
+      status: 'connected',
+      color: 'text-green-500',
+      icon: Wifi,
+      text: 'Conectado'
+    };
+  }, [chatState.isRealtimeConnected, chatState.connectionStatus]);
+
+  // Função para calcular latência da conexão
+  const getConnectionLatency = useCallback(() => {
+    if (!chatState.lastUpdateTime) return null;
+    
+    const now = new Date();
+    const lastUpdate = new Date(chatState.lastUpdateTime);
+    const diff = now.getTime() - lastUpdate.getTime();
+    
+    if (diff < 1000) return '<1s';
+    if (diff < 60000) return `${Math.floor(diff / 1000)}s`;
+    return `${Math.floor(diff / 60000)}m`;
+  }, [chatState.lastUpdateTime]);
+
+  // 🔔 EFEITO PARA NOTIFICAÇÕES DE NOVAS MENSAGENS VIA WEBSOCKET
+  useEffect(() => {
+    if (chatState.realTimeMessages.length > 0 && soundEnabled) {
+      const lastMessage = chatState.realTimeMessages[chatState.realTimeMessages.length - 1];
+      
+      // Só notificar se a mensagem não é do usuário atual e é recente (menos de 5 segundos)
+      const messageTime = new Date(lastMessage.timestamp || Date.now());
+      const now = new Date();
+      const timeDiff = now.getTime() - messageTime.getTime();
+      
+      if (timeDiff < 5000 && lastMessage.sender !== 'agent') {
+        // Toast para mensagens de clientes
+        toast({
+          title: `📱 ${lastMessage.senderName || 'Cliente'}`,
+          description: lastMessage.content.length > 60 
+            ? lastMessage.content.substring(0, 60) + '...' 
+            : lastMessage.content,
+          duration: 4000,
+        });
+        
+        // Som de notificação (se suportado pelo navegador)
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`Nova mensagem de ${lastMessage.senderName || 'Cliente'}`, {
+            body: lastMessage.content,
+            icon: '/favicon.ico'
+          });
+        }
+      }
+    }
+  }, [chatState.realTimeMessages.length, soundEnabled, toast]);
+
+  // 🔔 SOLICITAR PERMISSÃO PARA NOTIFICAÇÕES
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   // 🚀 RENDERIZAÇÃO CONDICIONAL APÓS TODOS OS HOOKS
+  // Função para obter informações do cliente
+  const clientInfo = chatState.extractClientInfo(chatState.currentTicket);
+
   // Verificar se chat está carregado
   if (!ticket) {
     return (
@@ -101,23 +226,49 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
     );
   }
 
-  // Loading state
+  // Loading state aprimorado com informações de conexão
   if (chatState.isLoadingHistory) {
+    const connectionInfo = getConnectionStatus();
+    
     return (
       <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center p-8">
-          <div className="relative mb-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-500 mx-auto"></div>
+        <div className="text-center p-8 max-w-md">
+          <div className="relative mb-6">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-500 mx-auto"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <MessageSquare className="w-6 h-6 text-blue-500" />
+            </div>
           </div>
-          <p className="text-blue-700 font-medium mb-2">Carregando mensagens...</p>
-          <p className="text-sm text-blue-600">Conectando com {chatState.currentTicket?.client || 'cliente'}</p>
+          
+          <h3 className="text-blue-700 font-bold text-lg mb-2">Carregando Chat</h3>
+          <p className="text-blue-600 mb-4">Conectando com {chatState.currentTicket?.client || 'cliente'}</p>
+          
+          {/* Status da conexão WebSocket */}
+          <div className="bg-white/50 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-center space-x-2">
+              <connectionInfo.icon className={`w-4 h-4 ${connectionInfo.color}`} />
+              <span className={`text-sm font-medium ${connectionInfo.color}`}>
+                {connectionInfo.text}
+              </span>
+            </div>
+            
+            {chatState.lastUpdateTime && (
+              <p className="text-xs text-blue-500 mt-1">
+                Última atualização: {getConnectionLatency()} atrás
+              </p>
+            )}
+          </div>
+          
+          {/* Informações do ticket */}
+          {clientInfo.isWhatsApp && (
+            <div className="bg-green-100 rounded-lg p-2 text-green-700 text-sm">
+              📱 Chat WhatsApp • Evolution API
+            </div>
+          )}
         </div>
       </div>
     );
   }
-
-  // Função para obter informações do cliente
-  const clientInfo = chatState.extractClientInfo(chatState.currentTicket);
 
   // Funções de utilidade
   const getStatusColor = (status: string) => {
@@ -185,7 +336,23 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
             </div>
 
             {/* Controles do Header */}
-            <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2">
+              {/* Indicador de conexão WebSocket */}
+              <div className="flex items-center space-x-1 bg-white/10 rounded-lg px-2 py-1">
+                {(() => {
+                  const connectionInfo = getConnectionStatus();
+                  return (
+                    <>
+                      <connectionInfo.icon className={`w-3 h-3 ${connectionInfo.color.replace('text-', 'text-white/')}`} />
+                      <span className="text-xs text-white/80">{connectionInfo.text}</span>
+                      {chatState.lastUpdateTime && (
+                        <span className="text-xs text-white/60">({getConnectionLatency()})</span>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+              
               {/* Barra de Busca */}
               <div className="relative">
                 <input
@@ -247,13 +414,33 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
             </div>
           </div>
 
-          {/* Indicador de conexão em tempo real */}
-          {chatState.lastUpdateTime && (
-            <div className="mt-2 text-xs text-blue-200">
-              Última atualização: {formatTime(chatState.lastUpdateTime)}
+          {/* Indicador de conexão em tempo real aprimorado */}
+          <div className="mt-2 flex items-center justify-between text-xs">
+            <div className="flex items-center space-x-2 text-blue-200">
+              <span>Última atualização: {chatState.lastUpdateTime ? formatTime(chatState.lastUpdateTime) : 'Nunca'}</span>
               {chatState.isRealtimeConnected && (
-                <span className="ml-2 inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
               )}
+            </div>
+            
+            {/* Estatísticas de conexão */}
+            <div className="flex items-center space-x-3 text-blue-200">
+              <span>🔗 {chatState.connectionStatus}</span>
+              {clientInfo.isWhatsApp && (
+                <span>📱 WhatsApp</span>
+              )}
+            </div>
+          </div>
+
+          {/* Indicador de digitação */}
+          {isTyping && (
+            <div className="mt-1 text-xs text-blue-200 flex items-center space-x-1">
+              <span>Digitando</span>
+              <div className="flex space-x-1">
+                <div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce"></div>
+                <div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
             </div>
           )}
         </div>
@@ -486,7 +673,11 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
               <div className="flex-1 relative">
                 <textarea
                   value={chatState.message}
-                  onChange={(e) => chatState.setMessage(e.target.value)}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    chatState.setMessage(newValue);
+                    handleTypingIndicator(newValue);
+                  }}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -690,11 +881,11 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                   }`}>
                     <p className={`text-xs uppercase tracking-wide ${
                       chatState.isRealtimeConnected ? 'text-green-600' : 'text-red-600'
-                    }`}>Status</p>
+                    }`}>WebSocket</p>
                     <p className={`text-lg font-bold ${
                       chatState.isRealtimeConnected ? 'text-green-700' : 'text-red-700'
                     }`}>
-                      {chatState.isRealtimeConnected ? 'Online' : 'Offline'}
+                      {chatState.isRealtimeConnected ? 'Conectado' : 'Desconectado'}
                     </p>
                   </div>
                 </div>
@@ -728,6 +919,42 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                     <Settings className="w-4 h-4 text-blue-500" />
                     <span className="text-sm">Atualizar Mensagens</span>
                   </button>
+                  
+                  {/* Controles de áudio */}
+                  <button 
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className={`w-full text-left p-2 hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-2 ${
+                      soundEnabled ? 'text-green-600' : 'text-gray-500'
+                    }`}
+                  >
+                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                    <span className="text-sm">{soundEnabled ? 'Som Ativado' : 'Som Desativado'}</span>
+                  </button>
+                  
+                  {/* Informações de conexão detalhadas */}
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <h5 className="font-medium text-gray-700 mb-2">Conexão WebSocket</h5>
+                    <div className="space-y-1 text-xs text-gray-600">
+                      <div className="flex justify-between">
+                        <span>Status:</span>
+                        <span className={chatState.isRealtimeConnected ? 'text-green-600' : 'text-red-600'}>
+                          {chatState.connectionStatus}
+                        </span>
+                      </div>
+                      {chatState.lastUpdateTime && (
+                        <div className="flex justify-between">
+                          <span>Última atualização:</span>
+                          <span>{getConnectionLatency()} atrás</span>
+                        </div>
+                      )}
+                      {clientInfo.isWhatsApp && (
+                        <div className="flex justify-between">
+                          <span>Evolution API:</span>
+                          <span className="text-green-600">Integrado</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

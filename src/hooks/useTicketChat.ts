@@ -587,11 +587,25 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
             if (phoneNumber && phoneNumber !== 'Telefone não informado') {
               console.log('📤 [WHATSAPP] Enviando via Evolution API...');
               
-              const evolutionResponse = await sendEvolutionMessage(
-                fixedTicket,
-                messageText,
-                { type: 'text' }
-              );
+              // Preparar dados para Evolution API
+              const evolutionData = {
+                phone: phoneNumber,
+                text: messageText,
+                instance: fixedTicket?.metadata?.evolution_instance || 'atendimento-ao-cliente-suporte',
+                options: {
+                  delay: 1000,
+                  presence: 'composing' as const,
+                  linkPreview: true
+                }
+              };
+              
+              console.log('📞 [WHATSAPP] Dados para Evolution API:', {
+                phone: evolutionData.phone,
+                text: evolutionData.text.substring(0, 50) + '...',
+                instance: evolutionData.instance
+              });
+              
+              const evolutionResponse = await sendEvolutionMessage(evolutionData);
               
               if (evolutionResponse?.success) {
                 console.log('✅ [WHATSAPP] Enviado via Evolution API');
