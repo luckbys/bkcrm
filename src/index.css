@@ -940,3 +940,22 @@
 .chat-no-scroll {
   overflow: hidden;
 }
+
+/* Classe para quebra adequada de texto em mensagens */
+.message-text-break {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -moz-hyphens: auto;
+  -ms-hyphens: auto;
+  white-space: pre-wrap;
+  max-width: 100%;
+}
+
+/* Para URLs e texto sem espaços */
+.message-text-break * {
+  max-width: 100%;
+  overflow: hidden;
+}

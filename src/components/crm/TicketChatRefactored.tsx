@@ -52,6 +52,14 @@ interface TicketChatProps {
  * 🎨 UI/UX Aprimorada: Interface moderna com animações e feedback visual
  */
 const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMinimize }) => {
+  // 🔧 DEBUG: Log do estado completo do chat
+  console.log('🚀 [DEBUG] TicketChatRefactored renderizado:', {
+    hasTicket: !!ticket,
+    ticketId: ticket?.id,
+    ticketTitle: ticket?.title || ticket?.subject,
+    timestamp: new Date().toISOString()
+  });
+
   // 🚀 INTEGRAÇÃO COM SISTEMA REAL DE MENSAGENS + WEBSOCKET EVOLUTION API
   const chatState = useTicketChat(ticket);
   const { toast } = useToast();
@@ -65,6 +73,16 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // 🔧 DEBUG: Log do estado do chatState
+  console.log('🔧 [DEBUG] chatState completo:', {
+    hasRealTimeMessages: !!chatState.realTimeMessages,
+    messagesLength: chatState.realTimeMessages?.length || 0,
+    isLoadingHistory: chatState.isLoadingHistory,
+    isRealtimeConnected: chatState.isRealtimeConnected,
+    connectionStatus: chatState.connectionStatus,
+    currentTicket: chatState.currentTicket?.id || 'sem ticket'
+  });
 
   // Templates de resposta rápida
   const quickTemplates = [
@@ -166,12 +184,30 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
 
   // Filtrar mensagens baseado na busca
   const getFilteredMessages = useCallback(() => {
-    if (!chatState.messageSearchTerm) return chatState.realTimeMessages;
-    return chatState.realTimeMessages.filter(msg => 
+    // 🔧 DEBUG: Log para diagnosticar problema das mensagens
+    console.log('🔍 [DEBUG] getFilteredMessages chamada:', {
+      totalMessages: chatState.realTimeMessages.length,
+      searchTerm: chatState.messageSearchTerm,
+      isLoading: chatState.isLoadingHistory,
+      isConnected: chatState.isRealtimeConnected,
+      connectionStatus: chatState.connectionStatus,
+      ticketId: ticket?.id || 'sem ticket',
+      rawMessages: chatState.realTimeMessages.slice(0, 3) // Primeiras 3 mensagens
+    });
+
+    if (!chatState.messageSearchTerm) {
+      console.log('🔍 [DEBUG] Retornando todas as mensagens:', chatState.realTimeMessages.length);
+      return chatState.realTimeMessages;
+    }
+    
+    const filtered = chatState.realTimeMessages.filter(msg => 
       msg.content.toLowerCase().includes(chatState.messageSearchTerm.toLowerCase()) ||
       msg.senderName.toLowerCase().includes(chatState.messageSearchTerm.toLowerCase())
     );
-  }, [chatState.realTimeMessages, chatState.messageSearchTerm]);
+    
+    console.log('🔍 [DEBUG] Mensagens filtradas:', filtered.length);
+    return filtered;
+  }, [chatState.realTimeMessages, chatState.messageSearchTerm, chatState.isLoadingHistory, chatState.isRealtimeConnected, chatState.connectionStatus, ticket?.id]);
 
   // 🔄 FUNÇÕES DE INTEGRAÇÃO WEBSOCKET EVOLUTION API
   const handleTypingIndicator = useCallback((message: string) => {
@@ -451,35 +487,38 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
         chatState.showSidebar ? 'flex-1 min-w-0' : 'w-full'
       }`}>
         {/* Header - Altura fixa */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 flex-shrink-0">
+        <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             {/* Informações do Cliente */}
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5" />
+              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                <User className="w-5 h-5 text-gray-600" />
               </div>
               <div>
-                <h3 className="font-bold text-lg">{clientInfo.clientName}</h3>
-                <p className="text-blue-100 text-sm">
-                  {getChannelIcon(chatState.currentTicket?.channel)} {chatState.currentTicket?.channel || 'Chat'} 
-                  {clientInfo.isWhatsApp && ' • WhatsApp'}
-                  {chatState.isRealtimeConnected ? ' • Online' : ' • Conectando...'}
+                <h3 className="font-semibold text-gray-900">{clientInfo.clientName}</h3>
+                <p className="text-gray-500 text-sm flex items-center space-x-2">
+                  <span>{getChannelIcon(chatState.currentTicket?.channel)} {chatState.currentTicket?.channel || 'Chat'}</span>
+                  {clientInfo.isWhatsApp && (
+                    <span className="text-green-600 text-xs font-medium">• WhatsApp</span>
+                  )}
+                  <span className={`w-2 h-2 rounded-full ${chatState.isRealtimeConnected ? 'bg-green-400' : 'bg-gray-300'}`}></span>
+                  <span className="text-xs">{chatState.isRealtimeConnected ? 'Online' : 'Conectando...'}</span>
                 </p>
               </div>
             </div>
 
             {/* Controles do Header */}
-                          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
               {/* Indicador de conexão WebSocket */}
-              <div className="flex items-center space-x-1 bg-white/10 rounded-lg px-2 py-1">
+              <div className="flex items-center space-x-1 bg-gray-50 rounded-lg px-2 py-1">
                 {(() => {
                   const connectionInfo = getConnectionStatus();
                   return (
                     <>
-                      <connectionInfo.icon className={`w-3 h-3 ${connectionInfo.color.replace('text-', 'text-white/')}`} />
-                      <span className="text-xs text-white/80">{connectionInfo.text}</span>
+                      <connectionInfo.icon className={`w-3 h-3 ${connectionInfo.color}`} />
+                      <span className="text-xs text-gray-600">{connectionInfo.text}</span>
                       {chatState.lastUpdateTime && (
-                        <span className="text-xs text-white/60">({getConnectionLatency()})</span>
+                        <span className="text-xs text-gray-400">({getConnectionLatency()})</span>
                       )}
                     </>
                   );
@@ -493,17 +532,17 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                   placeholder="Buscar mensagens..."
                   value={chatState.messageSearchTerm}
                   onChange={(e) => chatState.setMessageSearchTerm(e.target.value)}
-                  className={`bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/40 transition-all duration-300 ${
+                  className={`bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${
                     chatState.showSidebar ? 'w-32 lg:w-40' : 'w-48 lg:w-64'
                   }`}
                 />
-                <Search className="absolute right-2 top-1.5 w-4 h-4 text-white/60" />
+                <Search className="absolute right-2 top-2 w-4 h-4 text-gray-400" />
               </div>
               
               {/* Botões de Ação */}
               <button 
                 onClick={chatState.toggleSidebar}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
                 title="Informações do ticket"
               >
                 <Settings className="w-5 h-5" />
@@ -512,7 +551,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
               {onMinimize && (
                 <button 
                   onClick={onMinimize}
-                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
                   title="Minimizar"
                 >
                   <Minimize2 className="w-5 h-5" />
@@ -521,7 +560,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
               
               <button 
                 onClick={onClose}
-                className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-red-500"
                 title="Fechar"
               >
                 <X className="w-5 h-5" />
@@ -530,16 +569,10 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
           </div>
 
           {/* Informações do Ticket */}
-          <div className="mt-3 flex items-center justify-between">
-            <div className="flex items-center space-x-4 text-sm">
-              <span>Ticket #{chatState.currentTicket?.id}</span>
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <div className="flex items-center space-x-4 text-gray-600">
+              <span className="font-medium">#{chatState.currentTicket?.id}</span>
               <span>{chatState.currentTicket?.subject || chatState.currentTicket?.title || 'Atendimento Geral'}</span>
-              <span>Cliente: {clientInfo.clientName}</span>
-              {clientInfo.isWhatsApp && (
-                <span className="bg-green-500/20 px-2 py-1 rounded-full text-xs">
-                  📱 WhatsApp
-                </span>
-              )}
             </div>
             
             <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(chatState.currentTicket?.status)}`}>
@@ -547,32 +580,14 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
             </div>
           </div>
 
-          {/* Indicador de conexão em tempo real aprimorado */}
-          <div className="mt-2 flex items-center justify-between text-xs">
-            <div className="flex items-center space-x-2 text-blue-200">
-              <span>Última atualização: {chatState.lastUpdateTime ? formatTime(chatState.lastUpdateTime) : 'Nunca'}</span>
-              {chatState.isRealtimeConnected && (
-                <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-              )}
-            </div>
-            
-            {/* Estatísticas de conexão */}
-            <div className="flex items-center space-x-3 text-blue-200">
-              <span>🔗 {chatState.connectionStatus}</span>
-              {clientInfo.isWhatsApp && (
-                <span>📱 WhatsApp</span>
-              )}
-            </div>
-          </div>
-
-          {/* Indicador de digitação */}
+          {/* Indicador de digitação minimalista */}
           {isTyping && (
-            <div className="mt-1 text-xs text-blue-200 flex items-center space-x-1">
+            <div className="mt-2 text-xs text-gray-500 flex items-center space-x-1">
               <span>Digitando</span>
               <div className="flex space-x-1">
-                <div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce"></div>
-                <div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                <div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               </div>
             </div>
           )}
@@ -599,7 +614,24 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
               </div>
             )}
 
-            {/* Mensagens REAIS do sistema com separação visual COMPLETAMENTE APRIMORADA */}
+            {/* 🔧 DEBUG: Log antes da renderização */}
+            {(() => {
+              const messages = getFilteredMessages();
+              console.log('📋 [DEBUG] Renderizando mensagens:', {
+                total: messages.length,
+                ticket: ticket?.id,
+                loading: chatState.isLoadingHistory,
+                connected: chatState.isRealtimeConnected,
+                firstMessages: messages.slice(0, 2).map(m => ({
+                  id: m.id,
+                  content: m.content?.substring(0, 30) + '...',
+                  sender: m.sender
+                }))
+              });
+              return null;
+            })()}
+
+            {/* Mensagens REAIS do sistema com separação visual MINIMALISTA E SOFISTICADA */}
             {getFilteredMessages().map((msg, index) => {
               // Verificação de segurança para evitar erros
               if (!msg || !msg.id) {
@@ -607,7 +639,6 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
               }
 
               // 🎯 LÓGICA CORRETA PARA IDENTIFICAR REMETENTE
-              // Usar a propriedade 'sender' do LocalMessage que foi convertida
               const isFromAgent = msg.sender === 'agent';
               const isFromClient = msg.sender === 'client';
               const isInternalNote = msg.isInternal;
@@ -620,213 +651,144 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
 
               return (
                 <React.Fragment key={msg.id}>
-                  {/* Separador temporal */}
+                  {/* Separador temporal minimalista */}
                   {showTimeSeparator && (
-                    <div className="flex items-center my-6">
-                      <div className="flex-1 border-t border-gray-300"></div>
-                      <span className="px-4 py-2 bg-gray-200 text-gray-600 text-xs rounded-full font-medium shadow-sm">
+                    <div className="flex items-center justify-center my-8">
+                      <div className="bg-gray-100 text-gray-500 text-xs px-3 py-1 rounded-full font-medium">
                         {formatTime(currentTime)}
-                      </span>
-                      <div className="flex-1 border-t border-gray-300"></div>
+                      </div>
                     </div>
                   )}
 
-                  {/* 🎨 CONTAINER DA MENSAGEM COM SEPARAÇÃO VISUAL CLARA */}
-                  <div className={`flex mb-6 ${
+                  {/* 🎨 CONTAINER DA MENSAGEM MINIMALISTA */}
+                  <div className={`flex mb-4 group ${
                     isInternalNote 
-                      ? 'justify-center px-8' 
+                      ? 'justify-center' 
                       : isFromAgent 
-                        ? 'justify-end pl-16' 
-                        : 'justify-start pr-16'
+                        ? 'justify-end pl-12' 
+                        : 'justify-start pr-12'
                   }`}>
                     
-                    {/* 👤 AVATAR DO CLIENTE (lado esquerdo) - VERDE WHATSAPP DESTACADO */}
+                    {/* 👤 AVATAR MINIMALISTA DO CLIENTE */}
                     {isFromClient && !isInternalNote && (
-                      <div className="flex-shrink-0 mr-4 flex flex-col items-center">
-                        <div className="w-12 h-12 bg-gradient-to-br from-green-400 via-green-500 to-green-600 rounded-full flex items-center justify-center shadow-xl border-3 border-white ring-4 ring-green-200">
-                          <span className="text-white text-lg font-bold">
-                            {clientInfo.clientName?.charAt(0)?.toUpperCase() || 'C'}
-                          </span>
+                      <div className="flex-shrink-0 mr-3 flex flex-col items-center">
+                        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 text-sm font-medium">
+                          {clientInfo.clientName?.charAt(0)?.toUpperCase() || 'C'}
                         </div>
-                        {clientInfo.isWhatsApp && (
-                          <div className="mt-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                            📱 WhatsApp
-                          </div>
-                        )}
                       </div>
                     )}
 
-                    {/* 💬 BALÃO DA MENSAGEM COM DESIGN DIFERENCIADO */}
-                    <div className={`group relative transition-all duration-300 hover:scale-[1.02] ${
-                      msg.isInternal 
-                        ? 'max-w-lg' 
-                        : 'max-w-xs lg:max-w-md'
+                    {/* 💬 BALÃO DA MENSAGEM SOFISTICADO */}
+                    <div className={`relative transition-all duration-200 ${
+                      isInternalNote ? 'max-w-2xl' : 'max-w-md'
                     }`}>
                       
-                      {/* 🔒 NOTA INTERNA - DESIGN ESPECIAL CENTRALIZADO */}
+                      {/* 🔒 NOTA INTERNA MINIMALISTA */}
                       {isInternalNote ? (
-                        <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-dashed border-amber-400 rounded-2xl p-4 shadow-lg backdrop-blur-sm">
-                          {/* Header da nota interna */}
-                          <div className="flex items-center justify-center mb-3 pb-2 border-b border-amber-300">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
-                                <span className="text-white text-xs">🔒</span>
-                              </div>
-                              <span className="text-amber-800 font-bold text-sm uppercase tracking-wider">Nota Interna</span>
-                              <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
-                                <span className="text-white text-xs">👁️</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Avatar circular do agente */}
+                        <div className="bg-amber-50 border-l-4 border-amber-400 rounded-lg p-4 shadow-sm">
                           <div className="flex items-start space-x-3">
-                            <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full flex items-center justify-center shadow-md flex-shrink-0">
-                              <span className="text-white text-sm font-bold">👁️</span>
+                            <div className="w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <span className="text-amber-600 text-xs">🔒</span>
                             </div>
-                            
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <div className="text-xs font-medium text-amber-700 mb-1">
-                                {getAgentName()} • Apenas para equipe
+                                {getAgentName()} • Nota interna
                               </div>
-                              <p className="text-sm text-amber-900 font-medium leading-relaxed">
+                              <p className="text-sm text-amber-900 leading-relaxed message-text-break">
                                 {msg.content || 'Mensagem sem conteúdo'}
                               </p>
-                              <div className="flex items-center justify-between mt-3 pt-2 border-t border-amber-200">
-                                <span className="text-xs text-amber-600">{formatTime(msg.timestamp || new Date())}</span>
-                                <span className="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded-full font-medium">Confidencial</span>
+                              <div className="text-xs text-amber-600 mt-2">
+                                {formatTime(msg.timestamp || new Date())}
                               </div>
                             </div>
-                          </div>
-                          
-                          {/* Aviso de privacidade */}
-                          <div className="mt-3 pt-2 border-t border-amber-200 text-center">
-                            <span className="text-xs text-amber-600 italic">Esta nota não é visível para o cliente</span>
                           </div>
                         </div>
                       ) : (
-                        /* 💬 MENSAGENS NORMAIS (CLIENTE/AGENTE) - SEPARAÇÃO VISUAL RADICAL */
-                        <div className={`rounded-2xl px-5 py-4 shadow-2xl transform transition-all duration-300 ${
+                        /* 💬 MENSAGENS NORMAIS MINIMALISTAS */
+                        <div className={`rounded-2xl px-4 py-3 shadow-sm transition-all duration-200 hover:shadow-md overflow-hidden ${
                           isFromAgent 
-                            ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 text-white shadow-blue-200 border-l-4 border-blue-300' 
-                            : 'bg-gradient-to-br from-green-50 to-white border-2 border-green-300 text-gray-800 hover:border-green-400 hover:shadow-green-200 shadow-green-100 border-l-4 border-l-green-500'
+                            ? 'bg-blue-500 text-white ml-auto' 
+                            : 'bg-white border border-gray-200 text-gray-800'
                         }`}>
                           
-                          {/* 🏷️ BADGES IDENTIFICADORES APRIMORADOS */}
-                          {isFromAgent && (
-                            <div className="absolute -top-4 -right-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white text-sm px-4 py-2 rounded-full font-bold shadow-xl border-3 border-white ring-2 ring-blue-200">
-                              🎧 SISTEMA
-                        </div>
-                      )}
-                      
-                          {isFromClient && clientInfo.isWhatsApp && (
-                            <div className="absolute -top-4 -left-4 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm px-4 py-2 rounded-full font-bold shadow-xl border-3 border-white ring-2 ring-green-200">
-                              📱 WHATSAPP
-                        </div>
-                      )}
-                      
-                      {/* Conteúdo da mensagem */}
-                      <div className="space-y-2">
-                            {/* 🏷️ HEADER COM NOME DO REMETENTE APRIMORADO */}
-                            <div className={`text-sm font-bold flex items-center justify-between pb-2 border-b ${
-                              isFromAgent 
-                                ? 'text-blue-100 border-blue-400' 
-                                : 'text-gray-800 border-green-300'
-                        }`}>
-                              <div className="flex items-center space-x-3">
-                                <span className="text-base">
-                                  {isFromAgent 
-                                    ? `🎧 ${(msg.senderName || getAgentName()).toUpperCase()}` 
-                                    : `👤 ${(msg.senderName || clientInfo.clientName || 'Cliente').toUpperCase()}`}
-                                </span>
-                          {clientInfo.isWhatsApp && isFromClient && (
-                                  <span className="bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                                    📱 WhatsApp
-                                  </span>
-                                )}
-                              </div>
-                              {isFromAgent && (
-                                <span className="bg-blue-400 text-white px-3 py-1 rounded-full text-xs font-bold">SISTEMA</span>
-                          )}
-                        </div>
-                        
-                        {/* Texto da mensagem */}
-                            <p className={`text-sm leading-relaxed font-medium ${
-                              isFromAgent ? 'text-white' : 'text-gray-800'
-                        }`}>
-                          {msg.content || 'Mensagem sem conteúdo'}
-                        </p>
-                        
-                            {/* 🕒 FOOTER COM TIMESTAMP E STATUS APRIMORADO */}
-                            <div className={`flex items-center justify-between text-sm pt-3 mt-2 border-t-2 ${
-                              isFromAgent 
-                                ? 'text-blue-100 border-blue-400' 
-                                : 'text-gray-600 border-green-200'
-                        }`}>
-                              <span className="font-bold bg-black/10 px-2 py-1 rounded-full">
-                                🕒 {formatTime(msg.timestamp || new Date())}
-                              </span>
-                          {isFromAgent && (
-                                <div className="flex items-center space-x-2 bg-blue-400/50 px-3 py-1 rounded-full">
-                                  <span className="text-green-300 text-lg">✓✓</span>
-                                  <span className="text-white font-bold">ENTREGUE</span>
-                                </div>
-                              )}
-                              {isFromClient && clientInfo.isWhatsApp && (
-                                <span className="bg-green-500 text-white px-3 py-1 rounded-full font-bold text-xs">
-                                  📱 VIA WHATSAPP
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                          {/* Nome do remetente discreto */}
+                          <div className={`text-xs mb-1 font-medium ${
+                            isFromAgent 
+                              ? 'text-blue-100' 
+                              : 'text-gray-500'
+                          }`}>
+                            {isFromAgent 
+                              ? getAgentName()
+                              : (msg.senderName || clientInfo.clientName || 'Cliente')
+                            }
+                            {clientInfo.isWhatsApp && isFromClient && (
+                              <span className="ml-2 text-green-600">via WhatsApp</span>
+                            )}
+                          </div>
+                          
+                          {/* Conteúdo da mensagem */}
+                          <p className={`text-sm leading-relaxed message-text-break ${
+                            isFromAgent ? 'text-white' : 'text-gray-800'
+                          }`}>
+                            {msg.content || 'Mensagem sem conteúdo'}
+                          </p>
+                          
+                          {/* Timestamp discreto */}
+                          <div className={`text-xs mt-2 flex items-center justify-between ${
+                            isFromAgent 
+                              ? 'text-blue-100' 
+                              : 'text-gray-400'
+                          }`}>
+                            <span>{formatTime(msg.timestamp || new Date())}</span>
+                            {isFromAgent && (
+                              <span className="text-blue-200">✓</span>
+                            )}
+                          </div>
 
-                          {/* Indicador de favorito */}
-                      {chatState.favoriteMessages.has(msg.id) && (
-                            <div className="absolute -top-2 -right-2">
-                              <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-                                <Star className="w-3 h-3 text-white fill-current" />
+                          {/* Indicador de favorito minimalista */}
+                          {chatState.favoriteMessages.has(msg.id) && (
+                            <div className="absolute -top-1 -right-1">
+                              <div className="w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center">
+                                <Star className="w-2 h-2 text-white fill-current" />
                               </div>
-                        </div>
-                      )}
+                            </div>
+                          )}
 
-                          {/* Ações no hover - MELHORADAS */}
-                          <div className="absolute -top-12 right-0 opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white rounded-xl shadow-2xl border-2 border-gray-100 p-2 flex space-x-1 z-20">
-                        <button 
-                          onClick={() => toggleStarMessage(msg.id)}
-                              className={`p-2 hover:bg-yellow-50 rounded-lg transition-colors ${
-                                chatState.favoriteMessages.has(msg.id) ? 'text-yellow-500 bg-yellow-50' : 'text-gray-600'
-                          }`}
-                              title="Favoritar mensagem"
-                        >
-                              <Star className="w-5 h-5" />
-                        </button>
-                        <button 
-                          onClick={() => copyMessage(msg.content)}
-                              className="p-2 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors"
-                              title="Copiar mensagem"
-                        >
-                              <Copy className="w-5 h-5" />
-                        </button>
-                        <button 
-                          onClick={() => replyToMessage(msg.id)}
-                              className="p-2 hover:bg-blue-50 rounded-lg text-gray-600 transition-colors"
-                              title="Responder mensagem"
-                        >
-                              <Reply className="w-5 h-5" />
-                        </button>
-                      </div>
+                          {/* Ações no hover minimalistas */}
+                          <div className="absolute -top-8 right-0 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-white rounded-lg shadow-lg border border-gray-200 p-1 flex space-x-1">
+                            <button 
+                              onClick={() => toggleStarMessage(msg.id)}
+                              className={`p-1.5 hover:bg-gray-50 rounded transition-colors ${
+                                chatState.favoriteMessages.has(msg.id) ? 'text-yellow-500' : 'text-gray-400'
+                              }`}
+                              title="Favoritar"
+                            >
+                              <Star className="w-3 h-3" />
+                            </button>
+                            <button 
+                              onClick={() => copyMessage(msg.content)}
+                              className="p-1.5 hover:bg-gray-50 rounded transition-colors text-gray-400"
+                              title="Copiar"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            <button 
+                              onClick={() => replyToMessage(msg.id)}
+                              className="p-1.5 hover:bg-gray-50 rounded transition-colors text-gray-400"
+                              title="Responder"
+                            >
+                              <Reply className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
 
-                    {/* 👨‍💼 AVATAR DO AGENTE (lado direito) - AZUL SISTEMA DESTACADO */}
+                    {/* 👨‍💼 AVATAR MINIMALISTA DO AGENTE */}
                     {isFromAgent && !isInternalNote && (
-                      <div className="flex-shrink-0 ml-4 flex flex-col items-center">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 rounded-full flex items-center justify-center shadow-xl border-3 border-white ring-4 ring-blue-200">
-                          <span className="text-white text-lg font-bold">🎧</span>
-                        </div>
-                        <div className="mt-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                          {getAgentName()}
+                      <div className="flex-shrink-0 ml-3 flex flex-col items-center">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-sm font-medium">
+                          {getAgentName()?.charAt(0)?.toUpperCase() || 'A'}
                         </div>
                       </div>
                     )}
@@ -844,17 +806,17 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
           }`}>
             {/* Templates de Resposta Rápida */}
             {showTemplates && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Templates de Resposta</h4>
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Templates de Resposta</h4>
                 <div className="grid grid-cols-2 gap-2">
                   {quickTemplates.map(template => (
                     <button
                       key={template.id}
                       onClick={() => handleTemplateSelect(template)}
-                      className="text-left p-2 bg-white rounded border hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                      className="text-left p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
                     >
                       <div className="font-medium text-sm text-gray-800">{template.title}</div>
-                      <div className="text-xs text-gray-500 truncate">{template.content}</div>
+                      <div className="text-xs text-gray-500 truncate mt-1">{template.content}</div>
                     </button>
                   ))}
                 </div>
@@ -863,14 +825,14 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
 
             {/* Picker de Emoji */}
             {showEmojiPicker && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Emojis</h4>
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Emojis</h4>
                 <div className="flex flex-wrap gap-2">
                   {availableEmojis.map(emoji => (
                     <button
                       key={emoji}
                       onClick={() => handleEmojiSelect(emoji)}
-                      className="text-lg hover:scale-110 transition-transform p-1 rounded hover:bg-white"
+                      className="text-lg hover:scale-110 transition-transform p-2 rounded-lg hover:bg-white"
                     >
                       {emoji}
                     </button>
@@ -881,7 +843,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
 
             {/* Barra de ferramentas */}
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3">
                 {/* Toggle para nota interna */}
                 <div className="flex items-center space-x-2">
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -891,18 +853,18 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                       onChange={(e) => chatState.setIsInternal(e.target.checked)}
                       className="sr-only peer" 
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                    <span className={`ml-2 text-sm font-medium ${chatState.isInternal ? 'text-amber-600' : 'text-gray-600'}`}>
-                      {chatState.isInternal ? 'Nota Interna (Privada)' : 'Resposta ao Cliente'}
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                    <span className={`ml-2 text-sm font-medium ${chatState.isInternal ? 'text-blue-600' : 'text-gray-600'}`}>
+                      {chatState.isInternal ? 'Nota interna' : 'Resposta pública'}
                     </span>
                   </label>
                 </div>
                 
-                <div className="flex items-center space-x-1 ml-4">
+                <div className="flex items-center space-x-1">
                   <button 
                     onClick={() => setShowTemplates(!showTemplates)}
                     className={`p-2 rounded-lg transition-colors ${
-                      showTemplates ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-600'
+                      showTemplates ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50 text-gray-500'
                     }`}
                     title="Templates"
                   >
@@ -912,28 +874,28 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                   <button 
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                     className={`p-2 rounded-lg transition-colors ${
-                      showEmojiPicker ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-600'
+                      showEmojiPicker ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50 text-gray-500'
                     }`}
                     title="Emojis"
                   >
                     <Smile className="w-4 h-4" />
                   </button>
                   
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600" title="Anexar arquivo">
+                  <button className="p-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-500" title="Anexar arquivo">
                     <Paperclip className="w-4 h-4" />
                   </button>
                   
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600" title="Gravar áudio">
+                  <button className="p-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-500" title="Gravar áudio">
                     <Mic className="w-4 h-4" />
                   </button>
                   
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600" title="Imagem">
+                  <button className="p-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-500" title="Imagem">
                     <Image className="w-4 h-4" />
                   </button>
                 </div>
               </div>
               
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-gray-400">
                 {chatState.message.length}/1000 • {chatState.message.split(' ').filter(w => w.trim()).length} palavras
                 {chatState.isSending && <span className="ml-2 text-blue-500">Enviando...</span>}
               </div>
@@ -955,8 +917,8 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                       chatState.handleSendMessage();
                     }
                   }}
-                  placeholder={chatState.isInternal ? "Digite uma nota interna (apenas para a equipe)..." : "Digite sua mensagem para o cliente..."}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[48px] max-h-32 transition-all duration-300"
+                  placeholder={chatState.isInternal ? "Digite uma nota interna..." : "Digite sua mensagem..."}
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[48px] max-h-32 transition-all duration-200"
                   rows={1}
                   disabled={chatState.isSending}
                   onInput={(e) => {
@@ -966,19 +928,19 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                   }}
                 />
                 
-                {/* Indicador de caracteres */}
+                {/* Indicador de caracteres minimalista */}
                 {chatState.message.length > 800 && (
-                  <div className={`absolute bottom-2 right-2 text-xs px-2 py-1 rounded-full font-medium ${
+                  <div className={`absolute bottom-2 right-2 text-xs px-2 py-1 rounded-full ${
                     chatState.message.length > 950 
-                      ? 'bg-red-100 text-red-700 border border-red-200' 
-                      : 'bg-amber-100 text-amber-700 border border-amber-200'
+                      ? 'bg-red-50 text-red-600' 
+                      : 'bg-yellow-50 text-yellow-600'
                   }`}>
-                    {1000 - chatState.message.length} restantes
+                    {1000 - chatState.message.length}
                   </div>
                 )}
               </div>
               
-              {/* Botão de envio */}
+              {/* Botão de envio minimalista */}
               <button
                 onClick={chatState.handleSendMessage}
                 disabled={!chatState.message.trim() || chatState.isSending}
@@ -986,32 +948,24 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                   chatState.isInternal 
                     ? 'bg-amber-500 hover:bg-amber-600' 
                     : 'bg-blue-500 hover:bg-blue-600'
-                } disabled:bg-gray-300 text-white p-3 rounded-xl transition-all shadow-lg hover:shadow-xl disabled:cursor-not-allowed flex items-center justify-center min-w-[48px] hover:scale-105 disabled:hover:scale-100`}
+                } disabled:bg-gray-300 text-white p-3 rounded-xl transition-all shadow-sm hover:shadow-md disabled:cursor-not-allowed flex items-center justify-center min-w-[48px]`}
               >
                 {chatState.isSending ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <Send className="w-5 h-5" />
+                  <Send className="w-4 h-4" />
                 )}
               </button>
             </div>
 
-            {/* Atalhos de teclado */}
+            {/* Atalhos de teclado discretos */}
             <div className="mt-2 text-xs text-gray-400 text-center">
               <span className="inline-flex items-center space-x-1">
-                <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">Enter</kbd>
+                <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-500 font-mono text-xs">Enter</kbd>
                 <span>Enviar</span>
                 <span className="mx-2">•</span>
-                <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">Shift</kbd>
-                <span>+</span>
-                <kbd className="px-2 py-1 bg-gray-100 rounded text-gray-600 font-mono">Enter</kbd>
+                <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-500 font-mono text-xs">Shift + Enter</kbd>
                 <span>Nova linha</span>
-                {chatState.isInternal && (
-                  <>
-                    <span className="mx-2">•</span>
-                    <span className="text-amber-600 font-medium">Modo: Nota Interna</span>
-                  </>
-                )}
               </span>
             </div>
           </div>

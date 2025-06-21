@@ -402,17 +402,29 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     }
   }, []); // 🚀 CORREÇÃO: Sem dependências para evitar loops
 
-  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL OTIMIZADO - CALCULAR ID PRIMEIRO
+  // 🚀 SISTEMA DE MENSAGENS EM TEMPO REAL OTIMIZADO - USAR TICKET ORIGINAL
   const ticketIdForRealtime = (() => {
     try {
-      const rawId = currentTicket?.originalId || currentTicket?.id;
+      // 🎯 CORREÇÃO: Usar ticket original passado como prop, não currentTicket que pode estar incorreto
+      const rawId = ticket?.originalId || ticket?.id;
       if (!rawId) {
-        console.log('⚠️ [REALTIME] Nenhum ID de ticket disponível');
+        console.log('⚠️ [REALTIME] Nenhum ID de ticket disponível no ticket original');
+        console.log('🔍 [REALTIME] Ticket prop:', { 
+          id: ticket?.id, 
+          originalId: ticket?.originalId,
+          title: ticket?.title || ticket?.subject 
+        });
         return null;
       }
       
       const ticketId = rawId.toString();
-      console.log('📡 [REALTIME] Usando ticket ID:', ticketId);
+      console.log('📡 [REALTIME] Usando ticket ID do prop original:', ticketId);
+      console.log('🔍 [REALTIME] Detalhes:', {
+        ticketPropId: ticket?.id,
+        ticketOriginalId: ticket?.originalId,
+        usedId: ticketId,
+        title: ticket?.title || ticket?.subject
+      });
       return ticketId;
     } catch (error) {
       console.error('❌ [REALTIME] Erro ao processar ticket ID:', error);

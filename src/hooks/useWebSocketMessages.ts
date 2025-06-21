@@ -110,10 +110,14 @@ export const useWebSocketMessages = ({
         setIsConnected(true);
         setConnectionStatus('connected');
         
+        // 🔧 DEBUG: Logs detalhados para diagnosticar
+        console.log(`🔗 [WS] Entrando no ticket:`, { ticketId, userId });
+        
         // Entrar no ticket
         socket.emit('join-ticket', { ticketId, userId });
         
-        // Solicitar mensagens existentes
+        // Solicitar mensagens existentes - COM LOGS DETALHADOS
+        console.log(`📋 [WS] Solicitando mensagens do ticket: ${ticketId}`);
         socket.emit('request-messages', { ticketId, limit: 50 });
         
         toast({
@@ -140,10 +144,25 @@ export const useWebSocketMessages = ({
       });
 
       socket.on('messages-loaded', (data) => {
-        if (!mountedRef.current || data.ticketId !== ticketId) return;
+        if (!mountedRef.current || data.ticketId !== ticketId) {
+          console.log(`⚠️ [WS] messages-loaded ignorado:`, {
+            mounted: mountedRef.current,
+            dataTicketId: data.ticketId,
+            expectedTicketId: ticketId,
+            match: data.ticketId === ticketId
+          });
+          return;
+        }
         
-        console.log(`📥 [WS] ${data.messages.length} mensagens carregadas`);
-        setMessages(data.messages);
+        console.log(`📥 [WS] ${data.messages?.length || 0} mensagens carregadas para ticket ${ticketId}:`, {
+          messages: data.messages?.slice(0, 3)?.map(m => ({
+            id: m.id,
+            content: m.content?.substring(0, 30) + '...',
+            sender_name: m.sender_name
+          })) || []
+        });
+        
+        setMessages(data.messages || []);
         setLastUpdateTime(new Date());
         setIsLoading(false);
       });

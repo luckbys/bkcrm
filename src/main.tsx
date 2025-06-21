@@ -4,6 +4,11 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 
+// 🔧 Debug scripts para desenvolvimento
+if (import.meta.env.DEV) {
+  import('./utils/test-ticket-messages').catch(console.error);
+}
+
 // Importar helpers para desenvolvimento
 import './utils/dev-helpers'
 import './utils/migration-helpers'
