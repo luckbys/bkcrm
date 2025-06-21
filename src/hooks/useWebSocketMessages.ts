@@ -149,15 +149,26 @@ export const useWebSocketMessages = ({
       });
 
       socket.on('new-message', (message: WebSocketMessage) => {
-        if (!mountedRef.current || message.ticket_id !== ticketId) return;
+        if (!mountedRef.current || message.ticket_id !== ticketId) {
+          console.log(`⚠️ [WS] Mensagem ignorada - mounted: ${mountedRef.current}, ticket match: ${message.ticket_id === ticketId}`);
+          return;
+        }
         
-        console.log(`📨 [WS] Nova mensagem recebida:`, message.content.substring(0, 50));
+        console.log(`📨 [WS] Nova mensagem recebida:`, {
+          id: message.id,
+          content: message.content.substring(0, 50) + '...',
+          sender_id: message.sender_id,
+          sender_name: message.sender_name,
+          ticket_id: message.ticket_id
+        });
         
         setMessages(prev => {
           // Evitar duplicatas
           if (prev.some(m => m.id === message.id)) {
+            console.log(`⚠️ [WS] Mensagem duplicada ignorada: ${message.id}`);
             return prev;
           }
+          console.log(`✅ [WS] Adicionando nova mensagem ao state. Total: ${prev.length + 1}`);
           return [...prev, message];
         });
         

@@ -1,0 +1,42 @@
+# ========================================
+# CREDENCIAIS CORRETAS PARA .env NA RAIZ
+# ========================================
+
+# COPIE ESTE CONTEÚDO PARA UM ARQUIVO CHAMADO .env NA RAIZ DO PROJETO
+# (mesmo local onde está package.json)
+
+# Configuração Supabase - Projeto Real (CORRETO)
+VITE_SUPABASE_URL=https://ajlgjjjvuglwgfnyqqvb.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU5NDQ5NDMsImV4cCI6MjA1MTUyMDk0M30.xbNH2mNzAYJzNOdwjLDBgF_-P8qMa3Fq2YEyHiV_j4U
+VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNTk0NDk0MywiZXhwIjoyMDUxNTIwOTQzfQ.dfIdvOZijcwmRW-6yAchp0CVPIytCKMAjezJxz5YXCU
+
+# Supabase URLs e chaves para backend (sem prefixo VITE_)
+SUPABASE_URL=https://ajlgjjjvuglwgfnyqqvb.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU5NDQ5NDMsImV4cCI6MjA1MTUyMDk0M30.xbNH2mNzAYJzNOdwjLDBgF_-P8qMa3Fq2YEyHiV_j4U
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNTk0NDk0MywiZXhwIjoyMDUxNTIwOTQzfQ.dfIdvOZijcwmRW-6yAchp0CVPIytCKMAjezJxz5YXCU
+
+# Evolution API
+VITE_EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host/
+VITE_EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
+EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host
+EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
+
+# WebSocket
+WEBSOCKET_URL=ws://localhost:4000
+
+# Configurações gerais
+VITE_ENABLE_REALTIME=true
+VITE_DEBUG_MODE=true
+NODE_ENV=development
+
+# ========================================
+# INSTRUÇÕES:
+# ========================================
+# 1. Copie todo este conteúdo
+# 2. Crie um arquivo chamado .env na raiz do projeto
+# 3. Cole este conteúdo no arquivo .env
+# 4. Salve o arquivo
+# 5. Reinicie os servidores:
+#    - Frontend: Ctrl+C e depois npm run dev
+#    - WebSocket: Ctrl+C e depois npm run websocket:dev
+# ======================================== 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTicketsDB } from './useTicketsDB';
 import { useAuth } from './useAuth';
 // import { useWebhookResponses } from './useWebhookResponses'; // Desabilitado
@@ -306,6 +306,32 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
   const [whatsappStatus, setWhatsappStatus] = useState<'connected' | 'disconnected' | 'unknown'>('unknown');
   const [whatsappInstance, setWhatsappInstance] = useState<string | null>(null);
 
+  // 🔧 FUNÇÃO PARA GERAR ID ÚNICO (MOVIDA PARA CIMA)
+  const generateUniqueId = useCallback((messageId: string): number => {
+    const numericPart = messageId.match(/\d+/);
+    if (numericPart) {
+      const id = parseInt(numericPart[0]);
+      if (!isNaN(id)) {
+        return id;
+      }
+    }
+    
+    let hash = 0;
+    for (let i = 0; i < messageId.length; i++) {
+      const char = messageId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    const result = Math.abs(hash);
+    
+    if (isNaN(result)) {
+      console.warn('🚨 ID inválido gerado:', { messageId, result });
+      return Date.now();
+    }
+    
+    return result;
+  }, []);
+
   // Função para carregar dados completos do ticket do banco
   const loadFullTicketData = useCallback(async (ticketId: string) => {
     try {
@@ -405,7 +431,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
 
   // 🔗 SISTEMA WEBSOCKET MESSAGES (Substitui realtime do Supabase)
   const {
-    messages: realTimeMessages,
+    messages: rawWebSocketMessages,
     isLoading: isLoadingHistory,
     isConnected: isRealtimeConnected,
     lastUpdateTime,
@@ -418,6 +444,59 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     userId: user?.id,
     enabled: Boolean(ticket && ticketIdForRealtime) // Só ativar se tiver ticket válido
   });
+
+  // 🔄 CONVERTER MENSAGENS WEBSOCKET PARA FORMATO LOCAL
+  const realTimeMessages = useMemo(() => {
+    console.log(`🔄 [CHAT] Convertendo ${rawWebSocketMessages.length} mensagens WebSocket para LocalMessage`);
+    
+    const converted = rawWebSocketMessages.map((wsMsg): LocalMessage => {
+      // 🎯 LÓGICA CORRIGIDA PARA IDENTIFICAR REMETENTE
+      // 1. Se tem sender_id = mensagem de agente
+      // 2. Se sender_id é null/undefined = mensagem de cliente
+      // 3. Verificar também metadata para confirmar origem
+      let isFromAgent = false;
+      
+      if (wsMsg.sender_id) {
+        // Tem sender_id = mensagem de agente/sistema
+        isFromAgent = true;
+      } else if (wsMsg.metadata?.is_from_whatsapp || wsMsg.metadata?.sender_phone) {
+        // Sem sender_id mas com indicadores WhatsApp = mensagem de cliente
+        isFromAgent = false;
+      } else {
+        // Fallback: assumir que sem sender_id = cliente
+        isFromAgent = false;
+      }
+      
+      const localMsg = {
+        id: generateUniqueId(wsMsg.id), // Converter string UUID para number
+        content: wsMsg.content,
+        sender: (isFromAgent ? 'agent' : 'client') as 'agent' | 'client',
+        senderName: wsMsg.sender_name || (isFromAgent ? 'Atendente' : 'Cliente'),
+        timestamp: new Date(wsMsg.created_at),
+        type: (wsMsg.is_internal ? 'internal' : 'text') as 'text' | 'internal',
+        status: 'delivered' as const,
+        isInternal: wsMsg.is_internal || false,
+        attachments: []
+      };
+      
+      console.log(`📝 [CHAT] Mensagem convertida:`, {
+        id: localMsg.id,
+        sender: localMsg.sender,
+        senderName: localMsg.senderName,
+        content: localMsg.content.substring(0, 30) + '...',
+        isInternal: localMsg.isInternal,
+        originalSenderId: wsMsg.sender_id,
+        isFromWhatsApp: wsMsg.metadata?.is_from_whatsapp
+      });
+      
+      return localMsg;
+    });
+    
+    console.log(`✅ [CHAT] Conversão completa. ${converted.length} mensagens convertidas`);
+    console.log(`👥 [CHAT] Estatísticas: ${converted.filter(m => m.sender === 'client').length} de clientes, ${converted.filter(m => m.sender === 'agent').length} de agentes`);
+    
+    return converted;
+  }, [rawWebSocketMessages, generateUniqueId]);
 
   // Função para obter o ticket ID real (UUID do banco de dados)
   const getRealTicketId = useCallback(async (ticketCompatibilityId: number | string): Promise<string | null> => {
@@ -462,32 +541,6 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       return null;
     }
   }, [ticket?.originalId, user]);
-
-  // Funções de utilidade
-  const generateUniqueId = useCallback((messageId: string): number => {
-    const numericPart = messageId.match(/\d+/);
-    if (numericPart) {
-      const id = parseInt(numericPart[0]);
-      if (!isNaN(id)) {
-        return id;
-      }
-    }
-    
-    let hash = 0;
-    for (let i = 0; i < messageId.length; i++) {
-      const char = messageId.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    const result = Math.abs(hash);
-    
-    if (isNaN(result)) {
-      console.warn('🚨 ID inválido gerado:', { messageId, result });
-      return Date.now();
-    }
-    
-    return result;
-  }, []);
 
   // Função para busca em tempo real
   const searchMessages = useCallback((term: string) => {
@@ -559,7 +612,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
     const newMessage = {
       content: messageText,
       sender: 'agent' as const,
-      senderName: user?.name || 'Agente',
+      senderName: user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente',
       sender_id: user?.id,
       isInternal: internal,
       timestamp: new Date(),
@@ -651,7 +704,7 @@ export const useTicketChat = (ticket: any | null): UseTicketChatReturn => {
       console.error('❌ [ENVIO] Erro completo:', error);
       toast({
         title: "❌ Erro ao enviar mensagem",
-        description: error.message || "Tente novamente",
+        description: (error as Error).message || "Tente novamente",
         variant: "destructive"
       });
       throw error;

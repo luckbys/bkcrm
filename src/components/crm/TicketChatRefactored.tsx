@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useTicketChat } from '../../hooks/useTicketChat';
 import { useToast } from '../../hooks/use-toast';
+import { useAuth } from '../../hooks/useAuth';
 
 interface TicketChatProps {
   ticket: any;
@@ -54,6 +55,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
   // 🚀 INTEGRAÇÃO COM SISTEMA REAL DE MENSAGENS + WEBSOCKET EVOLUTION API
   const chatState = useTicketChat(ticket);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Estados locais para UX aprimorada
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -62,6 +64,7 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   // Templates de resposta rápida
   const quickTemplates = [
@@ -73,6 +76,66 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
 
   // Emojis disponíveis
   const availableEmojis = ['👍', '❤️', '😊', '😢', '😮', '😡', '🎉', '👏', '🔥', '💯'];
+
+  // 🚀 FUNÇÃO PARA OBTER INFORMAÇÕES DO CLIENTE (antes de usar em callbacks)
+  const clientInfo = chatState.extractClientInfo(chatState.currentTicket);
+
+  // 🔍 FUNÇÃO DE DIAGNÓSTICO PARA DEBUGAR MENSAGENS
+  const debugMessageSystem = useCallback(() => {
+    console.log('🔍 [DEBUG] === DIAGNÓSTICO DO SISTEMA DE MENSAGENS ===');
+    console.log('📊 [DEBUG] Estatísticas:', {
+      totalMessages: chatState.realTimeMessages.length,
+      clientMessages: chatState.realTimeMessages.filter(m => m.sender === 'client').length,
+      agentMessages: chatState.realTimeMessages.filter(m => m.sender === 'agent').length,
+      internalMessages: chatState.realTimeMessages.filter(m => m.isInternal).length,
+      connectionStatus: chatState.connectionStatus,
+      isConnected: chatState.isRealtimeConnected
+    });
+    
+    console.log('🎯 [DEBUG] Últimas 5 mensagens:', 
+      chatState.realTimeMessages.slice(-5).map(msg => ({
+        id: msg.id,
+        content: msg.content.substring(0, 30) + '...',
+        sender: msg.sender,
+        senderName: msg.senderName,
+        timestamp: msg.timestamp,
+        isInternal: msg.isInternal
+      }))
+    );
+    
+    console.log('📱 [DEBUG] Informações do ticket:', {
+      ticketId: chatState.currentTicket?.id,
+      channel: chatState.currentTicket?.channel,
+      isWhatsApp: clientInfo.isWhatsApp,
+      clientName: clientInfo.clientName,
+      clientPhone: clientInfo.clientPhone
+    });
+    
+    toast({
+      title: "🔍 Diagnóstico executado",
+      description: `${chatState.realTimeMessages.length} mensagens total. Verifique o console.`,
+      duration: 5000
+    });
+  }, [chatState, clientInfo, toast]);
+
+  // Expor função de diagnóstico globalmente para debug
+  useEffect(() => {
+    (window as any).debugChatMessages = debugMessageSystem;
+    return () => {
+      delete (window as any).debugChatMessages;
+    };
+  }, [debugMessageSystem]);
+
+  // 🚀 FUNÇÃO PARA OBTER NOME DO AGENTE LOGADO
+  const getAgentName = useCallback(() => {
+    if (user?.user_metadata?.name) {
+      return user.user_metadata.name;
+    }
+    if (user?.email) {
+      return user.email.split('@')[0];
+    }
+    return 'Atendente';
+  }, [user]);
 
   // 🚀 TODOS OS HOOKS useCallback ANTES DE QUALQUER RENDERIZAÇÃO CONDICIONAL
   // Funções de interação com mensagens
@@ -167,6 +230,78 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
     return `${Math.floor(diff / 60000)}m`;
   }, [chatState.lastUpdateTime]);
 
+  // 🚀 FUNÇÕES DAS AÇÕES RÁPIDAS
+  const handleWhatsAppCall = useCallback(() => {
+    if (clientInfo.isWhatsApp && clientInfo.clientPhone !== 'Telefone não informado') {
+      const whatsappUrl = `https://wa.me/${clientInfo.clientPhone.replace(/\D/g, '')}`;
+      window.open(whatsappUrl, '_blank');
+      
+      toast({
+        title: "📱 WhatsApp aberto",
+        description: `Chamada iniciada para ${clientInfo.clientPhoneFormatted}`,
+        duration: 3000
+      });
+    }
+  }, [clientInfo, toast]);
+
+  const handleShowHistory = useCallback(() => {
+    setShowHistoryModal(true);
+    toast({
+      title: "📋 Histórico completo",
+      description: "Carregando histórico detalhado...",
+      duration: 2000
+    });
+  }, [toast]);
+
+  const handleAssignCustomer = useCallback(() => {
+    // Esta função pode ser expandida para abrir um modal de seleção de cliente
+    toast({
+      title: "👤 Atribuir Cliente",
+      description: "Funcionalidade em desenvolvimento",
+      duration: 3000
+    });
+  }, [toast]);
+
+  const handleExportChat = useCallback(() => {
+    try {
+      const chatData = {
+        ticket: chatState.currentTicket,
+        messages: chatState.realTimeMessages,
+        client: clientInfo,
+        exportDate: new Date().toISOString(),
+        totalMessages: chatState.realTimeMessages.length,
+        favorites: Array.from(chatState.favoriteMessages)
+      };
+
+      const blob = new Blob([JSON.stringify(chatData, null, 2)], {
+        type: 'application/json'
+      });
+      
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `chat-ticket-${chatState.currentTicket?.id}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "📥 Chat exportado",
+        description: "Dados do chat salvos com sucesso",
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('Erro ao exportar chat:', error);
+      toast({
+        title: "❌ Erro na exportação",
+        description: "Não foi possível exportar o chat",
+        variant: "destructive",
+        duration: 3000
+      });
+    }
+  }, [chatState, clientInfo, toast]);
+
   // 🔔 EFEITO PARA NOTIFICAÇÕES DE NOVAS MENSAGENS VIA WEBSOCKET
   useEffect(() => {
     if (chatState.realTimeMessages.length > 0 && soundEnabled) {
@@ -206,8 +341,6 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
   }, []);
 
   // 🚀 RENDERIZAÇÃO CONDICIONAL APÓS TODOS OS HOOKS
-  // Função para obter informações do cliente
-  const clientInfo = chatState.extractClientInfo(chatState.currentTicket);
 
   // Verificar se chat está carregado
   if (!ticket) {
@@ -466,101 +599,239 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
               </div>
             )}
 
-            {/* Mensagens REAIS do sistema */}
-            {getFilteredMessages().map((msg) => {
+            {/* Mensagens REAIS do sistema com separação visual COMPLETAMENTE APRIMORADA */}
+            {getFilteredMessages().map((msg, index) => {
               // Verificação de segurança para evitar erros
               if (!msg || !msg.id) {
                 return null;
               }
 
+              // 🎯 LÓGICA CORRETA PARA IDENTIFICAR REMETENTE
+              // Usar a propriedade 'sender' do LocalMessage que foi convertida
+              const isFromAgent = msg.sender === 'agent';
+              const isFromClient = msg.sender === 'client';
+              const isInternalNote = msg.isInternal;
+
+              // Verificar se deve mostrar separador temporal
+              const previousMsg = index > 0 ? getFilteredMessages()[index - 1] : null;
+              const currentTime = new Date(msg.timestamp || Date.now());
+              const previousTime = previousMsg ? new Date(previousMsg.timestamp || Date.now()) : null;
+              const showTimeSeparator = previousTime && (currentTime.getTime() - previousTime.getTime()) > 300000; // 5 minutos
+
               return (
-              <div 
-                key={msg.id}
-                className={`flex ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div className={`group max-w-xs lg:max-w-md relative ${
-                  msg.isInternal 
-                    ? 'bg-amber-100 border-amber-300 border-2 border-dashed text-amber-800'
-                    : msg.sender === 'agent' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-white border shadow-sm'
-                } rounded-2xl px-4 py-3 hover:shadow-md transition-shadow`}>
-                  
-                  {/* Avatar para mensagens do cliente */}
-                  {msg.sender === 'client' && (
-                    <div className="absolute -left-8 top-1 w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center text-xs font-bold">
-                      {clientInfo.clientName?.charAt(0) || 'C'}
+                <React.Fragment key={msg.id}>
+                  {/* Separador temporal */}
+                  {showTimeSeparator && (
+                    <div className="flex items-center my-6">
+                      <div className="flex-1 border-t border-gray-300"></div>
+                      <span className="px-4 py-2 bg-gray-200 text-gray-600 text-xs rounded-full font-medium shadow-sm">
+                        {formatTime(currentTime)}
+                      </span>
+                      <div className="flex-1 border-t border-gray-300"></div>
                     </div>
                   )}
 
-                  {/* Badge para nota interna */}
-                  {msg.isInternal && (
-                    <div className="absolute -top-2 -left-2 bg-amber-500 text-white text-xs px-2 py-1 rounded-full font-bold">
-                      PRIVADA
+                  {/* 🎨 CONTAINER DA MENSAGEM COM SEPARAÇÃO VISUAL CLARA */}
+                  <div className={`flex mb-6 ${
+                    isInternalNote 
+                      ? 'justify-center px-8' 
+                      : isFromAgent 
+                        ? 'justify-end pl-16' 
+                        : 'justify-start pr-16'
+                  }`}>
+                    
+                    {/* 👤 AVATAR DO CLIENTE (lado esquerdo) - VERDE WHATSAPP DESTACADO */}
+                    {isFromClient && !isInternalNote && (
+                      <div className="flex-shrink-0 mr-4 flex flex-col items-center">
+                        <div className="w-12 h-12 bg-gradient-to-br from-green-400 via-green-500 to-green-600 rounded-full flex items-center justify-center shadow-xl border-3 border-white ring-4 ring-green-200">
+                          <span className="text-white text-lg font-bold">
+                            {clientInfo.clientName?.charAt(0)?.toUpperCase() || 'C'}
+                          </span>
+                        </div>
+                        {clientInfo.isWhatsApp && (
+                          <div className="mt-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                            📱 WhatsApp
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 💬 BALÃO DA MENSAGEM COM DESIGN DIFERENCIADO */}
+                    <div className={`group relative transition-all duration-300 hover:scale-[1.02] ${
+                      msg.isInternal 
+                        ? 'max-w-lg' 
+                        : 'max-w-xs lg:max-w-md'
+                    }`}>
+                      
+                      {/* 🔒 NOTA INTERNA - DESIGN ESPECIAL CENTRALIZADO */}
+                      {isInternalNote ? (
+                        <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-dashed border-amber-400 rounded-2xl p-4 shadow-lg backdrop-blur-sm">
+                          {/* Header da nota interna */}
+                          <div className="flex items-center justify-center mb-3 pb-2 border-b border-amber-300">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs">🔒</span>
+                              </div>
+                              <span className="text-amber-800 font-bold text-sm uppercase tracking-wider">Nota Interna</span>
+                              <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs">👁️</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Avatar circular do agente */}
+                          <div className="flex items-start space-x-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full flex items-center justify-center shadow-md flex-shrink-0">
+                              <span className="text-white text-sm font-bold">👁️</span>
+                            </div>
+                            
+                            <div className="flex-1">
+                              <div className="text-xs font-medium text-amber-700 mb-1">
+                                {getAgentName()} • Apenas para equipe
+                              </div>
+                              <p className="text-sm text-amber-900 font-medium leading-relaxed">
+                                {msg.content || 'Mensagem sem conteúdo'}
+                              </p>
+                              <div className="flex items-center justify-between mt-3 pt-2 border-t border-amber-200">
+                                <span className="text-xs text-amber-600">{formatTime(msg.timestamp || new Date())}</span>
+                                <span className="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded-full font-medium">Confidencial</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Aviso de privacidade */}
+                          <div className="mt-3 pt-2 border-t border-amber-200 text-center">
+                            <span className="text-xs text-amber-600 italic">Esta nota não é visível para o cliente</span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* 💬 MENSAGENS NORMAIS (CLIENTE/AGENTE) - SEPARAÇÃO VISUAL RADICAL */
+                        <div className={`rounded-2xl px-5 py-4 shadow-2xl transform transition-all duration-300 ${
+                          isFromAgent 
+                            ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 text-white shadow-blue-200 border-l-4 border-blue-300' 
+                            : 'bg-gradient-to-br from-green-50 to-white border-2 border-green-300 text-gray-800 hover:border-green-400 hover:shadow-green-200 shadow-green-100 border-l-4 border-l-green-500'
+                        }`}>
+                          
+                          {/* 🏷️ BADGES IDENTIFICADORES APRIMORADOS */}
+                          {isFromAgent && (
+                            <div className="absolute -top-4 -right-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white text-sm px-4 py-2 rounded-full font-bold shadow-xl border-3 border-white ring-2 ring-blue-200">
+                              🎧 SISTEMA
+                        </div>
+                      )}
+                      
+                          {isFromClient && clientInfo.isWhatsApp && (
+                            <div className="absolute -top-4 -left-4 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm px-4 py-2 rounded-full font-bold shadow-xl border-3 border-white ring-2 ring-green-200">
+                              📱 WHATSAPP
+                        </div>
+                      )}
+                      
+                      {/* Conteúdo da mensagem */}
+                      <div className="space-y-2">
+                            {/* 🏷️ HEADER COM NOME DO REMETENTE APRIMORADO */}
+                            <div className={`text-sm font-bold flex items-center justify-between pb-2 border-b ${
+                              isFromAgent 
+                                ? 'text-blue-100 border-blue-400' 
+                                : 'text-gray-800 border-green-300'
+                        }`}>
+                              <div className="flex items-center space-x-3">
+                                <span className="text-base">
+                                  {isFromAgent 
+                                    ? `🎧 ${(msg.senderName || getAgentName()).toUpperCase()}` 
+                                    : `👤 ${(msg.senderName || clientInfo.clientName || 'Cliente').toUpperCase()}`}
+                                </span>
+                          {clientInfo.isWhatsApp && isFromClient && (
+                                  <span className="bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                                    📱 WhatsApp
+                                  </span>
+                                )}
+                              </div>
+                              {isFromAgent && (
+                                <span className="bg-blue-400 text-white px-3 py-1 rounded-full text-xs font-bold">SISTEMA</span>
+                          )}
+                        </div>
+                        
+                        {/* Texto da mensagem */}
+                            <p className={`text-sm leading-relaxed font-medium ${
+                              isFromAgent ? 'text-white' : 'text-gray-800'
+                        }`}>
+                          {msg.content || 'Mensagem sem conteúdo'}
+                        </p>
+                        
+                            {/* 🕒 FOOTER COM TIMESTAMP E STATUS APRIMORADO */}
+                            <div className={`flex items-center justify-between text-sm pt-3 mt-2 border-t-2 ${
+                              isFromAgent 
+                                ? 'text-blue-100 border-blue-400' 
+                                : 'text-gray-600 border-green-200'
+                        }`}>
+                              <span className="font-bold bg-black/10 px-2 py-1 rounded-full">
+                                🕒 {formatTime(msg.timestamp || new Date())}
+                              </span>
+                          {isFromAgent && (
+                                <div className="flex items-center space-x-2 bg-blue-400/50 px-3 py-1 rounded-full">
+                                  <span className="text-green-300 text-lg">✓✓</span>
+                                  <span className="text-white font-bold">ENTREGUE</span>
+                                </div>
+                              )}
+                              {isFromClient && clientInfo.isWhatsApp && (
+                                <span className="bg-green-500 text-white px-3 py-1 rounded-full font-bold text-xs">
+                                  📱 VIA WHATSAPP
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                          {/* Indicador de favorito */}
+                      {chatState.favoriteMessages.has(msg.id) && (
+                            <div className="absolute -top-2 -right-2">
+                              <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                                <Star className="w-3 h-3 text-white fill-current" />
+                              </div>
+                        </div>
+                      )}
+
+                          {/* Ações no hover - MELHORADAS */}
+                          <div className="absolute -top-12 right-0 opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white rounded-xl shadow-2xl border-2 border-gray-100 p-2 flex space-x-1 z-20">
+                        <button 
+                          onClick={() => toggleStarMessage(msg.id)}
+                              className={`p-2 hover:bg-yellow-50 rounded-lg transition-colors ${
+                                chatState.favoriteMessages.has(msg.id) ? 'text-yellow-500 bg-yellow-50' : 'text-gray-600'
+                          }`}
+                              title="Favoritar mensagem"
+                        >
+                              <Star className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => copyMessage(msg.content)}
+                              className="p-2 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors"
+                              title="Copiar mensagem"
+                        >
+                              <Copy className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => replyToMessage(msg.id)}
+                              className="p-2 hover:bg-blue-50 rounded-lg text-gray-600 transition-colors"
+                              title="Responder mensagem"
+                        >
+                              <Reply className="w-5 h-5" />
+                        </button>
+                      </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  
-                  {/* Conteúdo da mensagem */}
-                  <p className={`text-sm ${
-                    msg.isInternal 
-                      ? 'text-amber-800 font-medium' 
-                      : msg.sender === 'agent' 
-                        ? 'text-white' 
-                        : 'text-gray-800'
-                  }`}>
-                    {msg.content || 'Mensagem sem conteúdo'}
-                  </p>
-                  
-                  {/* Timestamp e status */}
-                  <div className={`flex items-center justify-between mt-1 text-xs ${
-                    msg.isInternal 
-                      ? 'text-amber-600'
-                      : msg.sender === 'agent' 
-                        ? 'text-blue-100' 
-                        : 'text-gray-500'
-                  }`}>
-                    <span>{formatTime(msg.timestamp || new Date())}</span>
-                    <span className="ml-2">{msg.senderName || 'Usuário'}</span>
-                    {msg.sender === 'agent' && (
-                      <span className="ml-2">✓✓</span>
+
+                    {/* 👨‍💼 AVATAR DO AGENTE (lado direito) - AZUL SISTEMA DESTACADO */}
+                    {isFromAgent && !isInternalNote && (
+                      <div className="flex-shrink-0 ml-4 flex flex-col items-center">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 rounded-full flex items-center justify-center shadow-xl border-3 border-white ring-4 ring-blue-200">
+                          <span className="text-white text-lg font-bold">🎧</span>
+                        </div>
+                        <div className="mt-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                          {getAgentName()}
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  {/* Estrela para mensagens favoritas */}
-                  {chatState.favoriteMessages.has(msg.id) && (
-                    <div className="absolute -top-1 -right-1">
-                      <Star className="w-3 h-3 text-yellow-500 fill-current" />
-                    </div>
-                  )}
-
-                  {/* Ações no hover */}
-                  <div className="absolute -top-8 right-0 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-lg shadow-lg border p-1 flex space-x-1 z-10">
-                    <button 
-                      onClick={() => toggleStarMessage(msg.id)}
-                      className={`p-1 hover:bg-gray-100 rounded text-xs transition-colors ${
-                        chatState.favoriteMessages.has(msg.id) ? 'text-yellow-500' : 'text-gray-600'
-                      }`}
-                      title="Favoritar"
-                    >
-                      <Star className="w-3 h-3" />
-                    </button>
-                    <button 
-                      onClick={() => copyMessage(msg.content)}
-                      className="p-1 hover:bg-gray-100 rounded text-gray-600 text-xs transition-colors"
-                      title="Copiar"
-                    >
-                      <Copy className="w-3 h-3" />
-                    </button>
-                    <button 
-                      onClick={() => replyToMessage(msg.id)}
-                      className="p-1 hover:bg-gray-100 rounded text-gray-600 text-xs transition-colors"
-                      title="Responder"
-                    >
-                      <Reply className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+                </React.Fragment>
               );
             })}
           </div>
@@ -896,21 +1167,34 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                 <h4 className="font-medium text-gray-700 mb-3">Ações Rápidas</h4>
                 <div className="space-y-2">
                   {clientInfo.isWhatsApp && clientInfo.clientPhone !== 'Telefone não informado' && (
-                    <button className="w-full text-left p-2 hover:bg-green-50 rounded-lg transition-colors flex items-center space-x-2 border border-green-200">
+                    <button 
+                      onClick={handleWhatsAppCall}
+                      className="w-full text-left p-2 hover:bg-green-50 rounded-lg transition-colors flex items-center space-x-2 border border-green-200"
+                    >
                       <Phone className="w-4 h-4 text-green-600" />
                       <span className="text-sm text-green-700">Chamar no WhatsApp</span>
                     </button>
                   )}
                   <button 
-                    onClick={() => chatState.setShowCustomerModal(true)}
+                    onClick={handleAssignCustomer}
                     className="w-full text-left p-2 hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-2"
                   >
                     <User className="w-4 h-4 text-gray-500" />
                     <span className="text-sm">Atribuir Cliente</span>
                   </button>
-                  <button className="w-full text-left p-2 hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-2">
+                  <button 
+                    onClick={handleShowHistory}
+                    className="w-full text-left p-2 hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-2"
+                  >
                     <MessageSquare className="w-4 h-4 text-gray-500" />
                     <span className="text-sm">Histórico Completo</span>
+                  </button>
+                  <button 
+                    onClick={handleExportChat}
+                    className="w-full text-left p-2 hover:bg-blue-50 rounded-lg transition-colors flex items-center space-x-2"
+                  >
+                    <FileText className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm">Exportar Chat</span>
                   </button>
                   <button 
                     onClick={chatState.refreshMessages}
@@ -918,6 +1202,14 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
                   >
                     <Settings className="w-4 h-4 text-blue-500" />
                     <span className="text-sm">Atualizar Mensagens</span>
+                  </button>
+                  
+                  <button 
+                    onClick={debugMessageSystem}
+                    className="w-full text-left p-2 hover:bg-orange-50 rounded-lg transition-colors flex items-center space-x-2"
+                  >
+                    <AlertCircle className="w-4 h-4 text-orange-500" />
+                    <span className="text-sm">Diagnóstico de Mensagens</span>
                   </button>
                   
                   {/* Controles de áudio */}
@@ -960,6 +1252,88 @@ const TicketChatRefactored: React.FC<TicketChatProps> = ({ ticket, onClose, onMi
             </div>
           </div>
         </>
+      )}
+
+      {/* Modal de Histórico */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-800">Histórico Completo do Chat</h3>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto max-h-96">
+              <div className="space-y-4">
+                {/* Estatísticas do histórico */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-blue-50 p-3 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-blue-600">{chatState.realTimeMessages.length}</p>
+                    <p className="text-sm text-blue-600">Total de Mensagens</p>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-green-600">
+                      {chatState.realTimeMessages.filter(m => m.sender === 'client').length}
+                    </p>
+                    <p className="text-sm text-green-600">Do Cliente</p>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-purple-600">
+                      {chatState.realTimeMessages.filter(m => m.sender === 'agent').length}
+                    </p>
+                    <p className="text-sm text-purple-600">Do Atendente</p>
+                  </div>
+                </div>
+
+                {/* Lista de mensagens */}
+                <div className="space-y-2">
+                  {chatState.realTimeMessages.map((msg, index) => (
+                    <div 
+                      key={msg.id} 
+                      className={`p-3 rounded-lg border ${
+                        msg.sender === 'agent' ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-sm font-medium ${
+                          msg.sender === 'agent' ? 'text-blue-700' : 'text-gray-700'
+                        }`}>
+                          {msg.sender === 'agent' ? (msg.senderName || getAgentName()) : (msg.senderName || clientInfo.clientName || 'Cliente')}
+                          {msg.isInternal && (
+                            <span className="ml-2 bg-amber-500 text-white text-xs px-2 py-1 rounded-full">
+                              PRIVADA
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatTime(msg.timestamp || new Date())}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-800">{msg.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between p-4 border-t bg-gray-50">
+              <span className="text-sm text-gray-600">
+                Ticket #{chatState.currentTicket?.id} • {clientInfo.isWhatsApp ? '📱 WhatsApp' : '💬 Chat'}
+              </span>
+              <button
+                onClick={handleExportChat}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Exportar Dados
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
