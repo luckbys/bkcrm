@@ -40,7 +40,7 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { MinimizedChatsDrawer } from './ticket-chat/MinimizedChatsDrawer';
+// import { MinimizedChatsDrawer } from './ticket-chat/MinimizedChatsDrawer'; // Removido na refatoração
 import { TicketHeader } from './ticket-management/TicketHeader';
 import { TicketFilters } from './ticket-management/TicketFilters';
 import { TicketsList } from './ticket-management/TicketsList';
@@ -49,7 +49,7 @@ import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useUserDepartment } from '@/hooks/useUserDepartment';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import TicketChatRefactored from './TicketChatRefactored';
+import { ChatWindow } from '../chat/ChatWindow';
 
 interface TicketManagementProps {
   sector: any;
@@ -892,28 +892,15 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
         </TabsContent>
       </Tabs>
 
-      {/* Sistema de Chat Aprimorado – versão modular */}
-      <Dialog 
-        open={!!selectedTicket}
-        onOpenChange={(open) => {
-          if (!open) setSelectedTicket(null);
-        }}
-      >
-        <DialogContent className="max-w-[98vw] w-full h-[95vh] p-0 overflow-hidden">
-          <DialogTitle className="sr-only">
-            Chat do Ticket - {selectedTicket?.client || 'Cliente'}
-          </DialogTitle>
-          {selectedTicket && (
-            <TicketChatRefactored
-              ticket={selectedTicket}
-              onClose={() => setSelectedTicket(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Sistema de Chat Moderno com WebSocket */}
+      <ChatWindow
+        ticketId={selectedTicket?.originalId || selectedTicket?.id?.toString() || ''}
+        isOpen={!!selectedTicket}
+        onClose={() => setSelectedTicket(null)}
+      />
 
-      {/* Drawer de Chats Minimizados */}
-      <MinimizedChatsDrawer />
+      {/* Drawer de Chats Minimizados - Removido na refatoração */}
+      {/* <MinimizedChatsDrawer /> */}
     </div>
   );
 };

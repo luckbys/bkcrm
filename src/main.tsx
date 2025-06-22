@@ -17,7 +17,7 @@ import { testCustomerAssignment, testTicketWithCustomerLoading, cleanupTestData 
 import { debugTicketAssignment, debugCurrentTicket, forceTicketReload } from './utils/debugTicketAssignment'
 
 // Importar diagnóstico de envio WhatsApp
-import './utils/diagnosticoEnvioWhatsApp'
+// import './utils/diagnosticoEnvioWhatsApp' // Removido na refatoração
 
 // Importar teste de validação de telefone
 import './utils/testeValidacaoTelefoneCompleto'
@@ -140,10 +140,16 @@ import './utils/test-realtime-fix'
 // 🔗 Importar testes do sistema WebSocket
 import './utils/test-websocket-system'
 
+// 🔍 Importar diagnóstico de mensagens do banco
+// import './utils/debug-messages-database' // Removido na refatoração
+// import './utils/debug-specific-ticket' // Removido na refatoração
+// import './utils/debug-simple-chat-websocket' // Removido na refatoração
+// import './utils/test-hybrid-system' // Removido na refatoração
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <App />
     </BrowserRouter>
-  </React.StrictMode>,
+  </React.StrictMode>
 )

@@ -153,7 +153,6 @@ export const useWebSocketMessages = ({
           });
           return;
         }
-        
         console.log(`📥 [WS] ${data.messages?.length || 0} mensagens carregadas para ticket ${ticketId}:`, {
           messages: data.messages?.slice(0, 3)?.map(m => ({
             id: m.id,

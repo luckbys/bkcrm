@@ -883,6 +883,8 @@
   height: 100vh;
   max-height: 100vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-main-content {
@@ -890,18 +892,30 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  flex: 1;
 }
 
 .chat-messages-area {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .chat-input-area {
-  flex-shrink: 0;
+  flex-shrink: 0 !important;
   position: relative;
   z-index: 10;
+  background: white;
+  min-height: auto !important;
+}
+
+/* Garantir que o textarea tenha altura controlada */
+.chat-textarea {
+  resize: none !important;
+  min-height: 48px !important;
+  max-height: 120px !important;
+  overflow-y: auto !important;
 }
 
 /* Mobile keyboard viewport fix */
@@ -909,13 +923,33 @@
   .chat-container {
     height: 100vh;
     height: 100dvh; /* Dynamic viewport height para mobile */
+    min-height: 100vh;
+    min-height: 100dvh;
   }
   
   .chat-input-area {
     padding-bottom: env(safe-area-inset-bottom, 0);
-    background: white;
+    background: white !important;
     position: sticky;
     bottom: 0;
+    flex-shrink: 0 !important;
+    z-index: 20 !important;
+  }
+  
+  .chat-messages-area {
+    padding-bottom: 10px; /* Espaço extra para melhor visualização */
+  }
+}
+
+/* Garantir layout correto em tablets */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .chat-container {
+    height: 90vh; /* Usar altura do modal */
+  }
+  
+  .chat-input-area {
+    flex-shrink: 0 !important;
+    min-height: auto !important;
   }
 }
 
