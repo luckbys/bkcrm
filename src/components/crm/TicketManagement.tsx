@@ -50,6 +50,67 @@ import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { UnifiedChatModal } from '../chat/UnifiedChatModal';
 
+// Função helper para extrair informações do cliente do ticket
+const extractClientInfo = (ticket: any) => {
+  if (!ticket) {
+    return {
+      clientName: 'Cliente Anônimo',
+      clientPhone: undefined,
+      isWhatsApp: false
+    };
+  }
+
+  const metadata = ticket.metadata || {};
+  const isWhatsApp = metadata.created_from_whatsapp || 
+                    metadata.whatsapp_phone || 
+                    metadata.anonymous_contact || 
+                    ticket.channel === 'whatsapp';
+
+  let clientName = 'Cliente Anônimo';
+  let clientPhone = undefined;
+
+  if (isWhatsApp) {
+    // Extrair nome do WhatsApp
+    clientName = metadata.client_name || 
+                metadata.whatsapp_name || 
+                (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.name : metadata.anonymous_contact) ||
+                ticket.client ||
+                ticket.whatsapp_contact_name ||
+                'Cliente WhatsApp';
+
+    // Extrair telefone do WhatsApp com múltiplas fontes
+    clientPhone = metadata.client_phone || 
+                 metadata.whatsapp_phone || 
+                 (typeof metadata.anonymous_contact === 'object' ? metadata.anonymous_contact?.phone : null) ||
+                 ticket.client_phone ||
+                 ticket.customerPhone ||
+                 ticket.phone ||
+                 ticket.nunmsg;
+
+    // Formatar telefone brasileiro se necessário
+    if (clientPhone && !clientPhone.includes('+')) {
+      const clean = clientPhone.replace(/\D/g, '');
+      if (clean.length >= 10) {
+        if (clean.length === 13 && clean.startsWith('55')) {
+          clientPhone = `+${clean}`;
+        } else if (clean.length >= 10 && clean.length <= 11) {
+          clientPhone = `+55${clean}`;
+        }
+      }
+    }
+  } else {
+    // Ticket normal (não WhatsApp)
+    clientName = ticket.client || ticket.customer_name || 'Cliente';
+    clientPhone = ticket.customerPhone || ticket.customer_phone;
+  }
+
+  return {
+    clientName: typeof clientName === 'string' ? clientName : 'Cliente Anônimo',
+    clientPhone: typeof clientPhone === 'string' ? clientPhone : undefined,
+    isWhatsApp
+  };
+};
+
 interface TicketManagementProps {
   sector: any;
   onOpenAddTicket: () => void;
@@ -185,8 +246,10 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
   });
   
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [ticketCounts, setTicketCounts] = useState({
     nonVisualized: sector.nonVisualized || 0,
+    inProgress: sector.inProgress || 0,
     total: sector.total || 0
   });
   
@@ -350,7 +413,21 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
   }, []);
 
   const handleTicketClick = useCallback((ticket: Ticket) => {
+    console.log('🎯 [TICKET] Ticket clicado:', {
+      ticket,
+      ticketId: ticket?.id,
+      ticketClient: ticket?.client,
+      ticketSubject: ticket?.subject,
+      ticketKeys: ticket ? Object.keys(ticket) : []
+    });
+    
     setSelectedTicket(ticket);
+    setIsChatOpen(true);
+    
+    console.log('🎯 [TICKET] Estado após clique:', {
+      selectedTicket: ticket,
+      isChatOpen: true
+    });
   }, []);
 
   const handleSearchChange = useCallback((value: string) => {
@@ -502,6 +579,11 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
     console.log('Exportando tickets:', filteredAndSortedTickets);
     // Aqui você implementaria a lógica de export
   }, [filteredAndSortedTickets]);
+
+  const handleCloseChat = useCallback(() => {
+    setIsChatOpen(false);
+    setSelectedTicket(null);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -892,13 +974,23 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
       </Tabs>
 
       {/* Sistema de Chat Moderno com WebSocket */}
-      <UnifiedChatModal
-        ticketId={selectedTicket?.originalId || selectedTicket?.id?.toString() || ''}
-        isOpen={!!selectedTicket}
-        onClose={() => setSelectedTicket(null)}
-        clientName={selectedTicket?.client || 'Cliente'}
-        clientPhone={selectedTicket?.channel === 'whatsapp' ? '+55 11 99999-9999' : undefined}
-      />
+      {selectedTicket && (
+        <UnifiedChatModal
+          ticket={selectedTicket}
+          isOpen={isChatOpen}
+          onOpenChange={setIsChatOpen}
+        />
+      )}
+      
+      {/* Debug do estado do modal */}
+      {console.log('🔍 [DEBUG] Estado do modal:', {
+        selectedTicket,
+        isChatOpen,
+        hasSelectedTicket: !!selectedTicket,
+        shouldRenderModal: !!(selectedTicket && isChatOpen)
+      })}
     </div>
   );
 };
+
+export default TicketManagement;

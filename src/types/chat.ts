@@ -8,15 +8,17 @@ export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
 
 export interface ChatMessage {
   id: string;
+  ticketId?: string; // Opcional para compatibilidade com mensagens antigas
   content: string;
-  type: MessageType;
-  sender: MessageSender;
+  type: 'text' | 'image' | 'file' | 'audio' | 'video';
+  sender: 'agent' | 'client' | 'system';
   senderName: string;
   senderId?: string;
   timestamp: Date;
   isInternal: boolean;
   status: MessageStatus;
-  metadata?: {
+  metadata: {
+    ticket?: any; // Ticket relacionado à mensagem
     isEdited?: boolean;
     editedAt?: Date;
     replyTo?: string;
@@ -28,14 +30,14 @@ export interface ChatMessage {
     }>;
     attachment?: {
       url: string;
+      type: string;
       name: string;
-      size: number;
-      mimeType: string;
+      size?: number;
     };
     whatsapp?: {
       messageId: string;
-      instanceName: string;
-      fromPhone: string;
+      status: 'pending' | 'sent' | 'delivered' | 'read';
+      timestamp: number;
     };
   };
 }
