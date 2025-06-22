@@ -1,9 +1,8 @@
-// 🪟 COMPONENTE PRINCIPAL DE CHAT COM WEBSOCKET
 import React, { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
-import { Button } from './ui/button';
-import { ScrollArea } from './ui/scroll-area';
-import { Input } from './ui/input';
+import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
+import { Button } from '../ui/button';
+import { ScrollArea } from '../ui/scroll-area';
+import { Input } from '../ui/input';
 import { 
   X, Minimize2, Phone, Video, Send, Paperclip, Smile, MoreVertical, Wifi, WifiOff,
   Search, Maximize2, Maximize, Download, Settings, Volume2, VolumeX, Copy, Trash2, Edit3, Star
@@ -12,12 +11,12 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInputTabs } from './MessageInputTabs';
 import { ReplyPreview } from './ReplyPreview';
 import { EmojiPicker } from './EmojiPicker';
-import { cn } from '../lib/utils';
-import { ChatMessage } from '../types/chat';
-import { useChatSocket } from '../hooks/useChatSocket';
-import { useAuth } from '../hooks/useAuth';
+import { cn } from '../../lib/utils';
+import { ChatMessage } from '../../types/chat';
+import { useChatSocket } from '../../hooks/useChatSocket';
+import { useAuth } from '../../hooks/useAuth';
 
-interface ChatWindowProps {
+interface UnifiedChatModalProps {
   isOpen: boolean;
   onClose: () => void;
   onMinimize?: () => void;
@@ -27,7 +26,7 @@ interface ChatWindowProps {
   className?: string;
 }
 
-export const ChatWindow: React.FC<ChatWindowProps> = ({
+export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   isOpen,
   onClose,
   onMinimize,
@@ -63,20 +62,29 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
   useEffect(() => {
     if (isOpen && ticketId) {
+      console.log(`🔗 [CHAT] Entrando no ticket ${ticketId}`);
+      console.log(`🔗 [CHAT] Status da conexão:`, {
+        isConnected,
+        isLoading,
+        isSending,
+        messages: messages?.length || 0,
+        typingUsers: typingUsers?.length || 0
+      });
       handleJoinTicket(ticketId);
     }
     return () => {
       if (isOpen && ticketId) {
+        console.log(`🔌 [CHAT] Saindo do ticket ${ticketId}`);
         handleLeaveTicket();
       }
     };
-  }, [isOpen, ticketId, handleJoinTicket, handleLeaveTicket]);
+  }, [isOpen, ticketId, handleJoinTicket, handleLeaveTicket, isConnected, isLoading, isSending, messages, typingUsers]);
   
   const filteredMessages = React.useMemo(() => {
     if (!searchQuery.trim()) return messages;
     return messages.filter(msg => 
-      msg.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      msg.senderName.toLowerCase().includes(searchQuery.toLowerCase())
+      (msg.content && msg.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (msg.senderName && msg.senderName.toLowerCase().includes(searchQuery.toLowerCase()))
     );
   }, [messages, searchQuery]);
 
@@ -84,7 +92,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     if (!showSearch) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [filteredMessages, showSearch]);
+  }, [messages, showSearch, filteredMessages]);
 
   useEffect(() => {
     if (showSearch) {
@@ -94,6 +102,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const handleSendMessage = async () => {
     if (!messageText.trim()) return;
+    console.log(`[CHAT] Enviando mensagem para ${ticketId}: "${messageText}"`);
     await sendRealMessage(messageText, activeMode === 'internal');
     setMessageText('');
     setReplyingTo(null);
@@ -108,6 +117,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     if (isExpanded) return cn(base, "max-w-7xl h-[95vh]");
     return cn(base, "max-w-5xl h-[90vh]");
   };
+
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -124,7 +137,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 {isConnected ? <Wifi className="w-3 h-3 text-green-500" /> : <WifiOff className="w-3 h-3 text-red-500" />}
                 <span>{isConnected ? 'Online' : 'Offline'}</span>
-                {typingUsers.length > 0 && <span className="text-blue-500 animate-pulse">digitando...</span>}
+                {typingUsers && typingUsers.length > 0 && <span className="text-blue-500 animate-pulse">digitando...</span>}
               </div>
             </div>
           </div>
@@ -147,13 +160,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           <ScrollArea className="flex-1 p-4 bg-gray-100">
             <div className="space-y-4">
               {isLoading && <p className="text-center text-gray-500">Carregando mensagens...</p>}
-              {filteredMessages.map((msg) => (
+              {!isLoading && messages && filteredMessages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
                   message={msg}
                   isFromCurrentUser={msg.senderId === user?.id}
                   onReply={() => setReplyingTo(msg)}
-                  isHighlighted={searchQuery.trim() ? msg.content.toLowerCase().includes(searchQuery.toLowerCase()) : false}
+                  isHighlighted={searchQuery.trim() ? (msg.content && msg.content.toLowerCase().includes(searchQuery.toLowerCase())) : false}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -195,4 +208,4 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       </DialogContent>
     </Dialog>
   );
-}; 
+};

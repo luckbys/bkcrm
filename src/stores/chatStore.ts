@@ -2,16 +2,12 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { io, Socket } from 'socket.io-client';
-import { ChatMessage, MessageStatus } from '../types/chat';
+import { ChatMessage, MessageStatus, SocketTypingUser } from '../types/chat';
 import { supabase } from '../lib/supabase';
 import React from 'react';
 
 // 🎯 Tipos específicos do WebSocket
-interface TypingUser {
-  userId: string;
-  userName: string;
-  timestamp: number;
-}
+// A interface TypingUser foi movida para src/types/chat.ts como SocketTypingUser
 
 interface ChatSocketEvents {
   // Eventos recebidos
@@ -40,7 +36,7 @@ interface ChatStore {
   connectionError: string | null;
   
   // Estado de digitação
-  typingUsers: Record<string, TypingUser[]>; // ticketId -> usuários digitando
+  typingUsers: Record<string, SocketTypingUser[]>; // ticketId -> usuários digitando
   
   // Estado de loading
   isLoading: boolean;
@@ -69,13 +65,17 @@ interface ChatStore {
   
   // Utilitários
   getCurrentMessages: () => ChatMessage[];
-  getTypingUsers: () => TypingUser[];
+  getTypingUsers: () => SocketTypingUser[];
   cleanupExpiredTyping: () => void;
 }
 
 // 🔧 Configurações
-const WEBSOCKET_URL = 'ws://localhost:4000';
+const WEBSOCKET_URL = process.env.VITE_WEBSOCKET_URL || (process.env.NODE_ENV === 'production'
+  ? 'wss://ws.bkcrm.devsible.com.br'  // Usar wss:// em produção
+  : 'ws://localhost:4000');  // Usar ws:// em desenvolvimento
 const TYPING_TIMEOUT = 3000; // 3 segundos
+
+console.log(`🔗 [WebSocket] Ambiente: ${process.env.NODE_ENV}, URL: ${WEBSOCKET_URL}`);
 
 export const useChatStore = create<ChatStore>()(
   subscribeWithSelector((set, get) => ({
@@ -101,6 +101,8 @@ export const useChatStore = create<ChatStore>()(
       }
 
       console.log('🔗 [WebSocket] Conectando ao servidor...');
+      console.log(`🔗 [WebSocket] URL: ${WEBSOCKET_URL}`);
+      console.log(`🔗 [WebSocket] Ambiente: ${process.env.NODE_ENV}`);
       
       const socket = io(WEBSOCKET_URL, {
         transports: ['websocket', 'polling'],
@@ -195,7 +197,7 @@ export const useChatStore = create<ChatStore>()(
         
         if (isTyping) {
           // Adicionar usuário digitando
-          const newTypingUser: TypingUser = {
+          const newTypingUser: SocketTypingUser = {
             userId,
             userName,
             timestamp: Date.now()
@@ -487,7 +489,7 @@ export const useChatStore = create<ChatStore>()(
     cleanupExpiredTyping: () => {
       const { typingUsers } = get();
       const now = Date.now();
-      const cleanedTyping: Record<string, TypingUser[]> = {};
+      const cleanedTyping: Record<string, SocketTypingUser[]> = {};
 
       Object.entries(typingUsers).forEach(([ticketId, users]) => {
         cleanedTyping[ticketId] = users.filter(

@@ -5,6 +5,7 @@ import { SalesFunnel } from './SalesFunnel';
 import { DepartmentDiagnostic } from './admin/DepartmentDiagnostic';
 import { DepartmentEvolutionManager } from './admin/DepartmentEvolutionManager';
 import { Dashboard } from './Dashboard';
+import { ChatDemo } from '../chat/ChatDemo';
 import { Loader2, MessageSquare, Filter, Users, Plus, Settings, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -128,6 +129,8 @@ export const MainContent = ({
         );
       case 'admin':
         return <DepartmentDiagnostic />;
+      case 'chat-demo':
+        return <ChatDemo />;
       default:
         return (
           <div className="flex items-center justify-center h-full">

@@ -266,4 +266,24 @@ export interface ChatTheme {
     md: string;
     lg: string;
   };
+}
+
+// Tipos específicos para o hook useChatSocket
+export interface SocketTypingUser {
+  userId: string;
+  userName: string;
+  timestamp: number;
+}
+
+export interface SocketConnectionStatus {
+  status: 'connected' | 'error' | 'connecting';
+  text: string;
+  color: string;
+}
+
+export interface SocketChatStats {
+  total: number;
+  clientMessages: number;
+  agentMessages: number;
+  internalNotes: number;
 } 

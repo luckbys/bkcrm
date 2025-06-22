@@ -1,22 +1,23 @@
 // 🎣 HOOK PERSONALIZADO PARA WEBSOCKET DO CHAT
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useAuth } from '../hooks/useAuth';
+import { SocketTypingUser, SocketConnectionStatus, SocketChatStats } from '../types/chat';
 
 // 🎯 Tipos locais para evitar conflitos de importação
-interface TypingUser {
+export interface TypingUser {
   userId: string;
   userName: string;
   timestamp: number;
 }
 
-interface ConnectionStatus {
+export interface ConnectionStatus {
   status: 'connected' | 'error' | 'connecting';
   text: string;
   color: string;
 }
 
-interface ChatStats {
+export interface ChatStats {
   total: number;
   clientMessages: number;
   agentMessages: number;
@@ -57,77 +58,75 @@ export const useChatSocket = () => {
     return () => {
       disconnectSocket();
     };
-  }, []);
+  }, [initializeSocket, disconnectSocket]);
 
   // 📝 Carregar respostas rápidas quando conectar
   useEffect(() => {
     if (isConnected) {
       loadCannedResponses();
     }
-  }, [isConnected]);
+  }, [isConnected, loadCannedResponses]);
 
   // ⌨️ Gerenciar digitação com debounce
-  const handleTypingStart = () => {
+  const handleTypingStart = useCallback(() => {
     if (!user?.user_metadata?.name) return;
 
     startTyping(user.user_metadata.name);
 
-    // Limpar timeout anterior
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Parar digitação após 3 segundos
     typingTimeoutRef.current = setTimeout(() => {
       stopTyping();
     }, 3000);
-  };
+  }, [user, startTyping, stopTyping]);
 
-  const handleTypingStop = () => {
+  const handleTypingStop = useCallback(() => {
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
     stopTyping();
-  };
+  }, [stopTyping]);
 
   // 📤 Enviar mensagem com tratamento de erro
-  const handleSendMessage = async (content: string, isInternal = false) => {
+  const handleSendMessage = useCallback(async (content: string, isInternal = false) => {
     if (!currentTicketId || !content.trim()) return;
 
     try {
       await sendMessage(currentTicketId, content, isInternal);
-      handleTypingStop(); // Parar digitação após enviar
+      handleTypingStop();
     } catch (error) {
       console.error('❌ [useChatSocket] Erro ao enviar mensagem:', error);
       throw error;
     }
-  };
+  }, [currentTicketId, sendMessage, handleTypingStop]);
 
   // 🎯 Entrar em um ticket específico
-  const handleJoinTicket = (ticketId: string) => {
+  const handleJoinTicket = useCallback((ticketId: string) => {
     if (ticketId !== currentTicketId) {
       joinTicket(ticketId);
       loadMessages(ticketId);
     }
-  };
+  }, [currentTicketId, joinTicket, loadMessages]);
 
   // 🚪 Sair do ticket atual
-  const handleLeaveTicket = () => {
+  const handleLeaveTicket = useCallback(() => {
     if (currentTicketId) {
       leaveTicket(currentTicketId);
     }
-  };
+  }, [currentTicketId, leaveTicket]);
 
   // 🔗 Status da conexão formatado
-  const getConnectionStatus = (): ConnectionStatus => {
+  const getConnectionStatus = useCallback((): SocketConnectionStatus => {
     if (isConnected) return { status: 'connected', text: 'Conectado', color: 'green' };
     if (connectionError) return { status: 'error', text: 'Erro', color: 'red' };
     return { status: 'connecting', text: 'Conectando...', color: 'yellow' };
-  };
+  }, [isConnected, connectionError]);
 
   // 📊 Estatísticas do chat
-  const getChatStats = (): ChatStats => {
+  const getChatStats = useCallback((): SocketChatStats => {
     const messages = getCurrentMessages();
     const total = messages.length;
     const clientMessages = messages.filter(m => m.sender === 'client').length;
@@ -140,7 +139,7 @@ export const useChatSocket = () => {
       agentMessages,
       internalNotes
     };
-  };
+  }, [getCurrentMessages]);
 
   return {
     // Estados

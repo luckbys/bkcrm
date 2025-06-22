@@ -40,7 +40,6 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-// import { MinimizedChatsDrawer } from './ticket-chat/MinimizedChatsDrawer'; // Removido na refatoração
 import { TicketHeader } from './ticket-management/TicketHeader';
 import { TicketFilters } from './ticket-management/TicketFilters';
 import { TicketsList } from './ticket-management/TicketsList';
@@ -49,7 +48,7 @@ import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useUserDepartment } from '@/hooks/useUserDepartment';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import { ChatWindow } from '../chat/ChatWindow';
+import { UnifiedChatModal } from '../chat/UnifiedChatModal';
 
 interface TicketManagementProps {
   sector: any;
@@ -893,14 +892,13 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
       </Tabs>
 
       {/* Sistema de Chat Moderno com WebSocket */}
-      <ChatWindow
+      <UnifiedChatModal
         ticketId={selectedTicket?.originalId || selectedTicket?.id?.toString() || ''}
         isOpen={!!selectedTicket}
         onClose={() => setSelectedTicket(null)}
+        clientName={selectedTicket?.client || 'Cliente'}
+        clientPhone={selectedTicket?.channel === 'whatsapp' ? '+55 11 99999-9999' : undefined}
       />
-
-      {/* Drawer de Chats Minimizados - Removido na refatoração */}
-      {/* <MinimizedChatsDrawer /> */}
     </div>
   );
 };

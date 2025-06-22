@@ -4,20 +4,12 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 
-// 🔧 Debug scripts para desenvolvimento
-if (import.meta.env.DEV) {
-  import('./utils/test-ticket-messages').catch(console.error);
-}
-
 // Importar helpers para desenvolvimento
 import './utils/dev-helpers'
 import './utils/migration-helpers'
 import './utils/database-test'
 import { testCustomerAssignment, testTicketWithCustomerLoading, cleanupTestData } from './utils/testCustomerAssignment'
 import { debugTicketAssignment, debugCurrentTicket, forceTicketReload } from './utils/debugTicketAssignment'
-
-// Importar diagnóstico de envio WhatsApp
-// import './utils/diagnosticoEnvioWhatsApp' // Removido na refatoração
 
 // Importar teste de validação de telefone
 import './utils/testeValidacaoTelefoneCompleto'
@@ -139,12 +131,6 @@ import './utils/test-realtime-fix'
 
 // 🔗 Importar testes do sistema WebSocket
 import './utils/test-websocket-system'
-
-// 🔍 Importar diagnóstico de mensagens do banco
-// import './utils/debug-messages-database' // Removido na refatoração
-// import './utils/debug-specific-ticket' // Removido na refatoração
-// import './utils/debug-simple-chat-websocket' // Removido na refatoração
-// import './utils/test-hybrid-system' // Removido na refatoração
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Filter, BarChart3, Smartphone, Users } from 'lucide-react';
+import { MessageSquare, Filter, BarChart3, Smartphone, Users, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SectorActionsProps {
@@ -38,6 +38,12 @@ export const SectorActions = ({ currentView, onViewChange }: SectorActionsProps)
       label: 'WhatsApp',
       icon: Smartphone,
       color: 'green'
+    },
+    {
+      id: 'chat-demo',
+      label: 'Chat Demo',
+      icon: Sparkles,
+      color: 'pink'
     }
   ];
 
@@ -54,6 +60,8 @@ export const SectorActions = ({ currentView, onViewChange }: SectorActionsProps)
           return "bg-purple-50/80 hover:bg-purple-100/80 border-purple-200/60 text-purple-700 shadow-sm";
         case 'green':
           return "bg-green-50/80 hover:bg-green-100/80 border-green-200/60 text-green-700 shadow-sm";
+        case 'pink':
+          return "bg-pink-50/80 hover:bg-pink-100/80 border-pink-200/60 text-pink-700 shadow-sm";
         default:
           return "bg-white/80 hover:bg-white border-gray-200/60 text-gray-900 shadow-sm";
       }

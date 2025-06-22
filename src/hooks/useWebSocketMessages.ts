@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useToast } from './use-toast';
+import { ChatMessage } from '../types/chat';
 
 // 📨 INTERFACES WEBSOCKET
 interface WebSocketMessage {
@@ -45,6 +46,33 @@ interface UseWebSocketMessagesReturn {
   retry: () => void;
 }
 
+interface TypingUser {
+  userId: string;
+  userName: string;
+  timestamp: number;
+}
+
+interface UseWebSocketMessagesOptions {
+  ticketId: string;
+  wsUrl?: string;
+  autoReconnect?: boolean;
+  reconnectInterval?: number;
+  maxReconnectAttempts?: number;
+}
+
+interface UseWebSocketMessagesReturn {
+  messages: ChatMessage[];
+  isConnected: boolean;
+  isConnecting: boolean;
+  typingUsers: TypingUser[];
+  sendMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  updateMessageStatus: (messageId: string, status: 'sent' | 'delivered' | 'read' | 'failed') => void;
+  startTyping: () => void;
+  stopTyping: () => void;
+  connectionError: string | null;
+  reconnect: () => void;
+}
+
 /**
  * Hook para gerenciar mensagens via WebSocket
  * Substitui o sistema de realtime do Supabase
@@ -72,9 +100,9 @@ export const useWebSocketMessages = ({
   const { toast } = useToast();
 
   // 🔧 Configurações para Easypanel
-  const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
-    ? 'https://ws.bkcrm.devsible.com.br'  // Subdomínio dedicado no Easypanel
-    : 'http://localhost:4000';
+  const WEBSOCKET_URL = process.env.VITE_WEBSOCKET_URL || (process.env.NODE_ENV === 'production' 
+    ? 'wss://ws.bkcrm.devsible.com.br'  // Usar wss:// em produção
+    : 'ws://localhost:4000');  // Usar ws:// em desenvolvimento
     
   console.log(`🔗 [WS] Ambiente: ${process.env.NODE_ENV}, URL: ${WEBSOCKET_URL}`);
 
@@ -89,6 +117,8 @@ export const useWebSocketMessages = ({
     }
 
     console.log(`🔗 [WS] Conectando ao WebSocket... (ticket: ${ticketId})`);
+    console.log(`🔗 [WS] URL: ${WEBSOCKET_URL}`);
+    console.log(`🔗 [WS] Ambiente: ${process.env.NODE_ENV}`);
     setConnectionStatus('connecting');
     setIsLoading(true);
 
@@ -385,5 +415,256 @@ export const useWebSocketMessages = ({
     
     // Utilitários
     retry
+  };
+};
+
+// Hook para Mensagens em Tempo Real via WebSocket
+export const useWebSocketMessagesRealTime = ({
+  ticketId,
+  wsUrl = 'ws://localhost:4000',
+  autoReconnect = true,
+  reconnectInterval = 3000,
+  maxReconnectAttempts = 5
+}: UseWebSocketMessagesOptions): UseWebSocketMessagesReturn => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttempts = useRef(0);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const typingTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Conectar ao WebSocket
+  const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    setIsConnecting(true);
+    setConnectionError(null);
+
+    try {
+      const ws = new WebSocket(`${wsUrl}/chat/${ticketId}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('🔗 WebSocket conectado para ticket:', ticketId);
+        setIsConnected(true);
+        setIsConnecting(false);
+        setConnectionError(null);
+        reconnectAttempts.current = 0;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data: WebSocketMessage = JSON.parse(event.data);
+          
+          switch (data.type) {
+            case 'new-message':
+              const newMessage: ChatMessage = {
+                ...data.payload,
+                timestamp: new Date(data.payload.timestamp)
+              };
+              
+              setMessages(prev => {
+                // Evitar duplicatas
+                const exists = prev.some(msg => msg.id === newMessage.id);
+                if (exists) return prev;
+                
+                // Inserir mensagem na ordem cronológica
+                const updated = [...prev, newMessage];
+                return updated.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+              });
+              break;
+
+            case 'message-status-update':
+              setMessages(prev => prev.map(msg => 
+                msg.id === data.payload.messageId 
+                  ? { ...msg, status: data.payload.status }
+                  : msg
+              ));
+              break;
+
+            case 'typing-start':
+              setTypingUsers(prev => {
+                const filtered = prev.filter(u => u.userId !== data.payload.userId);
+                return [...filtered, {
+                  userId: data.payload.userId,
+                  userName: data.payload.userName,
+                  timestamp: Date.now()
+                }];
+              });
+              break;
+
+            case 'typing-stop':
+              setTypingUsers(prev => prev.filter(u => u.userId !== data.payload.userId));
+              break;
+
+            case 'user-online':
+            case 'user-offline':
+              console.log(`👤 Usuario ${data.payload.userId} ficou ${data.type.split('-')[1]}`);
+              break;
+
+            default:
+              console.log('📨 Mensagem WebSocket desconhecida:', data);
+          }
+        } catch (error) {
+          console.error('❌ Erro ao processar mensagem WebSocket:', error);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log('🔌 WebSocket desconectado:', event.code, event.reason);
+        setIsConnected(false);
+        setIsConnecting(false);
+
+        // Auto-reconectar se necessário
+        if (autoReconnect && reconnectAttempts.current < maxReconnectAttempts) {
+          reconnectAttempts.current++;
+          console.log(`🔄 Tentando reconectar (${reconnectAttempts.current}/${maxReconnectAttempts})...`);
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+          }, reconnectInterval);
+        } else if (reconnectAttempts.current >= maxReconnectAttempts) {
+          setConnectionError('Máximo de tentativas de reconexão atingido');
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('❌ Erro WebSocket:', error);
+        setConnectionError('Erro de conexão WebSocket');
+        setIsConnecting(false);
+      };
+
+    } catch (error) {
+      console.error('❌ Erro ao criar WebSocket:', error);
+      setConnectionError('Falha ao criar conexão WebSocket');
+      setIsConnecting(false);
+    }
+  }, [ticketId, wsUrl, autoReconnect, reconnectInterval, maxReconnectAttempts]);
+
+  // Enviar mensagem
+  const sendMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const messageWithId: ChatMessage = {
+        ...message,
+        id: `temp-${Date.now()}`,
+        timestamp: new Date(),
+        status: 'sending'
+      };
+
+      // Adicionar mensagem otimisticamente
+      setMessages(prev => [...prev, messageWithId]);
+
+      // Enviar via WebSocket
+      wsRef.current.send(JSON.stringify({
+        type: 'send-message',
+        payload: messageWithId
+      }));
+    } else {
+      console.error('❌ WebSocket não conectado');
+    }
+  }, []);
+
+  // Atualizar status da mensagem
+  const updateMessageStatus = useCallback((messageId: string, status: 'sent' | 'delivered' | 'read' | 'failed') => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'update-message-status',
+        payload: { messageId, status }
+      }));
+    }
+
+    // Atualizar localmente também
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, status } : msg
+    ));
+  }, []);
+
+  // Indicar que está digitando
+  const startTyping = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'typing-start',
+        payload: { ticketId }
+      }));
+
+      // Parar de digitar automaticamente após 3 segundos
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      typingTimeoutRef.current = setTimeout(() => {
+        stopTyping();
+      }, 3000);
+    }
+  }, [ticketId]);
+
+  // Parar de digitar
+  const stopTyping = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'typing-stop',
+        payload: { ticketId }
+      }));
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+  }, [ticketId]);
+
+  // Reconectar manualmente
+  const reconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    reconnectAttempts.current = 0;
+    setConnectionError(null);
+    connect();
+  }, [connect]);
+
+  // Limpar usuários digitando antigos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setTypingUsers(prev => prev.filter(user => (now - user.timestamp) < 5000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Conectar ao montar
+  useEffect(() => {
+    connect();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [connect]);
+
+  return {
+    messages,
+    isConnected,
+    isConnecting,
+    typingUsers,
+    sendMessage,
+    updateMessageStatus,
+    startTyping,
+    stopTyping,
+    connectionError,
+    reconnect
   };
 }; 

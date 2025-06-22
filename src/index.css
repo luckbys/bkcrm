@@ -1,3 +1,6 @@
+/* 🎨 Importar estilos do chat - DEVE vir ANTES de tudo */
+@import './styles/chat-animations.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
