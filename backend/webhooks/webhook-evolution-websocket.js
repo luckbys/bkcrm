@@ -166,6 +166,14 @@ io.on('connection', (socket) => {
     try {
       const { ticketId, content, isInternal, userId, senderName } = data;
       
+      console.log(`📨 [WS-SEND] Processando envio:`, {
+        ticketId: ticketId,
+        content: content?.substring(0, 50) + '...',
+        isInternal: isInternal,
+        userId: userId,
+        senderName: senderName
+      });
+      
       // Salvar mensagem no banco
       const messageId = await saveMessageFromWebSocket({
         ticketId,
@@ -189,7 +197,92 @@ io.on('connection', (socket) => {
 
       wsManager.broadcastToTicket(ticketId, 'new-message', newMessage);
       
+      // 🚀 INTEGRAÇÃO EVOLUTION API: Enviar para WhatsApp se não for mensagem interna
+      if (!isInternal && messageId) {
+        console.log(`🔗 [WS-SEND] Tentando enviar para WhatsApp via Evolution API...`);
+        
+        try {
+          // Buscar dados do ticket para obter telefone
+          const { data: ticketData, error: ticketError } = await supabase
+            .from('tickets')
+            .select('nunmsg, metadata, channel')
+            .eq('id', ticketId)
+            .single();
+          
+          if (ticketError) {
+            console.error(`❌ [WS-SEND] Erro ao buscar ticket ${ticketId}:`, ticketError);
+          } else if (ticketData && (ticketData.channel === 'whatsapp' || ticketData.metadata?.is_whatsapp)) {
+            // Extrair telefone do ticket
+            const phone = ticketData.nunmsg || 
+                         ticketData.metadata?.whatsapp_phone || 
+                         ticketData.metadata?.client_phone;
+            
+            if (phone) {
+              console.log(`📱 [WS-SEND] Enviando para WhatsApp: ${phone}`);
+              
+              // Chamar endpoint interno de envio
+              const evolutionPayload = {
+                phone: phone,
+                text: content,
+                instance: ticketData.metadata?.instance_name || 'atendimento-ao-cliente-suporte',
+                options: {
+                  delay: 1000,
+                  presence: 'composing',
+                  linkPreview: true
+                }
+              };
+              
+              const evolutionResponse = await fetch('http://localhost:4000/webhook/send-message', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(evolutionPayload)
+              });
+              
+              const evolutionResult = await evolutionResponse.json();
+              
+              if (evolutionResponse.ok) {
+                console.log(`✅ [WS-SEND] Mensagem enviada para WhatsApp:`, {
+                  phone: phone,
+                  messageId: evolutionResult.messageId,
+                  status: evolutionResult.status
+                });
+                
+                // Atualizar metadata da mensagem com status de envio
+                await supabase
+                  .from('messages')
+                  .update({
+                    metadata: {
+                      sent_via_websocket: true,
+                      is_internal: isInternal,
+                      evolution_sent: true,
+                      evolution_message_id: evolutionResult.messageId,
+                      evolution_status: evolutionResult.status,
+                      sent_to_whatsapp_at: new Date().toISOString()
+                    }
+                  })
+                  .eq('id', messageId);
+                
+              } else {
+                console.error(`❌ [WS-SEND] Erro ao enviar para WhatsApp:`, evolutionResult);
+              }
+              
+            } else {
+              console.log(`⚠️ [WS-SEND] Ticket ${ticketId} não tem telefone para envio WhatsApp`);
+            }
+          } else {
+            console.log(`📧 [WS-SEND] Ticket ${ticketId} não é WhatsApp (channel: ${ticketData?.channel})`);
+          }
+        } catch (evolutionError) {
+          console.error(`❌ [WS-SEND] Erro na integração Evolution API:`, evolutionError);
+        }
+      } else {
+        console.log(`🔒 [WS-SEND] Mensagem interna, não enviando para WhatsApp`);
+      }
+      
     } catch (error) {
+      console.error(`❌ [WS-SEND] Erro geral:`, error);
       socket.emit('error', { message: 'Erro ao enviar mensagem', error: error.message });
     }
   });

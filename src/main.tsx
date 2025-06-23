@@ -201,6 +201,9 @@ import './utils/test-realtime-fix'
 // 🔧 Importar teste da correção UUID
 import './utils/uuid-test'
 
+// 🔗 Importar teste da integração Evolution API
+import './utils/test-evolution-integration'
+
 // 🧪 Importar teste de correção UUID vs ID numérico (removido - agora usa uuid-test.ts)
 
 // 🌐 Importar teste de conexão WebSocket produção
