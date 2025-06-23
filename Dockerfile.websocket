@@ -8,8 +8,8 @@ RUN apk add --no-cache curl
 # Copiar package.json
 COPY package.json ./
 
-# Instalar dependências
-RUN npm ci --only=production
+# Instalar dependências (usar npm install ao invés de npm ci)
+RUN npm install --only=production
 
 # Copiar código do WebSocket server
 COPY webhook-evolution-websocket.js ./
