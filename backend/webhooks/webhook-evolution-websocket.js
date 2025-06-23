@@ -757,17 +757,45 @@ async function processMessage(payload) {
       type: 'text'
     }, instanceName);
 
-    if (!messageId) {
+    if (messageId) {
+      console.log('✅ [PRODUÇÃO] Mensagem processada com sucesso:', {
+        ticketId,
+        messageId,
+        broadcast: true
+      });
+      
+      // 🚀 BROADCAST VIA WEBSOCKET PARA TODOS OS CLIENTES
+      const newMessage = {
+        id: messageId,
+        ticket_id: ticketId,
+        content: messageContent,
+        sender_id: null, // Cliente não tem sender_id
+        sender_name: senderName,
+        is_internal: false,
+        created_at: new Date().toISOString(),
+        type: 'text'
+      };
+
+      // Enviar para todos conectados ao ticket
+      const broadcastResult = wsManager.broadcastToTicket(ticketId, 'new-message', newMessage);
+      
+      if (broadcastResult) {
+        console.log('📡 [PRODUÇÃO] Mensagem enviada via WebSocket para clientes');
+      } else {
+        console.log('📭 [PRODUÇÃO] Nenhum cliente conectado ao ticket');
+      }
+      
+      return { 
+        success: true, 
+        message: 'Mensagem processada com sucesso',
+        ticketId,
+        messageId,
+        broadcast: true
+      };
+    } else {
+      console.log('❌ [PRODUÇÃO] Erro ao salvar mensagem');
       return { success: false, message: 'Erro ao salvar mensagem' };
     }
-
-    return { 
-      success: true, 
-      message: 'Mensagem processada com sucesso',
-      ticketId,
-      messageId,
-      broadcast: true
-    };
 
   } catch (error) {
     console.error('❌ Erro ao processar mensagem:', error);
@@ -1032,6 +1060,27 @@ app.post('/webhook/evolution', async (req, res) => {
                     messageId,
                     broadcast: true
                   });
+                  
+                  // 🚀 BROADCAST VIA WEBSOCKET PARA TODOS OS CLIENTES
+                  const newMessage = {
+                    id: messageId,
+                    ticket_id: ticketId,
+                    content: messageContent,
+                    sender_id: null, // Cliente não tem sender_id
+                    sender_name: senderName,
+                    is_internal: false,
+                    created_at: new Date().toISOString(),
+                    type: 'text'
+                  };
+
+                  // Enviar para todos conectados ao ticket
+                  const broadcastResult = wsManager.broadcastToTicket(ticketId, 'new-message', newMessage);
+                  
+                  if (broadcastResult) {
+                    console.log('📡 [PRODUÇÃO] Mensagem enviada via WebSocket para clientes');
+                  } else {
+                    console.log('📭 [PRODUÇÃO] Nenhum cliente conectado ao ticket');
+                  }
                   
                   result = { 
                     success: true, 
