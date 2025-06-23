@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
@@ -80,9 +80,9 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     };
   }, [isOpen, ticketId, handleJoinTicket, handleLeaveTicket, isConnected, isLoading, isSending, messages, typingUsers]);
   
-  const filteredMessages = React.useMemo(() => {
+  const filteredMessages = useMemo(() => {
     if (!searchQuery.trim()) return messages;
-    return messages.filter(msg => 
+    return messages.filter((msg: any) => 
       (msg.content && msg.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (msg.senderName && msg.senderName.toLowerCase().includes(searchQuery.toLowerCase()))
     );
@@ -174,7 +174,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
           <ScrollArea className="flex-1 p-4 bg-gray-100">
             <div className="space-y-4">
               {isLoading && <p className="text-center text-gray-500">Carregando mensagens...</p>}
-              {!isLoading && messages && filteredMessages.map((msg) => (
+              {!isLoading && messages && filteredMessages.map((msg: any) => (
                 <MessageBubble
                   key={msg.id}
                   message={msg}

@@ -48,7 +48,7 @@ import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useUserDepartment } from '@/hooks/useUserDepartment';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import SimpleChatModal from '../SimpleChatModal';
+import UnifiedChatModalWrapper from '../chat/UnifiedChatModalWrapper';
 
 // Função helper para extrair informações do cliente do ticket
 const extractClientInfo = (ticket: any) => {
@@ -980,9 +980,9 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
         </TabsContent>
       </Tabs>
 
-      {/* Sistema de Chat Simplificado */}
+      {/* Sistema de Chat Unificado */}
       {selectedTicket && (
-        <SimpleChatModal
+        <UnifiedChatModalWrapper
           ticket={selectedTicket}
           isOpen={isChatOpen}
           onOpenChange={setIsChatOpen}

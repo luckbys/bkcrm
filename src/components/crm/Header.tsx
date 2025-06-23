@@ -2,7 +2,7 @@ import { MainMenu } from './header/MainMenu';
 import { SectorTitle } from './header/SectorTitle';
 import { SectorActions } from './header/SectorActions';
 import { ActionButtons } from './header/ActionButtons';
-import { NotificationsDropdown } from './notifications/NotificationsDropdown';
+import { NotificationsDropdown } from '../notifications/NotificationsDropdown';
 import { UserProfile } from './header/UserProfile';
 
 interface HeaderProps {
