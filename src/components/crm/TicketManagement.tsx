@@ -48,7 +48,7 @@ import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useUserDepartment } from '@/hooks/useUserDepartment';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import { UnifiedChatModal } from '../chat/UnifiedChatModal';
+import SimpleChatModal from '../SimpleChatModal';
 
 // Função helper para extrair informações do cliente do ticket
 const extractClientInfo = (ticket: any) => {
@@ -418,17 +418,24 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
       ticketId: ticket?.id,
       ticketClient: ticket?.client,
       ticketSubject: ticket?.subject,
-      ticketKeys: ticket ? Object.keys(ticket) : []
+      ticketKeys: ticket ? Object.keys(ticket) : [],
+      ticketStringified: JSON.stringify(ticket, null, 2)
+    });
+    
+    console.log('🎯 [TICKET] Antes de setSelectedTicket:', {
+      currentSelectedTicket: selectedTicket,
+      newTicket: ticket,
+      currentIsChatOpen: isChatOpen
     });
     
     setSelectedTicket(ticket);
     setIsChatOpen(true);
     
-    console.log('🎯 [TICKET] Estado após clique:', {
+    console.log('🎯 [TICKET] Estado após clique (imediato):', {
       selectedTicket: ticket,
       isChatOpen: true
     });
-  }, []);
+  }, [selectedTicket, isChatOpen]);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value);
@@ -973,22 +980,14 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
         </TabsContent>
       </Tabs>
 
-      {/* Sistema de Chat Moderno com WebSocket */}
+      {/* Sistema de Chat Simplificado */}
       {selectedTicket && (
-        <UnifiedChatModal
+        <SimpleChatModal
           ticket={selectedTicket}
           isOpen={isChatOpen}
           onOpenChange={setIsChatOpen}
         />
       )}
-      
-      {/* Debug do estado do modal */}
-      {console.log('🔍 [DEBUG] Estado do modal:', {
-        selectedTicket,
-        isChatOpen,
-        hasSelectedTicket: !!selectedTicket,
-        shouldRenderModal: !!(selectedTicket && isChatOpen)
-      })}
     </div>
   );
 };

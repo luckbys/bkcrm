@@ -17,6 +17,75 @@ import './utils/testeValidacaoTelefoneCompleto'
 // Configurar endpoint global para receber respostas de webhook (mencionado nas memórias)
 import webhookResponseService from './services/webhook-response-service'
 
+// === TESTE DO NOVO SISTEMA DE CHAT ===
+import { useChatStore } from './stores/chatStore'
+
+// Função global para testar o novo chat
+(globalThis as any).testNewChat = (ticketId = 'TEST-123') => {
+  console.log('🧪 Testando novo sistema de chat...');
+  
+  const store = useChatStore.getState();
+  
+  console.log('📊 Status inicial:', {
+    connected: store.isConnected,
+    loading: store.isLoading,
+    sending: store.isSending,
+    error: store.error,
+    messagesCount: Object.keys(store.messages).length
+  });
+  
+  // Inicializar se não conectado
+  if (!store.isConnected) {
+    console.log('🔄 Inicializando conexão...');
+    store.init();
+  }
+  
+  // Aguardar conexão e testar
+  setTimeout(() => {
+    console.log('🔗 Entrando no ticket:', ticketId);
+    store.join(ticketId);
+    
+    setTimeout(() => {
+      console.log('📥 Carregando mensagens...');
+      store.load(ticketId);
+      
+      setTimeout(() => {
+        console.log('📤 Enviando mensagem de teste...');
+        store.send(ticketId, 'Mensagem de teste do novo sistema!', false).catch(console.error);
+      }, 1000);
+    }, 1000);
+  }, 2000);
+};
+
+// Função para debugar estado do chat
+(globalThis as any).debugNewChat = () => {
+  const store = useChatStore.getState();
+  
+  console.table({
+    'Conectado': store.isConnected ? '✅' : '❌',
+    'Carregando': store.isLoading ? '⏳' : '✅',
+    'Enviando': store.isSending ? '📤' : '✅',
+    'Erro': store.error || 'Nenhum',
+    'Socket': store.socket ? 'Ativo' : 'Inativo',
+    'Tickets': Object.keys(store.messages).length,
+    'Total Mensagens': Object.values(store.messages).reduce((total, msgs) => total + msgs.length, 0)
+  });
+  
+  console.log('📨 Mensagens por ticket:', store.messages);
+  
+  if (store.socket) {
+    console.log('🔗 Socket conectado:', store.socket.connected);
+    console.log('🆔 Socket ID:', store.socket.id);
+  }
+};
+
+// Função para limpar estado do chat
+(globalThis as any).clearNewChat = () => {
+  const store = useChatStore.getState();
+  store.disconnect();
+  console.log('🧹 Estado do chat limpo');
+};
+
 // Função global para receber payload do n8n
 (globalThis as any).receiveN8nWebhookResponse = async (payload: {
   ticketId: string;
@@ -128,6 +197,14 @@ import './utils/test-nunmsg-integration'
 
 // 🚀 Importar teste da correção do realtime
 import './utils/test-realtime-fix'
+
+// 🔧 Importar teste da correção UUID
+import './utils/uuid-test'
+
+// 🧪 Importar teste de correção UUID vs ID numérico (removido - agora usa uuid-test.ts)
+
+// 🌐 Importar teste de conexão WebSocket produção
+import './utils/test-websocket-production'
 
 // 🔗 Importar testes do sistema WebSocket
 import './utils/test-websocket-system'

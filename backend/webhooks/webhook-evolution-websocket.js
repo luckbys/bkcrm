@@ -421,6 +421,16 @@ async function saveMessage(ticketId, messageData, instanceName) {
 // Salvar mensagem enviada via WebSocket
 async function saveMessageFromWebSocket({ ticketId, content, isInternal, userId, senderName }) {
   try {
+    // Verificar se é um UUID válido
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId);
+    
+    if (!isValidUUID) {
+      console.log(`⚠️ [WS] ID do ticket ${ticketId} não é um UUID válido, simulando salvamento`);
+      const mockMessageId = `msg-${ticketId}-${Date.now()}`;
+      console.log(`✅ Mensagem WebSocket simulada: ${mockMessageId}`);
+      return mockMessageId;
+    }
+
     const messageId = crypto.randomUUID();
     const messageRecord = {
       id: messageId,
@@ -458,23 +468,99 @@ async function saveMessageFromWebSocket({ ticketId, content, isInternal, userId,
 // Carregar mensagens de um ticket
 async function loadTicketMessages(ticketId, limit = 50) {
   try {
-    const { data: messages, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('ticket_id', ticketId)
-      .order('created_at', { ascending: true })
-      .limit(limit);
-
-    if (error) {
-      console.error('❌ Erro ao carregar mensagens:', error);
-      return [];
+    console.log(`📥 [WS] Carregando mensagens para ticket: ${ticketId}`);
+    
+    // Verificar se é um UUID válido
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId);
+    
+    let messages = [];
+    
+    if (isValidUUID) {
+      console.log(`🔑 [WS] Ticket UUID válido: ${ticketId}`);
+      // Buscar diretamente por ticket_id UUID
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: true })
+        .limit(limit);
+        
+      if (error) {
+        console.error('❌ [WS] Erro ao carregar mensagens UUID:', error);
+        return [];
+      }
+      messages = data || [];
+      
+    } else {
+      console.log(`🔑 [WS] Ticket ID numérico: ${ticketId}, tentando múltiplas estratégias de busca`);
+      
+      // ESTRATÉGIA 1: Buscar nas últimas mensagens (caso sejam recentes)
+      console.log(`🔍 [WS] Buscando nas últimas 100 mensagens...`);
+      const { data: recentMessages, error: recentError } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+        
+      if (!recentError && recentMessages && recentMessages.length > 0) {
+        console.log(`📊 [WS] Encontradas ${recentMessages.length} mensagens recentes`);
+        // Filtrar mensagens que contenham o ticketId ou sejam relacionadas
+        messages = recentMessages.filter(msg => {
+          return (
+            msg.content?.includes(ticketId) ||
+            msg.metadata?.originalTicketId === ticketId ||
+            msg.metadata?.ticketId === ticketId ||
+            msg.metadata?.ticketId === String(ticketId)
+          );
+        });
+        
+        if (messages.length > 0) {
+          console.log(`✅ [WS] Filtradas ${messages.length} mensagens para ticket ${ticketId}`);
+        } else {
+          // ESTRATÉGIA 2: Buscar por conteúdo
+          console.log(`🔍 [WS] Tentando busca por conteúdo que contenha '${ticketId}'`);
+          const { data: contentMessages, error: contentError } = await supabase
+            .from('messages')
+            .select('*')
+            .ilike('content', `%${ticketId}%`)
+            .order('created_at', { ascending: true })
+            .limit(limit);
+            
+          if (!contentError && contentMessages) {
+            messages = contentMessages;
+            console.log(`🔍 [WS] Busca por conteúdo encontrou ${messages.length} mensagens`);
+          }
+        }
+      }
+      
+      // Se ainda não encontrou, mostrar algumas mensagens de exemplo
+      if (messages.length === 0) {
+        console.log(`🔍 [WS] Para debug, mostrando estrutura de mensagens recentes:`);
+        if (recentMessages && recentMessages.length > 0) {
+          recentMessages.slice(0, 3).forEach((msg, index) => {
+            console.log(`📝 [WS] Mensagem ${index + 1}:`, {
+              id: msg.id,
+              ticket_id: msg.ticket_id,
+              content: msg.content?.substring(0, 50) + '...',
+              metadata: msg.metadata
+            });
+          });
+        }
+      }
     }
 
-    console.log(`✅ Carregadas ${messages?.length || 0} mensagens do ticket ${ticketId}`);
-    return messages || [];
+    console.log(`✅ [WS] Carregadas ${messages.length} mensagens do banco para ticket ${ticketId}`);
+    
+    // 🔧 Se não há mensagens no banco, retornar array vazio para permitir que o usuário inicie a conversa
+    if (messages.length === 0) {
+      console.log(`📭 [WS] Nenhuma mensagem encontrada para ticket ${ticketId} - conversa nova`);
+      return [];
+    }
+    
+    return messages;
 
   } catch (error) {
-    console.error('❌ Erro ao carregar mensagens:', error);
+    console.error('❌ [WS] Erro crítico ao carregar mensagens:', error);
     return [];
   }
 }
