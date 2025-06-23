@@ -973,15 +973,25 @@ app.post('/webhook/evolution', async (req, res) => {
     const payload = req.body;
     const timestamp = new Date().toISOString();
     
+    // Log completo para debug
+    console.log(`🔔 [${timestamp}] Webhook Evolution API - DADOS COMPLETOS:`, JSON.stringify(payload, null, 2));
+    
     console.log(`🔔 [${timestamp}] Webhook Evolution API:`, {
       event: payload.event,
-      instance: payload.instance
+      instance: payload.instance,
+      hasData: !!payload.data,
+      keys: Object.keys(payload)
     });
 
     let result = { success: false, message: 'Evento não processado' };
 
     if (payload.event === 'MESSAGES_UPSERT') {
       result = await processMessage(payload);
+    } else if (payload.event === 'CONNECTION_UPDATE') {
+      console.log('🔗 Atualização de conexão:', payload.data);
+      result = { success: true, message: 'Conexão atualizada' };
+    } else {
+      console.log('⚠️ Evento não reconhecido:', payload.event);
     }
 
     res.status(200).json({ 
