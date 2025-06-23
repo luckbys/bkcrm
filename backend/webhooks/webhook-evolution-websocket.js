@@ -985,13 +985,91 @@ app.post('/webhook/evolution', async (req, res) => {
 
     let result = { success: false, message: 'Evento não processado' };
 
-    if (payload.event === 'MESSAGES_UPSERT') {
-      result = await processMessage(payload);
+    // 🔧 CORREÇÃO: Processar MESSAGES_UPSERT corretamente
+    if (payload.event === 'MESSAGES_UPSERT' && payload.data) {
+      console.log('📨 [PRODUÇÃO] Processando MESSAGES_UPSERT...');
+      
+      try {
+        // Verificar se é mensagem de cliente (não nossa)
+        if (payload.data.key && !payload.data.key.fromMe) {
+          console.log('✅ [PRODUÇÃO] Mensagem de cliente detectada');
+          
+          // Extrair dados básicos
+          const clientPhone = extractPhoneFromJid(payload.data.key.remoteJid);
+          const messageContent = extractMessageContent(payload.data.message);
+          const senderName = payload.data.pushName || `Cliente ${clientPhone?.slice(-4) || 'Unknown'}`;
+          const instanceName = payload.instance || 'atendimento-ao-cliente-suporte';
+          
+          console.log('📱 [PRODUÇÃO] Dados extraídos:', {
+            phone: clientPhone,
+            content: messageContent?.substring(0, 50) + '...',
+            sender: senderName,
+            instance: instanceName
+          });
+          
+          if (clientPhone && messageContent) {
+            // Buscar ou criar cliente
+            const customerId = await findOrCreateCustomer(clientPhone, instanceName, senderName);
+            
+            if (customerId) {
+              // Buscar ou criar ticket
+              const ticketId = await findOrCreateTicket(customerId, clientPhone, instanceName);
+              
+              if (ticketId) {
+                // Salvar mensagem
+                const messageId = await saveMessage(ticketId, {
+                  content: messageContent,
+                  senderName: senderName,
+                  senderPhone: clientPhone,
+                  whatsappMessageId: payload.data.key.id,
+                  timestamp: payload.data.messageTimestamp,
+                  type: 'text'
+                }, instanceName);
+                
+                if (messageId) {
+                  console.log('✅ [PRODUÇÃO] Mensagem processada com sucesso:', {
+                    ticketId,
+                    messageId,
+                    broadcast: true
+                  });
+                  
+                  result = { 
+                    success: true, 
+                    message: 'Mensagem processada com sucesso',
+                    ticketId,
+                    messageId,
+                    broadcast: true
+                  };
+                } else {
+                  console.log('❌ [PRODUÇÃO] Erro ao salvar mensagem');
+                  result = { success: false, message: 'Erro ao salvar mensagem' };
+                }
+              } else {
+                console.log('❌ [PRODUÇÃO] Erro ao criar/buscar ticket');
+                result = { success: false, message: 'Erro ao processar ticket' };
+              }
+            } else {
+              console.log('❌ [PRODUÇÃO] Erro ao criar/buscar cliente');
+              result = { success: false, message: 'Erro ao processar cliente' };
+            }
+          } else {
+            console.log('❌ [PRODUÇÃO] Dados da mensagem inválidos');
+            result = { success: false, message: 'Dados da mensagem inválidos' };
+          }
+        } else {
+          console.log('📤 [PRODUÇÃO] Mensagem própria, ignorando');
+          result = { success: true, message: 'Mensagem própria ignorada' };
+        }
+      } catch (error) {
+        console.error('❌ [PRODUÇÃO] Erro ao processar mensagem:', error);
+        result = { success: false, message: error.message };
+      }
     } else if (payload.event === 'CONNECTION_UPDATE') {
-      console.log('🔗 Atualização de conexão:', payload.data);
+      console.log('🔗 [PRODUÇÃO] Atualização de conexão:', payload.data);
       result = { success: true, message: 'Conexão atualizada' };
     } else {
-      console.log('⚠️ Evento não reconhecido:', payload.event);
+      console.log('⚠️ [PRODUÇÃO] Evento não reconhecido:', payload.event);
+      result = { success: false, message: `Evento ${payload.event} não requer processamento` };
     }
 
     res.status(200).json({ 
@@ -1006,7 +1084,7 @@ app.post('/webhook/evolution', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erro ao processar webhook:', error);
+    console.error('❌ [PRODUÇÃO] Erro ao processar webhook:', error);
     res.status(500).json({ 
       error: 'Erro interno do servidor',
       timestamp: new Date().toISOString(),
