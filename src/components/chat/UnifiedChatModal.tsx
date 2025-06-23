@@ -8,14 +8,42 @@ import {
   X, Minimize2, Phone, Video, Send, Paperclip, Smile, MoreVertical, Wifi, WifiOff,
   Search, Maximize2, Maximize, Download, Settings, Volume2, VolumeX, Copy, Trash2, 
   Edit3, Star, Users, Clock, MessageSquare, AlertCircle, Check, CheckCheck, Loader2,
-  Archive, Pin, Flag, FileText, Image, Video as VideoIcon, Mic, MapPin, User
+  Archive, Pin, Flag, FileText, Image, Video as VideoIcon, Mic, MapPin, User, Save,
+  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { MessageInputTabs } from './MessageInputTabs';
 import { ReplyPreview } from './ReplyPreview';
 import { EmojiPicker } from './EmojiPicker';
+import { NotificationToast, useNotificationToast } from './NotificationToast';
+import { TypingIndicator, useTypingIndicator } from './TypingIndicator';
+import { ConnectionStatus, useConnectionStatus } from './ConnectionStatus';
 import { cn } from '../../lib/utils';
-import { ChatMessage } from '../../types/chat';
+import { ChatMessage as BaseChatMessage } from '../../types/chat';
+
+// Interface local compatível com as mensagens do WebSocket
+interface LocalChatMessage {
+  id: string;
+  content: string;
+  sender: 'agent' | 'client' | 'system';
+  senderName: string;
+  timestamp: Date;
+  isInternal: boolean;
+  type?: 'text' | 'image' | 'file' | 'audio' | 'video';
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  metadata?: any;
+}
+
+// 📝 Templates de resposta rápida
+const QUICK_TEMPLATES = [
+  { id: 'greeting', title: 'Saudação', content: 'Olá! Como posso ajudá-lo hoje?' },
+  { id: 'thanks', title: 'Agradecimento', content: 'Obrigado pelo contato! Fico à disposição.' },
+  { id: 'wait', title: 'Aguarde', content: 'Por favor, aguarde um momento enquanto verifico isso para você.' },
+  { id: 'resolved', title: 'Resolvido', content: 'Problema resolvido! Há mais alguma coisa em que posso ajudar?' },
+  { id: 'followup', title: 'Acompanhamento', content: 'Gostaria de fazer um acompanhamento sobre sua solicitação.' },
+  { id: 'escalate', title: 'Escalar', content: 'Vou escalar sua solicitação para um especialista.' }
+];
+
 import { useChatStore } from '../../stores/chatStore';
 import { useAuth } from '../../hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
@@ -42,6 +70,19 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 }) => {
   const { user } = useAuth();
   
+  // 🎯 Hooks avançados de UX
+  const { 
+    success: showSuccess, 
+    error: showError, 
+    info: showInfo, 
+    warning: showWarning, 
+    NotificationContainer 
+  } = useNotificationToast();
+  
+  const {
+    connectionInfo
+  } = useConnectionStatus();
+  
   // 🔗 Hook do Chat Store com WebSocket real
   const {
     isConnected,
@@ -59,7 +100,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   // 📝 Estados da UI
   const [messageText, setMessageText] = useState('');
   const [activeMode, setActiveMode] = useState<'message' | 'internal'>('message');
-  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [replyingTo, setReplyingTo] = useState<LocalChatMessage | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -72,11 +113,20 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   
+  // 🆕 Novos estados para funcionalidades avançadas
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [showLinkPreview, setShowLinkPreview] = useState(true);
+  const [actionHistory, setActionHistory] = useState<Array<{id: string, action: string, timestamp: Date}>>([]);
+  
   // 📎 Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 💬 Mensagens do ticket atual
   const ticketMessages = useMemo(() => {
@@ -87,10 +137,12 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   const filteredMessages = useMemo(() => {
     if (!searchQuery.trim()) return ticketMessages;
     
-    return ticketMessages.filter((msg: ChatMessage) => 
-      (msg.content && msg.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (msg.senderName && msg.senderName.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    const query = searchQuery.toLowerCase();
+    return ticketMessages.filter((msg: LocalChatMessage) => {
+      const contentMatch = msg.content?.toLowerCase().includes(query);
+      const senderMatch = msg.senderName?.toLowerCase().includes(query);
+      return Boolean(contentMatch || senderMatch);
+    });
   }, [ticketMessages, searchQuery]);
 
   // 📊 Estatísticas das mensagens
@@ -147,9 +199,35 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       if (lastMessage && lastMessage.sender === 'client' && lastMessage.timestamp > lastSeen) {
         // Simular som de notificação
         console.log('🔔 [UNIFIED-CHAT] Nova mensagem do cliente!');
+        showInfo('Nova mensagem recebida!');
       }
     }
-  }, [ticketMessages, soundEnabled, lastSeen]);
+  }, [ticketMessages, soundEnabled, lastSeen, showInfo]);
+
+  // 💾 Auto-save de rascunhos
+  useEffect(() => {
+    if (messageText.trim() && messageText.length > 10) {
+      const draftKey = `draft_${ticketId}`;
+      localStorage.setItem(draftKey, messageText);
+      setDraftSaved(true);
+      
+      // Remover indicação de salvo após 2 segundos
+      const timer = setTimeout(() => setDraftSaved(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [messageText, ticketId]);
+
+  // 📂 Carregar rascunho salvo na inicialização
+  useEffect(() => {
+    if (isOpen && ticketId) {
+      const draftKey = `draft_${ticketId}`;
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft && !messageText) {
+        setMessageText(savedDraft);
+        showInfo('Rascunho restaurado!');
+      }
+    }
+  }, [isOpen, ticketId, messageText, showInfo]);
 
   // ⌨️ Indicador de digitação
   const handleTypingStart = useCallback(() => {
@@ -170,10 +248,23 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     
     console.log(`📤 [UNIFIED-CHAT] Enviando mensagem: "${messageText}" (interno: ${activeMode === 'internal'})`);
     
+    // Adicionar ao histórico de ações
+    const newAction = {
+      id: Date.now().toString(),
+      action: `Enviou mensagem: "${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}"`,
+      timestamp: new Date()
+    };
+    setActionHistory(prev => [newAction, ...prev.slice(0, 9)]); // Manter apenas 10 ações
+    
     try {
       await send(ticketId, messageText, activeMode === 'internal');
       setMessageText('');
       setReplyingTo(null);
+      
+      // Limpar rascunho salvo
+      const draftKey = `draft_${ticketId}`;
+      localStorage.removeItem(draftKey);
+      setDraftSaved(false);
       
       if (typingTimeout) {
         clearTimeout(typingTimeout);
@@ -184,43 +275,72 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       if (textareaRef.current) {
         textareaRef.current.focus();
       }
+
+      showSuccess('Mensagem enviada com sucesso!');
     } catch (error) {
       console.error('❌ [UNIFIED-CHAT] Erro ao enviar mensagem:', error);
+      showError('Erro ao enviar mensagem');
     }
-  }, [messageText, activeMode, isSending, send, ticketId, typingTimeout]);
+  }, [messageText, activeMode, isSending, send, ticketId, typingTimeout, showSuccess, showError]);
 
-  // ⌨️ Atalhos de teclado
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (!isOpen) return;
-      
-      // ESC para fechar
-      if (e.key === 'Escape') {
-        onClose();
-      }
-      
-      // Ctrl+I para alternar modo interno
-      if (e.ctrlKey && e.key === 'i') {
-        e.preventDefault();
-        setActiveMode(mode => mode === 'internal' ? 'message' : 'internal');
-      }
-      
-      // Ctrl+F para buscar
-      if (e.ctrlKey && e.key === 'f') {
-        e.preventDefault();
-        setShowSearch(true);
-      }
-      
-      // Ctrl+B para sidebar
-      if (e.ctrlKey && e.key === 'b') {
-        e.preventDefault();
-        setShowSidebar(!showSidebar);
-      }
-    };
+  // 📂 Drag & Drop para anexos
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isOpen, onClose, showSidebar]);
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileUpload(files);
+    }
+  }, []);
+
+  const handleFileUpload = useCallback((files: File[]) => {
+    files.forEach(file => {
+      // Validar tipos de arquivo
+      const allowedTypes = ['image/', 'text/', 'application/pdf', 'application/msword'];
+      const isAllowed = allowedTypes.some(type => file.type.startsWith(type));
+      
+      if (!isAllowed) {
+        showWarning(`Tipo de arquivo não permitido: ${file.name}`);
+        return;
+      }
+      
+      if (file.size > 10 * 1024 * 1024) { // 10MB
+        showWarning(`Arquivo muito grande: ${file.name}`);
+        return;
+      }
+      
+      console.log('📎 [UNIFIED-CHAT] Uploading file:', file.name);
+      showInfo(`Fazendo upload de: ${file.name}`);
+      
+      // Aqui você implementaria o upload real do arquivo
+      // Por enquanto, apenas simular
+      setTimeout(() => {
+        showSuccess(`Arquivo ${file.name} enviado!`);
+      }, 2000);
+    });
+  }, [showWarning, showInfo, showSuccess]);
+
+  // 📝 Usar template
+  const handleUseTemplate = useCallback((template: typeof QUICK_TEMPLATES[0]) => {
+    setMessageText(template.content);
+    setShowTemplates(false);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+    
+    showInfo(`Template "${template.title}" aplicado!`);
+  }, [showInfo]);
 
   // 🎨 Funções auxiliares
   const getClientInitials = useCallback(() => {
@@ -251,7 +371,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     console.log('📋 [UNIFIED-CHAT] Mensagem copiada');
   }, []);
 
-  const handleReplyToMessage = useCallback((message: ChatMessage) => {
+  const handleReplyToMessage = useCallback((message: LocalChatMessage) => {
     setReplyingTo(message);
     if (textareaRef.current) {
       textareaRef.current.focus();
@@ -463,7 +583,23 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
         {/* 🏗️ Layout Principal */}
         <div className="flex flex-1 min-h-0">
           {/* 💬 Área de Mensagens */}
-          <div className="flex flex-col flex-1 min-h-0">
+          <div 
+            className="flex flex-col flex-1 min-h-0 relative"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* Overlay de Drag & Drop */}
+            {isDragOver && (
+              <div className="absolute inset-0 z-50 bg-blue-500/20 border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                <div className="text-center text-blue-700">
+                  <Upload className="w-12 h-12 mx-auto mb-3 animate-bounce" />
+                  <h3 className="text-lg font-semibold mb-1">Solte seus arquivos aqui</h3>
+                  <p className="text-sm opacity-75">Imagens, PDFs, documentos até 10MB</p>
+                </div>
+              </div>
+            )}
+            
             <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 bg-gradient-to-b from-gray-50 to-gray-100">
               <div className="space-y-4">
                 {/* Estado de carregamento */}
@@ -502,19 +638,25 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                 )}
                 
                 {/* Lista de Mensagens */}
-                {filteredMessages.map((message: ChatMessage) => (
+                {filteredMessages.map((message: LocalChatMessage) => (
                   <MessageBubble
                     key={message.id}
-                    message={message}
+                    message={{
+                      ...message,
+                      type: message.type || 'text',
+                      status: message.status || 'sent',
+                      metadata: message.metadata || {}
+                    }}
                     isFromCurrentUser={message.sender === 'agent'}
                     onReply={() => handleReplyToMessage(message)}
                     onToggleFavorite={() => handleToggleFavorite(message.id)}
                     onCopy={() => handleCopyMessage(message.content)}
                     isFavorite={favoriteMessages.has(message.id)}
-                    isHighlighted={searchQuery.trim() ? 
-                      (message.content && message.content.toLowerCase().includes(searchQuery.toLowerCase())) : 
-                      false
-                    }
+                    isHighlighted={Boolean(
+                      searchQuery.trim() && 
+                      message.content && 
+                      message.content.toLowerCase().includes(searchQuery.toLowerCase())
+                    )}
                     className="transition-all duration-200 hover:scale-[1.01]"
                   />
                 ))}
@@ -551,15 +693,76 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-2">
                   {/* Anexar */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-3 text-gray-600 hover:text-blue-600"
-                    title="Anexar arquivo"
-                  >
-                    <Paperclip className="w-4 h-4 mr-1" />
-                    Anexar
-                  </Button>
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-8 px-3 text-gray-600 hover:text-blue-600"
+                      title="Anexar arquivo (Drag & Drop)"
+                    >
+                      <Paperclip className="w-4 h-4 mr-1" />
+                      Anexar
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.txt"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length > 0) {
+                          handleFileUpload(files);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Templates de Resposta */}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTemplates(!showTemplates)}
+                      className={cn(
+                        "h-8 px-3 text-gray-600 hover:text-purple-600",
+                        showTemplates && "bg-purple-50 text-purple-600"
+                      )}
+                      title="Templates de resposta rápida"
+                    >
+                      <Zap className="w-4 h-4 mr-1" />
+                      Templates
+                    </Button>
+                    
+                    {showTemplates && (
+                      <div className="absolute bottom-full mb-2 left-0 z-50 bg-white border rounded-lg shadow-lg p-2 w-64">
+                        <div className="text-xs font-medium text-gray-700 mb-2 px-2">Templates de Resposta</div>
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {QUICK_TEMPLATES.map((template) => (
+                            <button
+                              key={template.id}
+                              onClick={() => handleUseTemplate(template)}
+                              className="w-full text-left p-2 hover:bg-gray-50 rounded text-sm"
+                            >
+                              <div className="font-medium text-gray-800">{template.title}</div>
+                              <div className="text-gray-500 text-xs truncate">{template.content}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="border-t mt-2 pt-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowTemplates(false)}
+                            className="w-full text-xs"
+                          >
+                            Fechar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Emoji */}
                   <div className="relative">
@@ -595,11 +798,28 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                 <div className="flex items-center gap-3 text-xs text-gray-400">
                   <span>Ticket #{ticketId}</span>
                   <span>•</span>
-                  <span>{messageText.length}/2000</span>
+                  <span className={cn(
+                    messageText.length > 1800 ? "text-red-500" : 
+                    messageText.length > 1500 ? "text-yellow-500" : "text-gray-400"
+                  )}>
+                    {messageText.length}/2000
+                  </span>
+                  {draftSaved && (
+                    <>
+                      <span>•</span>
+                      <span className="text-green-500 flex items-center gap-1">
+                        <Save className="w-3 h-3" />
+                        Rascunho salvo
+                      </span>
+                    </>
+                  )}
                   {replyingTo && (
                     <>
                       <span>•</span>
-                      <span className="text-blue-500">Respondendo</span>
+                      <span className="text-blue-500 flex items-center gap-1">
+                        <Quote className="w-3 h-3" />
+                        Respondendo
+                      </span>
                     </>
                   )}
                 </div>
@@ -733,11 +953,71 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                       )}
                     </div>
                   </div>
+                  
+                  {/* Histórico de Ações */}
+                  {actionHistory.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                        <History className="w-4 h-4" />
+                        Histórico Recente
+                      </h4>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {actionHistory.slice(0, 5).map((action) => (
+                          <div key={action.id} className="text-xs p-2 bg-gray-50 rounded">
+                            <div className="text-gray-800 font-medium">{action.action}</div>
+                            <div className="text-gray-500">
+                              {formatDistanceToNow(action.timestamp, { addSuffix: true, locale: ptBR })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {actionHistory.length > 5 && (
+                        <div className="text-xs text-gray-500 text-center mt-2">
+                          +{actionHistory.length - 5} ações anteriores
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Configurações Avançadas */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                      <Settings className="w-4 h-4" />
+                      Preferências
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Som de notificações</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSoundEnabled(!soundEnabled)}
+                          className={cn("h-6 w-10 p-0", soundEnabled ? "bg-green-100" : "bg-gray-100")}
+                        >
+                          {soundEnabled ? <Volume2 className="w-3 h-3 text-green-600" /> : <VolumeX className="w-3 h-3 text-gray-400" />}
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Pré-visualizar links</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowLinkPreview(!showLinkPreview)}
+                          className={cn("h-6 w-10 p-0", showLinkPreview ? "bg-blue-100" : "bg-gray-100")}
+                        >
+                          {showLinkPreview ? <Link2 className="w-3 h-3 text-blue-600" /> : <X className="w-3 h-3 text-gray-400" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </ScrollArea>
             </div>
           )}
         </div>
+        
+        {/* 🔔 Container de Notificações */}
+        <NotificationContainer />
       </DialogContent>
     </Dialog>
   );
