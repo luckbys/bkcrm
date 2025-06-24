@@ -9,7 +9,7 @@ import {
   Search, Maximize2, Maximize, Download, Settings, Volume2, VolumeX, Copy, Trash2, 
   Edit3, Star, Users, Clock, MessageSquare, AlertCircle, Check, CheckCheck, Loader2,
   Archive, Pin, Flag, FileText, Image, Video as VideoIcon, Mic, MapPin, User, Save,
-  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote, ChevronDown
+  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote, ChevronDown, RefreshCw
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { MessageInputTabs } from './MessageInputTabs';
@@ -128,21 +128,51 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   const [showLinkPreview, setShowLinkPreview] = useState(true);
   const [actionHistory, setActionHistory] = useState<Array<{id: string, action: string, timestamp: Date}>>([]);
   
-  // 🔄 Otimização de estados
-  const [uiState, setUiState] = useState({
-    isBackgroundUpdating: false,
-    lastUpdateTime: new Date(),
-    updateCount: 0,
-    previousMessageCount: 0,
-    draftRestored: false
-  });
+  // 🔄 Estados simplificados
+  const [draftRestored, setDraftRestored] = useState(false);
 
   // 🎯 Cache de mensagens otimizado
   const messageCache = useRef(new Map());
   
-  // 💬 Mensagens do ticket atual
+  // 💬 Mensagens do ticket atual com debug melhorado
   const ticketMessages = useMemo(() => {
-    return messages[ticketId] || [];
+    const rawMessages = messages[ticketId] || [];
+    
+    console.log(`🔍 [UNIFIED-CHAT] Debug mensagens para ticket ${ticketId}:`, {
+      ticketId,
+      totalMessages: rawMessages.length,
+      messagesKeys: Object.keys(messages),
+      firstMessage: rawMessages[0],
+      lastMessage: rawMessages[rawMessages.length - 1],
+      allMessages: rawMessages
+    });
+    
+    // Converter para o formato local se necessário
+    const convertedMessages = rawMessages.map((msg: any) => {
+      // Verificar se já está no formato correto
+      if (msg.sender && msg.senderName && msg.timestamp instanceof Date) {
+        return msg as LocalChatMessage;
+      }
+      
+      // Converter do formato do store para o formato local
+      const converted: LocalChatMessage = {
+        id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+        content: msg.content || '',
+        sender: msg.sender === 'client' ? 'client' : 'agent',
+        senderName: msg.senderName || (msg.sender === 'client' ? 'Cliente' : 'Agente'),
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp || Date.now()),
+        isInternal: msg.isInternal || false,
+        type: msg.type || 'text',
+        status: msg.status || 'sent',
+        metadata: msg.metadata || {}
+      };
+      
+      console.log(`🔄 [UNIFIED-CHAT] Convertendo mensagem:`, { original: msg, converted });
+      return converted;
+    });
+    
+    console.log(`✅ [UNIFIED-CHAT] ${convertedMessages.length} mensagens convertidas para ticket ${ticketId}`);
+    return convertedMessages;
   }, [messages, ticketId]);
 
   // 🔍 Mensagens filtradas por busca
@@ -198,49 +228,42 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     }
   }, [isOpen, ticketId, isConnected, join, load]);
 
-  // 🔄 Polling como fallback
+  // 🔄 Carregamento inicial apenas (sem polling automático)
   useEffect(() => {
-    if (!isOpen || !ticketId) return;
-
-    let isPolling = false;
-    const pollMessages = async () => {
-      if (isPolling || !isConnected) return;
-      isPolling = true;
+    if (isOpen && ticketId && isConnected) {
+      console.log(`🔍 [UNIFIED-CHAT] === DEBUG CARREGAMENTO INICIAL ===`);
+      console.log(`📋 [UNIFIED-CHAT] Estado atual:`, {
+        isOpen,
+        ticketId,
+        isConnected,
+        isLoading,
+        totalTicketsComMensagens: Object.keys(messages).length,
+        mensagensDoTicketAtual: messages[ticketId]?.length || 0,
+        todasMensagens: messages
+      });
       
-      const currentCount = ticketMessages.length;
-      setUiState(prev => ({
-        ...prev,
-        isBackgroundUpdating: true,
-        previousMessageCount: currentCount
-      }));
+      // Carregar mensagens apenas uma vez quando abrir
+      console.log(`📥 [UNIFIED-CHAT] Iniciando carregamento de mensagens do ticket ${ticketId}...`);
+      load(ticketId);
       
-      try {
-        await load(ticketId);
-        if (ticketMessages.length > currentCount) {
-          setUiState(prev => ({
-            ...prev,
-            updateCount: prev.updateCount + 1,
-            lastUpdateTime: new Date()
-          }));
+      // Debug adicional - verificar mensagens após 2 segundos
+      setTimeout(() => {
+        const updatedMessages = messages[ticketId] || [];
+        console.log(`🔍 [UNIFIED-CHAT] === DEBUG PÓS-CARREGAMENTO (2s) ===`);
+        console.log(`📊 [UNIFIED-CHAT] Mensagens após carregamento:`, {
+          ticketId,
+          totalMensagens: updatedMessages.length,
+          primeirasMensagens: updatedMessages.slice(0, 3),
+          ultimasMensagens: updatedMessages.slice(-3)
+        });
+        
+        if (updatedMessages.length === 0) {
+          console.warn(`⚠️ [UNIFIED-CHAT] PROBLEMA: Nenhuma mensagem carregada para ticket ${ticketId}`);
+          console.warn(`💡 [UNIFIED-CHAT] Possíveis causas: WebSocket não conectado, ticket não existe, erro no servidor`);
         }
-      } catch (error) {
-        console.log('⚠️ [UNIFIED-CHAT] Polling falhou:', error);
-      } finally {
-        isPolling = false;
-        // Delay maior para transição mais suave
-        setTimeout(() => {
-          setUiState(prev => ({
-            ...prev,
-            isBackgroundUpdating: false
-          }));
-        }, 800);
-      }
-    };
-
-    const interval = setInterval(pollMessages, 5000); // Intervalo maior
-
-    return () => clearInterval(interval);
-  }, [isOpen, ticketId, isConnected, load, ticketMessages.length]);
+      }, 2000);
+    }
+  }, [isOpen, ticketId, isConnected]);
 
   // 🎯 Reconexão automática quando necessário
   useEffect(() => {
@@ -338,35 +361,21 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     if (messageText.trim() && messageText.length > 10) {
       const draftKey = `draft_${ticketId}`;
       localStorage.setItem(draftKey, messageText);
-      setUiState(prev => ({
-        ...prev,
-        draftRestored: true
-      }));
-      
-      // Remover indicação de salvo após 2 segundos
-      const timer = setTimeout(() => setUiState(prev => ({
-        ...prev,
-        draftRestored: false
-      })), 2000);
-      return () => clearTimeout(timer);
     }
   }, [messageText, ticketId]);
 
   // 📝 Restaurar rascunho salvo
   useEffect(() => {
-    if (isOpen && ticketId && !uiState.draftRestored) {
+    if (isOpen && ticketId && !draftRestored) {
       const draftKey = `draft_${ticketId}`;
       const savedDraft = localStorage.getItem(draftKey);
       if (savedDraft && !messageText) {
         setMessageText(savedDraft);
-        setUiState(prev => ({
-          ...prev,
-          draftRestored: true
-        }));
+        setDraftRestored(true);
         showInfo('Rascunho restaurado!');
       }
     }
-  }, [isOpen, ticketId, uiState.draftRestored]);
+  }, [isOpen, ticketId, draftRestored, messageText, showInfo]);
 
   // ⌨️ Indicador de digitação
   const handleTypingStart = useCallback(() => {
@@ -403,10 +412,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       // Limpar rascunho salvo
       const draftKey = `draft_${ticketId}`;
       localStorage.removeItem(draftKey);
-      setUiState(prev => ({
-        ...prev,
-        draftRestored: false
-      }));
+      setDraftRestored(false);
       
       if (typingTimeout) {
         clearTimeout(typingTimeout);
@@ -567,10 +573,8 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     willChange: 'transform, opacity',
     transformOrigin: 'center center',
     backfaceVisibility: 'hidden' as const,
-    perspective: '1000px',
-    transform: uiState.isBackgroundUpdating ? 'scale(0.9998)' : 'scale(1)',
-    opacity: uiState.isBackgroundUpdating ? '0.995' : '1'
-  }), [uiState.isBackgroundUpdating]);
+    perspective: '1000px'
+  }), []);
 
   // 🎨 Componente do Header otimizado
   const ChatHeader = memo(() => (
@@ -608,13 +612,24 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       <div className="flex items-center gap-2">
         {/* Status de Conexão */}
         <ConnectionStatus connectionInfo={{
-          isConnected,
-          isLoading,
-          error: error || null,
-          lastUpdate: uiState.lastUpdateTime
+          status: isConnected ? 'connected' : (isLoading ? 'connecting' : 'disconnected'),
+          error: error || undefined
         }} />
 
         {/* Controles UX */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            console.log('🔄 [UNIFIED-CHAT] Atualizando mensagens manualmente...');
+            load(ticketId);
+          }}
+          className="text-muted-foreground hover:text-blue-600"
+          title="Atualizar mensagens (F5)"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"
@@ -675,10 +690,92 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     </div>
   ));
 
+  // 📜 Scroll automático simples
+  useEffect(() => {
+    if (messagesEndRef.current && !showSearch) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [ticketMessages.length, showSearch]);
+
   // 🚫 Não renderizar se não estiver aberto
   if (!isOpen) {
     return null;
   }
+
+  // 🔄 Sistema de debug avançado com force reload manual
+  useEffect(() => {
+    // Disponibilizar função de debug globalmente
+    const debugUnifiedChat = () => {
+      const currentState = {
+        isOpen,
+        ticketId,
+        isConnected,
+        isLoading,
+        error,
+        totalMessages: ticketMessages.length,
+        messageStats,
+        socketStatus: isConnected ? 'CONECTADO' : 'DESCONECTADO',
+        allMessages: messages,
+        currentTicketMessages: messages[ticketId] || []
+      };
+      
+      console.log(`🔍 [DEBUG-UNIFIED-CHAT] === ESTADO COMPLETO ===`, currentState);
+      
+      // Forçar reload das mensagens
+      if (isConnected && ticketId) {
+        console.log(`🔄 [DEBUG-UNIFIED-CHAT] Forçando reload das mensagens...`);
+        load(ticketId);
+      } else {
+        console.warn(`⚠️ [DEBUG-UNIFIED-CHAT] Não é possível recarregar: isConnected=${isConnected}, ticketId=${ticketId}`);
+      }
+      
+      return currentState;
+    };
+    
+    // Disponibilizar no console do navegador
+    (window as any).debugUnifiedChat = debugUnifiedChat;
+    
+    return () => {
+      delete (window as any).debugUnifiedChat;
+    };
+  }, [isOpen, ticketId, isConnected, isLoading, error, ticketMessages, messageStats, messages, load]);
+
+  // 🔄 Debug das mensagens em tempo real
+  useEffect(() => {
+    console.log(`🔍 [UNIFIED-CHAT] === MUDANÇA NO ESTADO DAS MENSAGENS ===`);
+    console.log(`📊 [UNIFIED-CHAT] Ticket ${ticketId}:`, {
+      totalMensagens: ticketMessages.length,
+      mensagensDetalhadas: ticketMessages.map(msg => ({
+        id: msg.id,
+        sender: msg.sender,
+        content: msg.content.substring(0, 30),
+        timestamp: msg.timestamp
+      })),
+      filteredCount: filteredMessages.length,
+      searchActive: Boolean(searchQuery.trim())
+    });
+    
+    // Se não há mensagens, fornecer debugging adicional
+    if (ticketMessages.length === 0) {
+      console.warn(`⚠️ [UNIFIED-CHAT] PROBLEMA: Zero mensagens para ticket ${ticketId}`);
+      console.warn(`🔍 [UNIFIED-CHAT] Debug completo:`, {
+        isSocketConnected: isConnected,
+        isModalOpen: isOpen,
+        allTicketsWithMessages: Object.keys(messages),
+        rawMessagesFromStore: messages[ticketId],
+        isLoading,
+        error
+      });
+      
+      // Tentar recarregar automaticamente se conectado
+      if (isConnected && isOpen && !isLoading) {
+        console.log(`🔄 [UNIFIED-CHAT] Auto-retry: Tentando recarregar mensagens automaticamente...`);
+        setTimeout(() => {
+          load(ticketId);
+        }, 1000);
+      }
+    }
+  }, [ticketMessages, filteredMessages, ticketId, isConnected, isOpen, isLoading, error, messages, searchQuery, load]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -744,33 +841,11 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
             
             {/* 📱 Área de Mensagens com Transições Suaves */}
             <div className="flex-1 overflow-hidden relative">
-              {/* Indicador sutil de atualização em background */}
-              {uiState.isBackgroundUpdating && (
-                <div className="absolute top-2 right-2 z-10">
-                  <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-full px-2 py-1 border border-gray-200 shadow-sm">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs text-gray-600">Atualizando...</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Indicador de última atualização (muito sutil) */}
-              {uiState.updateCount > 0 && (
-                <div className="absolute top-2 left-2 z-10">
-                  <div className="text-xs text-gray-400 bg-white/60 backdrop-blur-sm rounded px-1.5 py-0.5">
-                    Última atualização: {formatDistanceToNow(uiState.lastUpdateTime, { addSuffix: true, locale: ptBR })}
-                  </div>
-                </div>
-              )}
+                          {/* Área limpa sem indicadores que causam re-render */}
               
               <ScrollArea 
                 ref={scrollAreaRef}
                 className="h-full px-4"
-                style={{
-                  // Transições suaves para evitar piscar
-                  transition: 'opacity 0.3s ease-in-out',
-                  opacity: uiState.isBackgroundUpdating ? 0.98 : 1
-                }}
               >
                 <div className="space-y-3 py-4">
                   {filteredMessages.length === 0 ? (
@@ -785,25 +860,10 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                     </div>
                   ) : (
                     filteredMessages.map((message: LocalChatMessage, index: number) => {
-                      const isLastMessage = index === filteredMessages.length - 1;
-                      const isNewMessage = message.timestamp > lastSeen;
-                      const isRecentlyAdded = index >= uiState.previousMessageCount;
-                      
                       return (
                         <div
                           key={message.id}
-                          className={cn(
-                            "transition-all duration-500 ease-out",
-                            isNewMessage && "animate-in slide-in-from-bottom-2 fade-in-0",
-                            isRecentlyAdded && "bg-blue-50/30 rounded-lg",
-                            uiState.isBackgroundUpdating && "opacity-95"
-                          )}
-                          style={{
-                            // Animação sutil para novas mensagens
-                            animationDelay: isNewMessage ? `${index * 30}ms` : '0ms',
-                            // Transição suave para mensagens recém-adicionadas
-                            transition: isRecentlyAdded ? 'background-color 2s ease-out' : 'none'
-                          }}
+                          className="transition-all duration-300 ease-out"
                         >
                           <MessageBubble
                             message={{
@@ -987,7 +1047,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                   )}>
                     {messageText.length}/2000
                   </span>
-                  {uiState.isBackgroundUpdating && (
+                  {draftRestored && (
                     <>
                       <span>•</span>
                       <span className="text-green-500 flex items-center gap-1">

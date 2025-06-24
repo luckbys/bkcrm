@@ -27,8 +27,10 @@ interface ChatState {
   load: (ticketId: string) => void;
 }
 
-// 🔧 FORÇAR URL DE PRODUÇÃO: Sempre usar ws.bkcrm.devsible.com.br
-const SOCKET_URL = 'https://ws.bkcrm.devsible.com.br';
+// 🔧 URL DINÂMICA: Detectar ambiente automaticamente
+const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+  ? 'http://localhost:4000' 
+  : 'https://ws.bkcrm.devsible.com.br';
 
 // 🔧 UUID FIXO PARA SISTEMA - Resolve erro "current-user" invalid UUID
 const SYSTEM_USER_UUID = '00000000-0000-0000-0000-000000000001';
@@ -75,7 +77,7 @@ function getCurrentUserId(): string {
   }
 }
 
-console.log(`🔗 [CHAT-STORE] WebSocket forçado para produção: ${SOCKET_URL}`);
+console.log(`🔗 [CHAT-STORE] WebSocket URL detectada: ${SOCKET_URL} (ambiente: ${window.location.hostname})`);
 
 export const useChatStore = create<ChatState>((set, get) => ({
   isConnected: false,
@@ -120,7 +122,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     socket.on('new-message', (data: any) => {
-      console.log('📨 [CHAT] Nova mensagem recebida:', data);
+      console.log('📨 [CHAT] === NOVA MENSAGEM RECEBIDA VIA WEBSOCKET ===');
+      console.log('📨 [CHAT] Dados brutos:', data);
       
       // Gerar ID único mais robusto
       const messageId = data.id || `msg-${data.ticket_id || data.ticketId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -134,6 +137,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isInternal: data.is_internal || false,
         timestamp: new Date(data.created_at || Date.now())
       };
+
+      console.log('📨 [CHAT] Mensagem processada:', {
+        id: message.id,
+        ticketId: message.ticketId,
+        sender: message.sender,
+        content: message.content.substring(0, 50),
+        senderName: message.senderName,
+        isInternal: message.isInternal
+      });
 
       set((state) => {
         const currentMessages = state.messages[message.ticketId] || [];
@@ -179,10 +191,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     socket.on('messages-loaded', (data: any) => {
-      console.log('📥 [CHAT] Mensagens carregadas:', data);
+      console.log('📥 [CHAT] === MENSAGENS CARREGADAS VIA WEBSOCKET ===');
+      console.log('📥 [CHAT] Dados brutos:', data);
       
       const ticketId = data.ticketId;
-      const messages: ChatMessage[] = (data.messages || []).map((msg: any, index: number) => ({
+      const rawMessages = data.messages || [];
+      
+      console.log(`📥 [CHAT] Processando ${rawMessages.length} mensagens para ticket ${ticketId}`);
+      
+      const messages: ChatMessage[] = rawMessages.map((msg: any, index: number) => ({
         id: msg.id || `loaded-${ticketId}-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
         ticketId: ticketId,
         content: msg.content || 'Sem conteúdo',
@@ -192,13 +209,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
         timestamp: new Date(msg.created_at || Date.now())
       }));
 
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [ticketId]: messages
-        },
-        isLoading: false
-      }));
+      console.log('📥 [CHAT] Mensagens processadas:', messages.map(m => ({
+        id: m.id,
+        sender: m.sender,
+        content: m.content.substring(0, 30),
+        senderName: m.senderName
+      })));
+
+      set((state) => {
+        console.log(`📥 [CHAT] Atualizando estado com ${messages.length} mensagens para ticket ${ticketId}`);
+        return {
+          messages: {
+            ...state.messages,
+            [ticketId]: messages
+          },
+          isLoading: false
+        };
+      });
     });
 
     socket.on('joined-ticket', (data: any) => {
@@ -236,10 +263,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   load: (ticketId: string) => {
     const { socket, isConnected } = get();
     
-    console.log(`📥 [CHAT] Carregando mensagens para ticket ${ticketId}`);
+    console.log(`📥 [CHAT] === CARREGANDO MENSAGENS ===`);
+    console.log(`📥 [CHAT] Ticket: ${ticketId}, Connected: ${isConnected}, Socket: ${socket ? 'exists' : 'null'}`);
     
     if (!isConnected || !socket) {
       console.warn('⚠️ [CHAT] Socket não conectado, criando mensagens mock');
+      console.warn(`⚠️ [CHAT] Estado: isConnected=${isConnected}, socket=${socket ? 'exists' : 'null'}`);
       
       // Mensagens mock para desenvolvimento
       const mockMessages: ChatMessage[] = [
@@ -282,8 +311,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    console.log(`📥 [CHAT] Enviando request-messages para ticket ${ticketId}`);
     set({ isLoading: true });
     socket.emit('request-messages', { ticketId, limit: 50 });
+    console.log(`📥 [CHAT] Request enviado, aguardando resposta...`);
   },
 
   send: async (ticketId: string, content: string, isInternal: boolean) => {
