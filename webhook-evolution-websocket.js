@@ -1118,6 +1118,7 @@ app.post('/webhook/evolution', async (req, res) => {
       result = { success: true, message: 'Conexão atualizada' };
     } else {
       console.log('⚠️ [PRODUÇÃO] Evento não reconhecido:', payload.event);
+      console.log('🔍 [PRODUÇÃO] Dados do evento:', JSON.stringify(payload, null, 2));
       result = { success: false, message: `Evento ${payload.event} não requer processamento` };
     }
 
@@ -1197,31 +1198,16 @@ app.post('/webhook/evolution/messages-upsert', async (req, res) => {
     
     console.log(`🔄 [${timestamp}] Messages Upsert específico - Event: ${payload.event}`);
     
-    // Processar MESSAGES_UPSERT como no endpoint principal
+    // PROCESSAR MENSAGEM COMPLETAMENTE como no endpoint principal
     let result = { success: false, message: 'Evento não processado' };
 
     if ((payload.event === 'MESSAGES_UPSERT' || payload.event === 'messages.upsert') && payload.data) {
       console.log(`📨 [MESSAGES-UPSERT] Processando ${payload.event}...`);
       
       try {
-        // Verificar se é mensagem de cliente (não nossa)
-        if (payload.data.key && !payload.data.key.fromMe) {
-          console.log('✅ [MESSAGES-UPSERT] Mensagem de cliente detectada');
-          
-          // Extrair dados básicos
-          const clientPhone = extractPhoneFromJid(payload.data.key.remoteJid);
-          const messageContent = extractMessageContent(payload.data.message);
-          const senderName = payload.data.pushName || `Cliente ${clientPhone?.slice(-4) || 'Unknown'}`;
-          const instanceName = payload.instance || 'atendimento-ao-cliente-suporte';
-          
-          if (clientPhone && messageContent) {
-            result = { success: true, message: 'Mensagem processada via endpoint específico' };
-          } else {
-            result = { success: false, message: 'Dados da mensagem inválidos' };
-          }
-        } else {
-          result = { success: true, message: 'Mensagem própria ignorada' };
-        }
+        // Usar a função processMessage completa
+        result = await processMessage(payload);
+        console.log(`✅ [MESSAGES-UPSERT] Resultado:`, result);
       } catch (error) {
         console.error('❌ [MESSAGES-UPSERT] Erro ao processar:', error);
         result = { success: false, message: error.message };
