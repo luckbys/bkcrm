@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
@@ -68,6 +68,11 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   clientPhone,
   className
 }: UnifiedChatModalProps): JSX.Element | null => {
+  // 🚫 EARLY RETURN - DEVE ESTAR ANTES DE TODOS OS HOOKS
+  if (!isOpen) {
+    return null;
+  }
+
   const { user } = useAuth();
   
   // 📌 Refs
@@ -577,7 +582,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   }), []);
 
   // 🎨 Componente do Header otimizado
-  const ChatHeader = memo(() => (
+  const ChatHeader = () => (
     <div 
       className={cn(
         "chat-header chat-animated",
@@ -724,7 +729,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
         </Button>
       </div>
     </div>
-  ));
+  );
 
   // 📜 Scroll automático simples
   useEffect(() => {
@@ -732,11 +737,6 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [ticketMessages.length, showSearch]);
-
-  // 🚫 Não renderizar se não estiver aberto
-  if (!isOpen) {
-    return null;
-  }
 
   // 🔄 Sistema de debug avançado com force reload manual
   useEffect(() => {
@@ -815,7 +815,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={getModalClasses()}>
+      <DialogContent className={cn(getModalClasses(), "[&>button]:hidden")}>
         <DialogTitle className="sr-only">
           Chat do Ticket {ticketId} - {clientName}
         </DialogTitle>
