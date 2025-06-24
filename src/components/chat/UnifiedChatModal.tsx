@@ -616,6 +616,20 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
           error: error || undefined
         }} />
 
+        {/* 🔧 DEBUG: Status WebSocket Visual */}
+        <div className={`px-2 py-1 rounded text-xs font-mono ${
+          isConnected ? 'bg-green-100 text-green-800' : 
+          isLoading ? 'bg-yellow-100 text-yellow-800' : 
+          'bg-red-100 text-red-800'
+        }`}>
+          WS: {isConnected ? '🟢 ON' : isLoading ? '🟡 ...' : '🔴 OFF'}
+          {isConnected && (
+            <span className="ml-2 text-xs opacity-70">
+              ⚡{messageStats.total}
+            </span>
+          )}
+        </div>
+
         {/* Controles UX */}
         <Button
           variant="ghost"
@@ -628,6 +642,28 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
           title="Atualizar mensagens (F5)"
         >
           <RefreshCw className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            console.log('🔧 [DEBUG] Forçando reconexão WebSocket...');
+            disconnect();
+            setTimeout(() => {
+              init();
+              setTimeout(() => {
+                if (isConnected) {
+                  join(ticketId);
+                  load(ticketId);
+                }
+              }, 2000);
+            }, 1000);
+          }}
+          className="text-muted-foreground hover:text-green-600"
+          title="🔧 Debug: Reconectar WebSocket"
+        >
+          <Zap className="h-4 w-4" />
         </Button>
 
         <Button

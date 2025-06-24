@@ -91,15 +91,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     console.log('🔄 [CHAT] Inicializando WebSocket...');
     console.log('🔗 [CHAT] URL de conexão:', SOCKET_URL);
     
+    // 🔧 Desconectar socket anterior se existir
+    const currentState = get();
+    if (currentState.socket) {
+      console.log('🔌 [CHAT] Desconectando socket anterior...');
+      currentState.socket.disconnect();
+    }
+    
+    set({ isLoading: true, error: null });
+    
     // 🔧 Configurações dinâmicas baseadas no ambiente
     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
     
     const socketConfig = {
       transports: ['websocket', 'polling'],
-      timeout: 10000,
+      timeout: 15000,
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      maxReconnectionAttempts: 5,
       forceNew: true,
       autoConnect: true,
       // 🎯 Configurações específicas do ambiente
@@ -126,15 +137,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
     
     const socket = io(SOCKET_URL, socketConfig);
 
+    // 🔧 TIMEOUT DE CONEXÃO - Se não conectar em 10 segundos, tentar novamente
+    const connectionTimeout = setTimeout(() => {
+      if (!socket.connected) {
+        console.warn('⏰ [CHAT] Timeout de conexão - forçando reconexão...');
+        socket.disconnect();
+        set({ error: 'Timeout de conexão', isLoading: false });
+        
+        // Tentar novamente em 3 segundos
+        setTimeout(() => {
+          console.log('🔄 [CHAT] Tentativa automática de reconexão...');
+          get().init();
+        }, 3000);
+      }
+    }, 10000);
+
     socket.on('connect', () => {
       console.log('✅ [CHAT] Conectado ao WebSocket!');
       console.log('🔗 [CHAT] Socket ID:', socket.id);
+      console.log('🌐 [CHAT] Transporte usado:', socket.io.engine.transport.name);
+      
+      clearTimeout(connectionTimeout);
       set({ isConnected: true, error: null, socket, isLoading: false });
+      
+      // 🎯 Forçar heartbeat para manter conexão viva
+      const heartbeat = setInterval(() => {
+        if (socket.connected) {
+          socket.emit('ping', Date.now());
+        } else {
+          clearInterval(heartbeat);
+        }
+      }, 30000); // A cada 30 segundos
     });
 
     socket.on('disconnect', (reason) => {
       console.log('🔌 [CHAT] Desconectado:', reason);
+      clearTimeout(connectionTimeout);
       set({ isConnected: false });
+      
+      // 🔧 Reconexão automática mais agressiva
+      if (reason === 'io server disconnect') {
+        // Se o servidor desconectou, reconectar manualmente
+        console.log('🔄 [CHAT] Servidor desconectou - reconectando manualmente...');
+        setTimeout(() => {
+          socket.connect();
+        }, 2000);
+      }
     });
 
     socket.on('connect_error', (error: any) => {
@@ -142,7 +190,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('🔧 [CHAT] URL tentada:', SOCKET_URL);
       console.error('🌐 [CHAT] Hostname atual:', window.location.hostname);
       console.error('⚙️ [CHAT] Config usada:', socketConfig);
+      
+      clearTimeout(connectionTimeout);
       set({ isConnected: false, error: error.message, isLoading: false });
+      
+      // 🔧 Análise de erros específicos
+      if (error.message.includes('xhr poll error') || error.message.includes('timeout')) {
+        console.log('🔄 [CHAT] Erro de polling - tentando WebSocket apenas...');
+        setTimeout(() => {
+          const newSocket = io(SOCKET_URL, {
+            ...socketConfig,
+            transports: ['websocket'] // Tentar apenas WebSocket
+          });
+          set({ socket: newSocket });
+        }, 5000);
+      }
     });
 
     socket.on('reconnect', (attemptNumber) => {
@@ -152,6 +214,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     socket.on('reconnect_attempt', (attemptNumber) => {
       console.log('⏳ [CHAT] Tentativa de reconexão:', attemptNumber);
+      set({ isLoading: true });
     });
 
     socket.on('reconnect_error', (error) => {
@@ -160,12 +223,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     socket.on('reconnect_failed', () => {
       console.error('💥 [CHAT] Falha total na reconexão');
-      set({ error: 'Falha na reconexão ao servidor' });
+      set({ error: 'Falha na reconexão ao servidor', isLoading: false });
+      
+      // 🔧 Último recurso: reinicializar completamente
+      console.log('🆘 [CHAT] Tentativa de reinicialização completa...');
+      setTimeout(() => {
+        get().init();
+      }, 10000);
     });
 
+    // 🔧 EVENTOS DE MENSAGEM COM MELHORIA
     socket.on('new-message', (data: any) => {
       console.log('📨 [CHAT] === NOVA MENSAGEM RECEBIDA VIA WEBSOCKET ===');
       console.log('📨 [CHAT] Dados brutos:', data);
+      
+      // 🎯 Validação robusta dos dados
+      if (!data || !data.content || !data.ticket_id) {
+        console.warn('⚠️ [CHAT] Dados de mensagem inválidos:', data);
+        return;
+      }
       
       // Gerar ID único mais robusto
       const messageId = data.id || `msg-${data.ticket_id || data.ticketId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -223,9 +299,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         };
 
-        // Forçar re-render para componentes que dependem deste estado
+        // 🎯 Forçar re-render com delay
         setTimeout(() => {
-          console.log('🔄 [CHAT] Forçando update do estado para ticket:', message.ticketId);
+          console.log('🔄 [CHAT] Trigger re-render para componente:', message.ticketId);
+          window.dispatchEvent(new CustomEvent('chat-message-received', { 
+            detail: { ticketId: message.ticketId, message } 
+          }));
         }, 100);
 
         return newState;
