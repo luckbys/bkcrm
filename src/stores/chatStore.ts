@@ -89,26 +89,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   init: () => {
     console.log('🔄 [CHAT] Inicializando WebSocket...');
+    console.log('🔗 [CHAT] URL de conexão:', SOCKET_URL);
     
-    const socket = io(SOCKET_URL, {
+    // 🔧 Configurações dinâmicas baseadas no ambiente
+    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    
+    const socketConfig = {
       transports: ['websocket', 'polling'],
       timeout: 10000,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
-      // 🔧 Configurações para HTTPS produção
-      secure: true, // sempre true para produção HTTPS
-      rejectUnauthorized: false, // aceitar certificados auto-assinados
       forceNew: true,
-      // Headers para autenticação se necessário
-      extraHeaders: {
-        'Origin': window.location.origin
-      }
+      autoConnect: true,
+      // 🎯 Configurações específicas do ambiente
+      ...(isProduction ? {
+        // Produção HTTPS
+        secure: true,
+        rejectUnauthorized: false,
+        extraHeaders: {
+          'Origin': window.location.origin
+        }
+      } : {
+        // Desenvolvimento HTTP
+        secure: false,
+        upgrade: true,
+        rememberUpgrade: false
+      })
+    };
+
+    console.log('⚙️ [CHAT] Configuração Socket.IO:', {
+      url: SOCKET_URL,
+      isProduction,
+      config: socketConfig
     });
+    
+    const socket = io(SOCKET_URL, socketConfig);
 
     socket.on('connect', () => {
       console.log('✅ [CHAT] Conectado ao WebSocket!');
-      set({ isConnected: true, error: null, socket });
+      console.log('🔗 [CHAT] Socket ID:', socket.id);
+      set({ isConnected: true, error: null, socket, isLoading: false });
     });
 
     socket.on('disconnect', (reason) => {
@@ -118,7 +139,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     socket.on('connect_error', (error: any) => {
       console.error('❌ [CHAT] Erro de conexão:', error);
-      set({ isConnected: false, error: error.message });
+      console.error('🔧 [CHAT] URL tentada:', SOCKET_URL);
+      console.error('🌐 [CHAT] Hostname atual:', window.location.hostname);
+      console.error('⚙️ [CHAT] Config usada:', socketConfig);
+      set({ isConnected: false, error: error.message, isLoading: false });
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('🔄 [CHAT] Reconectado após', attemptNumber, 'tentativas');
+      set({ isConnected: true, error: null });
+    });
+
+    socket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('⏳ [CHAT] Tentativa de reconexão:', attemptNumber);
+    });
+
+    socket.on('reconnect_error', (error) => {
+      console.error('❌ [CHAT] Erro na reconexão:', error);
+    });
+
+    socket.on('reconnect_failed', () => {
+      console.error('💥 [CHAT] Falha total na reconexão');
+      set({ error: 'Falha na reconexão ao servidor' });
     });
 
     socket.on('new-message', (data: any) => {

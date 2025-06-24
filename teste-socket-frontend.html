@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Socket.IO Frontend</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .connecting { background-color: #ffeaa7; color: #6c4f00; }
+        #messages { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 10px; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .success { background-color: #28a745; color: white; }
+        .warning { background-color: #ffc107; color: black; }
+        .danger { background-color: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Teste de Conexão Socket.IO</h1>
+    
+    <div id="status" class="status disconnected">
+        🔴 Desconectado
+    </div>
+    
+    <div>
+        <button onclick="conectar()" class="success">🔌 Conectar</button>
+        <button onclick="desconectar()" class="danger">🔌 Desconectar</button>
+        <button onclick="entrarTicket()" class="warning">🎫 Entrar no Ticket</button>
+        <button onclick="enviarMensagemTeste()" class="warning">📨 Enviar Mensagem Teste</button>
+        <button onclick="limparLogs()" class="warning">🗑️ Limpar Logs</button>
+    </div>
+    
+    <h3>📊 Logs de Conexão:</h3>
+    <div id="messages"></div>
+    
+    <h3>🔧 Informações do Sistema:</h3>
+    <div id="info">
+        <p><strong>URL do Socket:</strong> <span id="socket-url"></span></p>
+        <p><strong>Hostname:</strong> <span id="hostname"></span></p>
+        <p><strong>Protocolo:</strong> <span id="protocol"></span></p>
+        <p><strong>Ambiente:</strong> <span id="environment"></span></p>
+    </div>
+
+    <!-- Socket.IO CDN -->
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    
+    <script>
+        let socket = null;
+        const TICKET_ID = '788a5f10-a693-4cfa-8410-ed5cd082e555';
+        
+        // Detectar ambiente
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const SOCKET_URL = isLocalhost ? 'http://localhost:4000' : 'https://ws.bkcrm.devsible.com.br';
+        
+        // Exibir informações do sistema
+        document.getElementById('socket-url').textContent = SOCKET_URL;
+        document.getElementById('hostname').textContent = window.location.hostname;
+        document.getElementById('protocol').textContent = window.location.protocol;
+        document.getElementById('environment').textContent = isLocalhost ? 'Desenvolvimento' : 'Produção';
+        
+        function log(message, type = 'info') {
+            const messages = document.getElementById('messages');
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>${timestamp}:</strong> ${message}`;
+            
+            if (type === 'success') div.style.color = 'green';
+            if (type === 'error') div.style.color = 'red';
+            if (type === 'warning') div.style.color = 'orange';
+            
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        function updateStatus(status, text) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${status}`;
+            statusDiv.textContent = text;
+        }
+        
+        function conectar() {
+            if (socket && socket.connected) {
+                log('⚠️ Já conectado!', 'warning');
+                return;
+            }
+            
+            log('🔄 Tentando conectar ao ' + SOCKET_URL);
+            updateStatus('connecting', '🟡 Conectando...');
+            
+            // Configuração do Socket.IO (igual ao frontend)
+            const socketConfig = {
+                transports: ['websocket', 'polling'],
+                timeout: 10000,
+                reconnection: true,
+                reconnectionAttempts: 10,
+                reconnectionDelay: 2000,
+                forceNew: true,
+                autoConnect: true,
+                ...(isLocalhost ? {
+                    // Desenvolvimento HTTP
+                    secure: false,
+                    upgrade: true,
+                    rememberUpgrade: false
+                } : {
+                    // Produção HTTPS
+                    secure: true,
+                    rejectUnauthorized: false,
+                    extraHeaders: {
+                        'Origin': window.location.origin
+                    }
+                })
+            };
+            
+            log('⚙️ Configuração: ' + JSON.stringify(socketConfig, null, 2));
+            
+            socket = io(SOCKET_URL, socketConfig);
+            
+            // Event listeners
+            socket.on('connect', () => {
+                log('✅ Conectado! Socket ID: ' + socket.id, 'success');
+                updateStatus('connected', '🟢 Conectado - ID: ' + socket.id);
+            });
+            
+            socket.on('disconnect', (reason) => {
+                log('🔌 Desconectado: ' + reason, 'warning');
+                updateStatus('disconnected', '🔴 Desconectado: ' + reason);
+            });
+            
+            socket.on('connect_error', (error) => {
+                log('❌ Erro de conexão: ' + error.message, 'error');
+                log('🔧 URL tentada: ' + SOCKET_URL, 'error');
+                updateStatus('disconnected', '🔴 Erro: ' + error.message);
+            });
+            
+            socket.on('reconnect', (attemptNumber) => {
+                log('🔄 Reconectado após ' + attemptNumber + ' tentativas', 'success');
+                updateStatus('connected', '🟢 Reconectado');
+            });
+            
+            socket.on('reconnect_attempt', (attemptNumber) => {
+                log('⏳ Tentativa de reconexão: ' + attemptNumber, 'warning');
+            });
+            
+            socket.on('new-message', (data) => {
+                log('📨 NOVA MENSAGEM RECEBIDA: ' + JSON.stringify(data, null, 2), 'success');
+            });
+            
+            socket.on('messages-loaded', (data) => {
+                log('📥 MENSAGENS CARREGADAS: ' + (data.messages ? data.messages.length : 0) + ' mensagens', 'success');
+            });
+            
+            socket.on('joined-ticket', (data) => {
+                log('🎫 Entrou no ticket: ' + JSON.stringify(data), 'success');
+            });
+        }
+        
+        function desconectar() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('🔌 Desconectado manualmente', 'warning');
+                updateStatus('disconnected', '🔴 Desconectado');
+            } else {
+                log('⚠️ Já desconectado!', 'warning');
+            }
+        }
+        
+        function entrarTicket() {
+            if (!socket || !socket.connected) {
+                log('❌ Conecte primeiro!', 'error');
+                return;
+            }
+            
+            log('🎫 Entrando no ticket ' + TICKET_ID);
+            socket.emit('join-ticket', { 
+                ticketId: TICKET_ID, 
+                userId: '00000000-0000-0000-0000-000000000001' 
+            });
+            
+            // Solicitar mensagens
+            setTimeout(() => {
+                log('📥 Solicitando mensagens do ticket...');
+                socket.emit('request-messages', { ticketId: TICKET_ID, limit: 50 });
+            }, 1000);
+        }
+        
+        function enviarMensagemTeste() {
+            // Enviar via webhook para simular Evolution API
+            log('📨 Enviando mensagem de teste via webhook...');
+            
+            const testMessage = {
+                event: 'messages.upsert',
+                instance: 'atendimento-ao-cliente-suporte',
+                data: {
+                    key: {
+                        id: `web-test-${Date.now()}`,
+                        remoteJid: '5512981022013@s.whatsapp.net',
+                        fromMe: false
+                    },
+                    message: {
+                        conversation: `🌐 TESTE VIA WEB - ${new Date().toLocaleTimeString()}`
+                    },
+                    messageTimestamp: Math.floor(Date.now() / 1000),
+                    pushName: 'Teste Web Frontend'
+                }
+            };
+            
+            fetch(SOCKET_URL + '/webhook/evolution', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(testMessage)
+            })
+            .then(response => response.json())
+            .then(data => {
+                log('✅ Mensagem enviada via webhook: ' + data.message, 'success');
+            })
+            .catch(error => {
+                log('❌ Erro no webhook: ' + error.message, 'error');
+            });
+        }
+        
+        function limparLogs() {
+            document.getElementById('messages').innerHTML = '';
+        }
+        
+        // Auto-conectar ao carregar a página
+        log('🚀 Página carregada, pronto para testar!');
+        log('💡 Clique em "Conectar" para iniciar o teste');
+    </script>
+</body>
+</html> 
