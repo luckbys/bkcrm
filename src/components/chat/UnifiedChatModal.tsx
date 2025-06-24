@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
@@ -9,7 +9,7 @@ import {
   Search, Maximize2, Maximize, Download, Settings, Volume2, VolumeX, Copy, Trash2, 
   Edit3, Star, Users, Clock, MessageSquare, AlertCircle, Check, CheckCheck, Loader2,
   Archive, Pin, Flag, FileText, Image, Video as VideoIcon, Mic, MapPin, User, Save,
-  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote
+  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote, ChevronDown
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { MessageInputTabs } from './MessageInputTabs';
@@ -67,8 +67,15 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   clientName = "Cliente",
   clientPhone,
   className
-}) => {
+}: UnifiedChatModalProps): JSX.Element | null => {
   const { user } = useAuth();
+  
+  // 📌 Refs
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 🎯 Hooks avançados de UX
   const { 
@@ -112,21 +119,26 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   const [lastSeen, setLastSeen] = useState<Date>(new Date());
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isSilentLoading, setIsSilentLoading] = useState(false);
   
   // 🆕 Novos estados para funcionalidades avançadas
   const [isDragOver, setIsDragOver] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [draftSaved, setDraftSaved] = useState(false);
   const [showLinkPreview, setShowLinkPreview] = useState(true);
   const [actionHistory, setActionHistory] = useState<Array<{id: string, action: string, timestamp: Date}>>([]);
   
-  // 📎 Refs
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // 🔄 Otimização de estados
+  const [uiState, setUiState] = useState({
+    isBackgroundUpdating: false,
+    lastUpdateTime: new Date(),
+    updateCount: 0,
+    previousMessageCount: 0,
+    draftRestored: false
+  });
+
+  // 🎯 Cache de mensagens otimizado
+  const messageCache = useRef(new Map());
   
   // 💬 Mensagens do ticket atual
   const ticketMessages = useMemo(() => {
@@ -186,22 +198,49 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     }
   }, [isOpen, ticketId, isConnected, join, load]);
 
-  // 🔄 Polling como fallback para garantir mensagens em tempo real
+  // 🔄 Polling como fallback
   useEffect(() => {
     if (!isOpen || !ticketId) return;
 
-    // Polling a cada 3 segundos para garantir que mensagens não sejam perdidas
-    const pollingInterval = setInterval(() => {
-      if (isConnected) {
-        console.log(`🔄 [UNIFIED-CHAT] Polling mensagens do ticket ${ticketId}`);
-        load(ticketId);
+    let isPolling = false;
+    const pollMessages = async () => {
+      if (isPolling || !isConnected) return;
+      isPolling = true;
+      
+      const currentCount = ticketMessages.length;
+      setUiState(prev => ({
+        ...prev,
+        isBackgroundUpdating: true,
+        previousMessageCount: currentCount
+      }));
+      
+      try {
+        await load(ticketId);
+        if (ticketMessages.length > currentCount) {
+          setUiState(prev => ({
+            ...prev,
+            updateCount: prev.updateCount + 1,
+            lastUpdateTime: new Date()
+          }));
+        }
+      } catch (error) {
+        console.log('⚠️ [UNIFIED-CHAT] Polling falhou:', error);
+      } finally {
+        isPolling = false;
+        // Delay maior para transição mais suave
+        setTimeout(() => {
+          setUiState(prev => ({
+            ...prev,
+            isBackgroundUpdating: false
+          }));
+        }, 800);
       }
-    }, 3000);
-
-    return () => {
-      clearInterval(pollingInterval);
     };
-  }, [isOpen, ticketId, isConnected, load]);
+
+    const interval = setInterval(pollMessages, 5000); // Intervalo maior
+
+    return () => clearInterval(interval);
+  }, [isOpen, ticketId, isConnected, load, ticketMessages.length]);
 
   // 🎯 Reconexão automática quando necessário
   useEffect(() => {
@@ -215,10 +254,16 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     }
   }, [isOpen, isConnected, isLoading, init]);
 
-  // 📜 Auto-scroll para última mensagem
+  // 📜 Auto-scroll para última mensagem com transição suave
   useEffect(() => {
     if (!showSearch && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      // Usar requestAnimationFrame para scroll mais suave
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'end'
+        });
+      });
     }
   }, [ticketMessages, showSearch]);
 
@@ -228,6 +273,21 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       searchInputRef.current.focus();
     }
   }, [showSearch]);
+
+  // 📜 Detecção de scroll para mostrar botão de scroll para baixo
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setShowScrollToBottom(!isNearBottom);
+    };
+
+    scrollArea.addEventListener('scroll', handleScroll);
+    return () => scrollArea.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // 🔊 Notificação sonora e visual para novas mensagens
   useEffect(() => {
@@ -260,11 +320,14 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
           showSuccess(`✅ Mensagem enviada para ${clientName}`);
         }
 
-        // Scroll automático para nova mensagem
+        // Scroll automático para nova mensagem com delay sutil
         if (messagesEndRef.current) {
           setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          }, 100);
+            messagesEndRef.current?.scrollIntoView({ 
+              behavior: 'smooth',
+              block: 'end'
+            });
+          }, 150); // Delay sutil para não ser abrupto
         }
       }
     }
@@ -275,25 +338,35 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     if (messageText.trim() && messageText.length > 10) {
       const draftKey = `draft_${ticketId}`;
       localStorage.setItem(draftKey, messageText);
-      setDraftSaved(true);
+      setUiState(prev => ({
+        ...prev,
+        draftRestored: true
+      }));
       
       // Remover indicação de salvo após 2 segundos
-      const timer = setTimeout(() => setDraftSaved(false), 2000);
+      const timer = setTimeout(() => setUiState(prev => ({
+        ...prev,
+        draftRestored: false
+      })), 2000);
       return () => clearTimeout(timer);
     }
   }, [messageText, ticketId]);
 
-  // 📂 Carregar rascunho salvo na inicialização
+  // 📝 Restaurar rascunho salvo
   useEffect(() => {
-    if (isOpen && ticketId) {
+    if (isOpen && ticketId && !uiState.draftRestored) {
       const draftKey = `draft_${ticketId}`;
       const savedDraft = localStorage.getItem(draftKey);
       if (savedDraft && !messageText) {
         setMessageText(savedDraft);
+        setUiState(prev => ({
+          ...prev,
+          draftRestored: true
+        }));
         showInfo('Rascunho restaurado!');
       }
     }
-  }, [isOpen, ticketId, messageText, showInfo]);
+  }, [isOpen, ticketId, uiState.draftRestored]);
 
   // ⌨️ Indicador de digitação
   const handleTypingStart = useCallback(() => {
@@ -330,7 +403,10 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       // Limpar rascunho salvo
       const draftKey = `draft_${ticketId}`;
       localStorage.removeItem(draftKey);
-      setDraftSaved(false);
+      setUiState(prev => ({
+        ...prev,
+        draftRestored: false
+      }));
       
       if (typingTimeout) {
         clearTimeout(typingTimeout);
@@ -398,13 +474,12 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   }, [showWarning, showInfo, showSuccess]);
 
   // 📝 Usar template
-  const handleUseTemplate = useCallback((template: typeof QUICK_TEMPLATES[0]) => {
+  const handleUseTemplate = useCallback((template: { id: string; title: string; content: string }) => {
     setMessageText(template.content);
     setShowTemplates(false);
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
-    
     showInfo(`Template "${template.title}" aplicado!`);
   }, [showInfo]);
 
@@ -434,8 +509,8 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 
   const handleCopyMessage = useCallback((content: string) => {
     navigator.clipboard.writeText(content);
-    console.log('📋 [UNIFIED-CHAT] Mensagem copiada');
-  }, []);
+    showSuccess('Mensagem copiada!');
+  }, [showSuccess]);
 
   const handleReplyToMessage = useCallback((message: LocalChatMessage) => {
     setReplyingTo(message);
@@ -454,19 +529,20 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 
   // ⌨️ Escuta de atalhos de teclado
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
       if (!isOpen) return;
       
       // F5 ou Ctrl+R para atualizar mensagens
       if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
         e.preventDefault();
-        console.log('🔄 [UNIFIED-CHAT] Atualizando via teclado...');
+        console.log('🔄 [UNIFIED-CHAT] Atualizando silenciosamente via teclado...');
+        setIsSilentLoading(true);
         if (isConnected) {
-          load(ticketId);
+          await load(ticketId);
         } else {
-          init();
+          await init();
         }
-        showInfo('🔄 Mensagens atualizadas!');
+        setIsSilentLoading(false);
       }
 
       // Ctrl+I para alternar modo interno
@@ -483,7 +559,121 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isConnected, load, ticketId, init, showInfo, onClose]);
+  }, [isOpen, isConnected, load, ticketId, init, onClose]);
+
+  // 🎨 Estilos críticos para o header
+  const headerStyles = useMemo(() => ({
+    transition: 'all 700ms cubic-bezier(0.4, 0, 0.2, 1)',
+    willChange: 'transform, opacity',
+    transformOrigin: 'center center',
+    backfaceVisibility: 'hidden' as const,
+    perspective: '1000px',
+    transform: uiState.isBackgroundUpdating ? 'scale(0.9998)' : 'scale(1)',
+    opacity: uiState.isBackgroundUpdating ? '0.995' : '1'
+  }), [uiState.isBackgroundUpdating]);
+
+  // 🎨 Componente do Header otimizado
+  const ChatHeader = memo(() => (
+    <div 
+      className={cn(
+        "chat-header chat-animated",
+        "flex items-center justify-between p-4 border-b flex-shrink-0",
+        "bg-gradient-to-r from-blue-50/80 to-green-50/80 backdrop-blur-sm"
+      )}
+      style={headerStyles}
+    >
+      <div className="flex items-center gap-3">
+        {/* Avatar do Cliente */}
+        <div className="relative">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white font-medium">
+            {clientName?.[0]?.toUpperCase() || "C"}
+          </div>
+          <div className="absolute -bottom-1 -right-1">
+            <Badge variant="secondary" className="h-5 w-5 rounded-full flex items-center justify-center p-0 bg-green-500 hover:bg-green-600">
+              <MessageSquare className="h-3 w-3 text-white" />
+            </Badge>
+          </div>
+        </div>
+
+        {/* Info do Cliente */}
+        <div>
+          <h3 className="font-medium">{clientName}</h3>
+          {clientPhone && (
+            <p className="text-sm text-muted-foreground">{clientPhone}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Controles */}
+      <div className="flex items-center gap-2">
+        {/* Status de Conexão */}
+        <ConnectionStatus connectionInfo={{
+          isConnected,
+          isLoading,
+          error: error || null,
+          lastUpdate: uiState.lastUpdateTime
+        }} />
+
+        {/* Controles UX */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowSearch(!showSearch)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <Search className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowSidebar(!showSidebar)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <Users className="h-4 w-4" />
+        </Button>
+
+        {/* Controles de janela */}
+        {onMinimize && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMinimize}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </Button>
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  ));
 
   // 🚫 Não renderizar se não estiver aberto
   if (!isOpen) {
@@ -498,176 +688,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
         </DialogTitle>
         
         {/* 🎨 Header Avançado */}
-        <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-green-50 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            {/* Avatar do Cliente */}
-            <div className="relative">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-green-400 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg ring-2 ring-white">
-                {getClientInitials()}
-              </div>
-              {/* Status online */}
-              <div className={cn(
-                "absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white",
-                isConnected ? "bg-green-400" : "bg-gray-400"
-              )}>
-                {isConnected && <div className="w-full h-full bg-green-400 rounded-full animate-pulse" />}
-              </div>
-            </div>
-            
-            {/* Informações do Cliente */}
-            <div className="flex flex-col">
-              <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                {clientName}
-                {clientPhone && (
-                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                    📱 WhatsApp
-                  </Badge>
-                )}
-              </h3>
-              
-              <div className="flex items-center gap-3 text-xs text-gray-500">
-                {/* Status de Conexão */}
-                <div className="flex items-center gap-1">
-                  <connectionStatus.icon className={cn("w-3 h-3", connectionStatus.color)} />
-                  <span className={connectionStatus.color}>{connectionStatus.text}</span>
-                  {isConnected && (
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Conexão ativa" />
-                  )}
-                </div>
-                
-                {/* Telefone com ação WhatsApp */}
-                {clientPhone && (
-                  <>
-                    <span className="text-gray-300">•</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-5 px-2 text-xs text-blue-600 hover:text-green-600 hover:bg-green-50"
-                      onClick={() => window.open(`https://wa.me/${clientPhone.replace(/\D/g, '')}`, '_blank')}
-                    >
-                      <Phone className="w-3 h-3 mr-1" />
-                      {clientPhone}
-                    </Button>
-                  </>
-                )}
-                
-                {/* Estatísticas */}
-                <span className="text-gray-300">•</span>
-                <span className="flex items-center gap-1">
-                  <MessageSquare className="w-3 h-3" />
-                  {messageStats.total} mensagens
-                </span>
-                
-                {messageStats.unread > 0 && (
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
-                    {messageStats.unread} não lidas
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          {/* 🎛️ Controles do Header */}
-          <div className="flex items-center gap-1">
-            {/* Busca */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowSearch(!showSearch)}
-              className={cn("h-8 w-8", showSearch && "bg-blue-100 text-blue-600")}
-              title="Buscar (Ctrl+F)"
-            >
-              <Search className="w-4 h-4" />
-            </Button>
-
-            {/* Atualizar mensagens */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                console.log('🔄 [UNIFIED-CHAT] Forçando atualização de mensagens...');
-                if (isConnected) {
-                  load(ticketId);
-                } else {
-                  init();
-                }
-                showInfo('Atualizando mensagens...');
-              }}
-              className={cn("h-8 w-8", isLoading && "animate-spin")}
-              title="Atualizar mensagens"
-            >
-              <Loader2 className="w-4 h-4" />
-            </Button>
-            
-            {/* Som */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className={cn("h-8 w-8", soundEnabled ? "text-green-600" : "text-gray-400")}
-              title="Som de notificações"
-            >
-              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </Button>
-            
-            {/* Sidebar */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowSidebar(!showSidebar)}
-              className={cn("h-8 w-8", showSidebar && "bg-blue-100 text-blue-600")}
-              title="Informações (Ctrl+B)"
-            >
-              <Users className="w-4 h-4" />
-            </Button>
-            
-            {/* Expandir */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="h-8 w-8"
-              title="Expandir"
-            >
-              <Maximize className="w-4 h-4" />
-            </Button>
-            
-            {/* Fullscreen */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              className="h-8 w-8"
-              title="Tela cheia"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </Button>
-            
-            {/* Minimizar */}
-            {onMinimize && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onMinimize}
-                className="h-8 w-8"
-                title="Minimizar"
-              >
-                <Minimize2 className="w-4 h-4" />
-              </Button>
-            )}
-            
-            {/* Fechar */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-              title="Fechar (ESC)"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
+        <ChatHeader />
 
         {/* 🔍 Barra de Busca */}
         {showSearch && (
@@ -721,71 +742,112 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
               </div>
             )}
             
-            <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 bg-gradient-to-b from-gray-50 to-gray-100">
-              <div className="space-y-4">
-                {/* Estado de carregamento */}
-                {isLoading && ticketMessages.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-                    <Loader2 className="w-8 h-8 animate-spin mb-3" />
-                    <p>Carregando mensagens...</p>
+            {/* 📱 Área de Mensagens com Transições Suaves */}
+            <div className="flex-1 overflow-hidden relative">
+              {/* Indicador sutil de atualização em background */}
+              {uiState.isBackgroundUpdating && (
+                <div className="absolute top-2 right-2 z-10">
+                  <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-full px-2 py-1 border border-gray-200 shadow-sm">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs text-gray-600">Atualizando...</span>
                   </div>
-                )}
-                
-                {/* Estado de erro */}
-                {error && (
-                  <div className="flex flex-col items-center justify-center py-12 text-red-500">
-                    <AlertCircle className="w-8 h-8 mb-3" />
-                    <p>Erro ao carregar mensagens</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => load(ticketId)}
-                      className="mt-2"
-                    >
-                      Tentar novamente
-                    </Button>
+                </div>
+              )}
+              
+              {/* Indicador de última atualização (muito sutil) */}
+              {uiState.updateCount > 0 && (
+                <div className="absolute top-2 left-2 z-10">
+                  <div className="text-xs text-gray-400 bg-white/60 backdrop-blur-sm rounded px-1.5 py-0.5">
+                    Última atualização: {formatDistanceToNow(uiState.lastUpdateTime, { addSuffix: true, locale: ptBR })}
                   </div>
-                )}
-                
-                {/* Estado vazio */}
-                {!isLoading && !error && ticketMessages.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-                    <MessageSquare className="w-12 h-12 mb-4 opacity-50" />
-                    <h3 className="text-lg font-medium mb-2">Nenhuma mensagem ainda</h3>
-                    <p className="text-sm text-center max-w-sm">
-                      Esta é uma nova conversa com {clientName}. Seja o primeiro a enviar uma mensagem!
-                    </p>
-                  </div>
-                )}
-                
-                {/* Lista de Mensagens */}
-                {filteredMessages.map((message: LocalChatMessage) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={{
-                      ...message,
-                      type: message.type || 'text',
-                      status: message.status || 'sent',
-                      metadata: message.metadata || {}
-                    }}
-                    isFromCurrentUser={message.sender === 'agent'}
-                    onReply={() => handleReplyToMessage(message)}
-                    onToggleFavorite={() => handleToggleFavorite(message.id)}
-                    onCopy={() => handleCopyMessage(message.content)}
-                    isFavorite={favoriteMessages.has(message.id)}
-                    isHighlighted={Boolean(
-                      searchQuery.trim() && 
-                      message.content && 
-                      message.content.toLowerCase().includes(searchQuery.toLowerCase())
-                    )}
-                    className="transition-all duration-200 hover:scale-[1.01]"
-                  />
-                ))}
-                
-                {/* Referência para scroll automático */}
-                <div ref={messagesEndRef} />
-              </div>
-            </ScrollArea>
+                </div>
+              )}
+              
+              <ScrollArea 
+                ref={scrollAreaRef}
+                className="h-full px-4"
+                style={{
+                  // Transições suaves para evitar piscar
+                  transition: 'opacity 0.3s ease-in-out',
+                  opacity: uiState.isBackgroundUpdating ? 0.98 : 1
+                }}
+              >
+                <div className="space-y-3 py-4">
+                  {filteredMessages.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">
+                        {searchQuery ? 'Nenhuma mensagem encontrada' : 'Nenhuma mensagem ainda'}
+                      </p>
+                      {!searchQuery && (
+                        <p className="text-xs mt-1">Inicie uma conversa enviando uma mensagem</p>
+                      )}
+                    </div>
+                  ) : (
+                    filteredMessages.map((message: LocalChatMessage, index: number) => {
+                      const isLastMessage = index === filteredMessages.length - 1;
+                      const isNewMessage = message.timestamp > lastSeen;
+                      const isRecentlyAdded = index >= uiState.previousMessageCount;
+                      
+                      return (
+                        <div
+                          key={message.id}
+                          className={cn(
+                            "transition-all duration-500 ease-out",
+                            isNewMessage && "animate-in slide-in-from-bottom-2 fade-in-0",
+                            isRecentlyAdded && "bg-blue-50/30 rounded-lg",
+                            uiState.isBackgroundUpdating && "opacity-95"
+                          )}
+                          style={{
+                            // Animação sutil para novas mensagens
+                            animationDelay: isNewMessage ? `${index * 30}ms` : '0ms',
+                            // Transição suave para mensagens recém-adicionadas
+                            transition: isRecentlyAdded ? 'background-color 2s ease-out' : 'none'
+                          }}
+                        >
+                          <MessageBubble
+                            message={{
+                              ...message,
+                              type: message.type || 'text',
+                              status: message.status || 'sent',
+                              metadata: message.metadata || {}
+                            }}
+                            isFromCurrentUser={message.sender === 'agent'}
+                            onReply={() => setReplyingTo(message)}
+                            onToggleFavorite={() => handleToggleFavorite(message.id)}
+                            isFavorite={favoriteMessages.has(message.id)}
+                            isHighlighted={Boolean(
+                              searchQuery.trim() && 
+                              message.content && 
+                              message.content.toLowerCase().includes(searchQuery.toLowerCase())
+                            )}
+                            onCopy={() => handleCopyMessage(message.content)}
+                          />
+                        </div>
+                      );
+                    })
+                  )}
+                  
+                  {/* Indicador de digitação */}
+                  <TypingIndicator typingUsers={[]} />
+                  
+                  {/* Âncora para scroll */}
+                  <div ref={messagesEndRef} className="h-1" />
+                </div>
+              </ScrollArea>
+              
+              {/* Botão de scroll para baixo (sutil) */}
+              {showScrollToBottom && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                  className="absolute bottom-4 right-4 h-8 w-8 bg-white/80 backdrop-blur-sm border shadow-sm hover:bg-white/90 transition-all duration-200"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
             
             {/* 🔄 Preview de Resposta */}
             {replyingTo && (
@@ -925,7 +987,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                   )}>
                     {messageText.length}/2000
                   </span>
-                  {draftSaved && (
+                  {uiState.isBackgroundUpdating && (
                     <>
                       <span>•</span>
                       <span className="text-green-500 flex items-center gap-1">

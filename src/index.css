@@ -996,3 +996,25 @@
   max-width: 100%;
   overflow: hidden;
 }
+
+/* 🎨 Otimização de transições do header do chat */
+.chat-header {
+  transition: all 700ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.chat-header.updating {
+  opacity: 0.995;
+  transform: scale(0.9998);
+}
+
+/* Otimização de performance para elementos animados */
+.chat-animated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform, opacity;
+}
