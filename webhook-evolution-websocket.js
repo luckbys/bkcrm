@@ -1113,7 +1113,7 @@ app.post('/webhook/evolution', async (req, res) => {
         console.error('❌ [PRODUÇÃO] Erro ao processar mensagem:', error);
         result = { success: false, message: error.message };
       }
-    } else if (payload.event === 'CONNECTION_UPDATE') {
+    } else if (payload.event === 'CONNECTION_UPDATE' || payload.event === 'connection.update') {
       console.log('🔗 [PRODUÇÃO] Atualização de conexão:', payload.data);
       result = { success: true, message: 'Conexão atualizada' };
     } else {
@@ -1142,6 +1142,130 @@ app.post('/webhook/evolution', async (req, res) => {
   }
 });
 
+// 🔧 ENDPOINTS ADICIONAIS DA EVOLUTION API
+// Endpoint para connection.update (Evolution API adiciona automaticamente)
+app.post('/webhook/evolution/connection-update', async (req, res) => {
+  try {
+    const payload = req.body;
+    const timestamp = new Date().toISOString();
+    
+    console.log(`🔗 [${timestamp}] Connection Update Evolution API:`, {
+      event: payload.event,
+      instance: payload.instance,
+      state: payload.data?.state,
+      profileName: payload.data?.profileName
+    });
+
+    // Processar atualização de conexão
+    if (payload.event === 'connection.update' && payload.data) {
+      console.log(`📱 [CONNECTION] Status: ${payload.data.state} para instância ${payload.instance}`);
+      
+      if (payload.data.state === 'open') {
+        console.log(`✅ [CONNECTION] WhatsApp conectado - ${payload.data.profileName || 'Sem nome'}`);
+      } else if (payload.data.state === 'close') {
+        console.log(`❌ [CONNECTION] WhatsApp desconectado`);
+      }
+    }
+
+    res.status(200).json({ 
+      received: true, 
+      timestamp,
+      event: payload.event || 'connection.update',
+      instance: payload.instance,
+      processed: true,
+      message: 'Connection update processado'
+    });
+
+  } catch (error) {
+    console.error('❌ [CONNECTION] Erro ao processar connection update:', error);
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      timestamp: new Date().toISOString(),
+      details: error.message
+    });
+  }
+});
+
+// Endpoint para messages.upsert (Evolution API pode usar formato específico)
+app.post('/webhook/evolution/messages-upsert', async (req, res) => {
+  try {
+    const payload = req.body;
+    const timestamp = new Date().toISOString();
+    
+    // Garantir que o evento esteja definido
+    payload.event = payload.event || 'messages.upsert';
+    
+    console.log(`🔄 [${timestamp}] Messages Upsert específico - Event: ${payload.event}`);
+    
+    // Processar MESSAGES_UPSERT como no endpoint principal
+    let result = { success: false, message: 'Evento não processado' };
+
+    if ((payload.event === 'MESSAGES_UPSERT' || payload.event === 'messages.upsert') && payload.data) {
+      console.log(`📨 [MESSAGES-UPSERT] Processando ${payload.event}...`);
+      
+      try {
+        // Verificar se é mensagem de cliente (não nossa)
+        if (payload.data.key && !payload.data.key.fromMe) {
+          console.log('✅ [MESSAGES-UPSERT] Mensagem de cliente detectada');
+          
+          // Extrair dados básicos
+          const clientPhone = extractPhoneFromJid(payload.data.key.remoteJid);
+          const messageContent = extractMessageContent(payload.data.message);
+          const senderName = payload.data.pushName || `Cliente ${clientPhone?.slice(-4) || 'Unknown'}`;
+          const instanceName = payload.instance || 'atendimento-ao-cliente-suporte';
+          
+          if (clientPhone && messageContent) {
+            result = { success: true, message: 'Mensagem processada via endpoint específico' };
+          } else {
+            result = { success: false, message: 'Dados da mensagem inválidos' };
+          }
+        } else {
+          result = { success: true, message: 'Mensagem própria ignorada' };
+        }
+      } catch (error) {
+        console.error('❌ [MESSAGES-UPSERT] Erro ao processar:', error);
+        result = { success: false, message: error.message };
+      }
+    }
+
+    res.status(200).json({ 
+      received: true, 
+      timestamp,
+      event: payload.event,
+      instance: payload.instance,
+      processed: result.success,
+      message: result.message,
+      endpoint: 'messages-upsert-specific'
+    });
+    
+  } catch (error) {
+    console.error('❌ [MESSAGES] Erro ao processar messages.upsert:', error);
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      timestamp: new Date().toISOString(),
+      details: error.message
+    });
+  }
+});
+
+// Endpoint genérico para capturar outros eventos da Evolution API
+app.post('/webhook/evolution/:event', (req, res) => {
+  const endpoint = req.params.event;
+  const payload = req.body;
+  
+  console.log(`🔄 [GENERIC] Endpoint Evolution API: /webhook/evolution/${endpoint}`);
+  console.log(`📦 [GENERIC] Event: ${payload.event || 'unknown'}`);
+  
+  res.status(200).json({ 
+    received: true, 
+    timestamp: new Date().toISOString(),
+    endpoint: `/webhook/evolution/${endpoint}`,
+    event: payload.event || 'unknown',
+    processed: true,
+    message: 'Evento genérico processado'
+  });
+});
+
 // Endpoint de health check
 app.get('/webhook/health', (req, res) => {
   const stats = wsManager.getStats();
@@ -1156,6 +1280,9 @@ app.get('/webhook/health', (req, res) => {
     },
     endpoints: [
       '/webhook/evolution',
+      '/webhook/evolution/connection-update',
+      '/webhook/evolution/messages-upsert',
+      '/webhook/evolution/:event',
       '/webhook/health',
       '/webhook/ws-stats'
     ]
