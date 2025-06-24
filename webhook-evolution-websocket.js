@@ -1013,9 +1013,9 @@ app.post('/webhook/evolution', async (req, res) => {
 
     let result = { success: false, message: 'Evento não processado' };
 
-    // 🔧 CORREÇÃO: Processar MESSAGES_UPSERT corretamente
-    if (payload.event === 'MESSAGES_UPSERT' && payload.data) {
-      console.log('📨 [PRODUÇÃO] Processando MESSAGES_UPSERT...');
+    // 🔧 CORREÇÃO: Processar MESSAGES_UPSERT corretamente (ambos formatos)
+    if ((payload.event === 'MESSAGES_UPSERT' || payload.event === 'messages.upsert') && payload.data) {
+      console.log(`📨 [PRODUÇÃO] Processando ${payload.event} (formato ${payload.event === 'MESSAGES_UPSERT' ? 'simulado' : 'real'})...`);
       
       try {
         // Verificar se é mensagem de cliente (não nossa)
