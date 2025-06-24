@@ -198,6 +198,9 @@ import './utils/test-nunmsg-integration'
 // 🚀 Importar teste da correção do realtime
 import './utils/test-realtime-fix'
 
+// 🔧 Importar debug do UnifiedChatModal
+import './utils/debug-unified-chat'
+
 // 🔧 Importar teste da correção UUID
 import './utils/uuid-test'
 

@@ -153,8 +153,18 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     const internal = ticketMessages.filter(msg => msg.isInternal).length;
     const unread = ticketMessages.filter(msg => msg.timestamp > lastSeen).length;
     
+    // Debug das mensagens
+    console.log(`📊 [UNIFIED-CHAT] Stats do ticket ${ticketId}:`, {
+      total,
+      fromClient,
+      fromAgent,
+      internal,
+      unread,
+      lastUpdate: ticketMessages.length > 0 ? ticketMessages[ticketMessages.length - 1].timestamp : null
+    });
+    
     return { total, fromClient, fromAgent, internal, unread };
-  }, [ticketMessages, lastSeen]);
+  }, [ticketMessages, lastSeen, ticketId]);
 
   // 🔄 Inicialização do WebSocket
   useEffect(() => {
@@ -170,13 +180,40 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       console.log(`🎯 [UNIFIED-CHAT] Entrando no ticket ${ticketId}`);
       join(ticketId);
       
-      // Carregar mensagens se não existirem
-      if (ticketMessages.length === 0) {
-        console.log(`📥 [UNIFIED-CHAT] Carregando mensagens do ticket...`);
+      // Carregar mensagens sempre que entrar no ticket
+      console.log(`📥 [UNIFIED-CHAT] Carregando mensagens do ticket...`);
+      load(ticketId);
+    }
+  }, [isOpen, ticketId, isConnected, join, load]);
+
+  // 🔄 Polling como fallback para garantir mensagens em tempo real
+  useEffect(() => {
+    if (!isOpen || !ticketId) return;
+
+    // Polling a cada 3 segundos para garantir que mensagens não sejam perdidas
+    const pollingInterval = setInterval(() => {
+      if (isConnected) {
+        console.log(`🔄 [UNIFIED-CHAT] Polling mensagens do ticket ${ticketId}`);
         load(ticketId);
       }
+    }, 3000);
+
+    return () => {
+      clearInterval(pollingInterval);
+    };
+  }, [isOpen, ticketId, isConnected, load]);
+
+  // 🎯 Reconexão automática quando necessário
+  useEffect(() => {
+    if (isOpen && !isConnected && !isLoading) {
+      console.log('🔄 [UNIFIED-CHAT] Tentando reconectar...');
+      const reconnectTimer = setTimeout(() => {
+        init();
+      }, 2000);
+
+      return () => clearTimeout(reconnectTimer);
     }
-  }, [isOpen, ticketId, isConnected, join, load, ticketMessages.length]);
+  }, [isOpen, isConnected, isLoading, init]);
 
   // 📜 Auto-scroll para última mensagem
   useEffect(() => {
@@ -192,17 +229,46 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     }
   }, [showSearch]);
 
-  // 🔊 Notificação sonora para novas mensagens
+  // 🔊 Notificação sonora e visual para novas mensagens
   useEffect(() => {
-    if (soundEnabled && ticketMessages.length > 0) {
+    if (ticketMessages.length > 0) {
       const lastMessage = ticketMessages[ticketMessages.length - 1];
-      if (lastMessage && lastMessage.sender === 'client' && lastMessage.timestamp > lastSeen) {
-        // Simular som de notificação
-        console.log('🔔 [UNIFIED-CHAT] Nova mensagem do cliente!');
-        showInfo('Nova mensagem recebida!');
+      const isNewMessage = lastMessage && lastMessage.timestamp > lastSeen;
+      
+      if (isNewMessage) {
+        console.log('🔔 [UNIFIED-CHAT] Nova mensagem detectada:', lastMessage);
+        
+        // Atualizar timestamp de última visualização
+        setLastSeen(new Date());
+        
+        // Notificação visual baseada no remetente
+        if (lastMessage.sender === 'client') {
+          showInfo(`💬 Nova mensagem de ${lastMessage.senderName}`);
+          
+          // Som de notificação se habilitado
+          if (soundEnabled) {
+            try {
+              // Tentar reproduzir som de notificação
+              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAkUXrTp66hVFApGn+D...');
+              audio.volume = 0.3;
+              audio.play().catch(e => console.log('🔇 Som não pôde ser reproduzido:', e));
+            } catch (e) {
+              console.log('🔇 Erro ao reproduzir som:', e);
+            }
+          }
+        } else if (lastMessage.sender === 'agent' && !lastMessage.isInternal) {
+          showSuccess(`✅ Mensagem enviada para ${clientName}`);
+        }
+
+        // Scroll automático para nova mensagem
+        if (messagesEndRef.current) {
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }
       }
     }
-  }, [ticketMessages, soundEnabled, lastSeen, showInfo]);
+  }, [ticketMessages, soundEnabled, lastSeen, showInfo, showSuccess, clientName]);
 
   // 💾 Auto-save de rascunhos
   useEffect(() => {
@@ -386,6 +452,39 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     return { icon: WifiOff, text: 'Offline', color: 'text-gray-500' };
   }, [isLoading, isConnected, error]);
 
+  // ⌨️ Escuta de atalhos de teclado
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+      
+      // F5 ou Ctrl+R para atualizar mensagens
+      if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+        e.preventDefault();
+        console.log('🔄 [UNIFIED-CHAT] Atualizando via teclado...');
+        if (isConnected) {
+          load(ticketId);
+        } else {
+          init();
+        }
+        showInfo('🔄 Mensagens atualizadas!');
+      }
+
+      // Ctrl+I para alternar modo interno
+      if (e.ctrlKey && e.key === 'i') {
+        e.preventDefault();
+        setActiveMode(prev => prev === 'internal' ? 'message' : 'internal');
+      }
+
+      // ESC para fechar
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isConnected, load, ticketId, init, showInfo, onClose]);
+
   // 🚫 Não renderizar se não estiver aberto
   if (!isOpen) {
     return null;
@@ -431,6 +530,9 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                 <div className="flex items-center gap-1">
                   <connectionStatus.icon className={cn("w-3 h-3", connectionStatus.color)} />
                   <span className={connectionStatus.color}>{connectionStatus.text}</span>
+                  {isConnected && (
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Conexão ativa" />
+                  )}
                 </div>
                 
                 {/* Telefone com ação WhatsApp */}
@@ -476,6 +578,25 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
               title="Buscar (Ctrl+F)"
             >
               <Search className="w-4 h-4" />
+            </Button>
+
+            {/* Atualizar mensagens */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                console.log('🔄 [UNIFIED-CHAT] Forçando atualização de mensagens...');
+                if (isConnected) {
+                  load(ticketId);
+                } else {
+                  init();
+                }
+                showInfo('Atualizando mensagens...');
+              }}
+              className={cn("h-8 w-8", isLoading && "animate-spin")}
+              title="Atualizar mensagens"
+            >
+              <Loader2 className="w-4 h-4" />
             </Button>
             
             {/* Som */}
@@ -829,7 +950,8 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
               <div className="mt-2 text-xs text-gray-400 text-center">
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded">Enter</kbd> para enviar • 
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Shift+Enter</kbd> nova linha • 
-                <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Ctrl+I</kbd> nota interna
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Ctrl+I</kbd> nota interna • 
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">F5</kbd> atualizar
               </div>
             </div>
           </div>

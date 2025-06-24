@@ -150,7 +150,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return state; // Não adicionar mensagem duplicada
         }
 
-        return {
+        console.log('✅ [CHAT] Adicionando nova mensagem ao estado:', {
+          ticketId: message.ticketId,
+          sender: message.sender,
+          content: message.content.substring(0, 50),
+          totalBefore: currentMessages.length,
+          totalAfter: currentMessages.length + 1
+        });
+
+        const newState = {
           ...state,
           messages: {
             ...state.messages,
@@ -160,6 +168,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ]
           }
         };
+
+        // Forçar re-render para componentes que dependem deste estado
+        setTimeout(() => {
+          console.log('🔄 [CHAT] Forçando update do estado para ticket:', message.ticketId);
+        }, 100);
+
+        return newState;
       });
     });
 
