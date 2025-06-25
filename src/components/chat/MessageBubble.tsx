@@ -14,10 +14,21 @@ import {
   Edit3,
   Flag,
   AlertCircle,
-  Lock
+  Lock,
+  Play,
+  Pause,
+  Download,
+  Image as ImageIcon,
+  FileText,
+  Film,
+  Music,
+  FileIcon,
+  Eye,
+  ExternalLink
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ChatMessage } from '../../types/chat';
+import { Button } from '../ui/button';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -32,6 +43,540 @@ interface MessageBubbleProps {
   isHighlighted?: boolean;
   className?: string;
 }
+
+// 🎵 Componente de Player de Áudio
+const AudioPlayer: React.FC<{ audioUrl: string; duration?: number }> = ({ audioUrl, duration }) => {
+  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [currentTime, setCurrentTime] = React.useState(0);
+  const [totalDuration, setTotalDuration] = React.useState(duration || 0);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [hasError, setHasError] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string>('');
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+
+  // 🔧 Função para tocar/pausar com tratamento de erro
+  const togglePlay = async () => {
+    if (!audioRef.current) return;
+
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        // Tentar reproduzir o áudio
+        await audioRef.current.play();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('🔴 [AUDIO] Erro ao reproduzir áudio:', error);
+      setHasError(true);
+      setErrorMessage('Erro ao reproduzir áudio. Tente novamente.');
+      setIsPlaying(false);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setTotalDuration(audioRef.current.duration);
+      setIsLoading(false);
+      console.log('✅ [AUDIO] Metadados carregados:', {
+        duration: audioRef.current.duration,
+        url: audioUrl
+      });
+    }
+  };
+
+  const handleLoadStart = () => {
+    console.log('🔄 [AUDIO] Iniciando carregamento:', audioUrl);
+    setIsLoading(true);
+    setHasError(false);
+    setErrorMessage('');
+  };
+
+  const handleCanPlay = () => {
+    console.log('✅ [AUDIO] Áudio pronto para reprodução');
+    setIsLoading(false);
+    setHasError(false);
+  };
+
+  const handleError = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const error = (e.target as HTMLAudioElement).error;
+    console.error('🔴 [AUDIO] Erro no áudio:', {
+      error: error?.message,
+      code: error?.code,
+      url: audioUrl
+    });
+    
+    setIsLoading(false);
+    setHasError(true);
+    setIsPlaying(false);
+    
+    // Mensagens de erro específicas por código
+    switch (error?.code) {
+      case MediaError.MEDIA_ERR_ABORTED:
+        setErrorMessage('Reprodução cancelada');
+        break;
+      case MediaError.MEDIA_ERR_NETWORK:
+        setErrorMessage('Erro de rede');
+        break;
+      case MediaError.MEDIA_ERR_DECODE:
+        setErrorMessage('Erro de decodificação');
+        break;
+      case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+        setErrorMessage('Formato não suportado');
+        break;
+      default:
+        setErrorMessage('Erro ao carregar áudio');
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || totalDuration === 0) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    const newTime = percent * totalDuration;
+    
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const progressPercentage = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+
+  // 🛡️ Validação da URL
+  React.useEffect(() => {
+    if (!audioUrl) {
+      setHasError(true);
+      setErrorMessage('URL do áudio não fornecida');
+    }
+  }, [audioUrl]);
+
+  if (hasError) {
+    return (
+      <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
+        <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+          <Music className="w-4 h-4 text-red-500" />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium text-red-700">Erro no Áudio</span>
+          </div>
+          <p className="text-xs text-red-600">{errorMessage}</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => window.open(audioUrl, '_blank')}
+          className="w-8 h-8 p-0"
+          title="Abrir áudio em nova aba"
+        >
+          <Download className="w-4 h-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border">
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onLoadStart={handleLoadStart}
+        onCanPlay={handleCanPlay}
+        onError={handleError}
+        onEnded={handleEnded}
+        preload="metadata"
+        crossOrigin="anonymous"
+      />
+      
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={togglePlay}
+        disabled={isLoading}
+        className="w-10 h-10 rounded-full bg-blue-500 hover:bg-blue-600 text-white p-0 disabled:bg-gray-300"
+      >
+        {isLoading ? (
+          <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+        ) : isPlaying ? (
+          <Pause className="w-4 h-4" />
+        ) : (
+          <Play className="w-4 h-4 ml-0.5" />
+        )}
+      </Button>
+
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-1">
+          <Music className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-medium text-gray-700">
+            {isLoading ? 'Carregando...' : 'Áudio'}
+          </span>
+        </div>
+        
+        <div className="relative">
+          <div 
+            className="w-full h-2 bg-gray-200 rounded-full overflow-hidden cursor-pointer"
+            onClick={handleSeek}
+          >
+            <div 
+              className="h-full bg-blue-500 transition-all duration-100"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+        </div>
+        
+        <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(totalDuration)}</span>
+        </div>
+      </div>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => window.open(audioUrl, '_blank')}
+        className="w-8 h-8 p-0"
+        title="Abrir áudio em nova aba"
+      >
+        <Download className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+};
+
+// 🖼️ Componente de Visualização de Imagem
+const ImageViewer: React.FC<{ imageUrl: string; altText?: string }> = ({ imageUrl, altText }) => {
+  const [isFullScreen, setIsFullScreen] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [hasError, setHasError] = React.useState(false);
+
+  return (
+    <>
+      <div className="relative group cursor-pointer" onClick={() => setIsFullScreen(true)}>
+        <div className="relative rounded-lg overflow-hidden bg-gray-100">
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+          )}
+          
+          {hasError ? (
+            <div className="flex items-center justify-center h-48 bg-gray-100">
+              <div className="text-center">
+                <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">Erro ao carregar imagem</p>
+              </div>
+            </div>
+          ) : (
+            <img
+              src={imageUrl}
+              alt={altText || "Imagem enviada"}
+              className={cn(
+                "w-full max-w-sm object-cover rounded-lg transition-all duration-200",
+                isLoading && "opacity-0"
+              )}
+              onLoad={() => setIsLoading(false)}
+              onError={() => {
+                setIsLoading(false);
+                setHasError(true);
+              }}
+              style={{ maxHeight: '300px' }}
+            />
+          )}
+          
+          {!isLoading && !hasError && (
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+              <Eye className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-all duration-200" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal de visualização em tela cheia */}
+      {isFullScreen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          onClick={() => setIsFullScreen(false)}
+        >
+          <div className="relative max-w-full max-h-full">
+            <img
+              src={imageUrl}
+              alt={altText || "Imagem enviada"}
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <Button
+              variant="ghost"
+              className="absolute top-4 right-4 text-white hover:bg-white/20"
+              onClick={() => setIsFullScreen(false)}
+            >
+              ✕
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// 🎬 Componente de Player de Vídeo
+const VideoPlayer: React.FC<{ videoUrl: string; thumbnailUrl?: string }> = ({ videoUrl, thumbnailUrl }) => {
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [hasError, setHasError] = React.useState(false);
+
+  return (
+    <div className="relative rounded-lg overflow-hidden bg-gray-100 max-w-sm">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+      )}
+      
+      {hasError ? (
+        <div className="flex items-center justify-center h-48 bg-gray-100">
+          <div className="text-center">
+            <Film className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">Erro ao carregar vídeo</p>
+          </div>
+        </div>
+      ) : (
+        <video
+          src={videoUrl}
+          poster={thumbnailUrl}
+          controls
+          className="w-full max-h-80 object-cover"
+          onLoadStart={() => setIsLoading(true)}
+          onLoadedData={() => setIsLoading(false)}
+          onError={() => {
+            setIsLoading(false);
+            setHasError(true);
+          }}
+        >
+          Seu navegador não suporta reprodução de vídeo.
+        </video>
+      )}
+    </div>
+  );
+};
+
+// 📄 Componente de Visualização de Arquivo
+const FileViewer: React.FC<{ 
+  fileUrl: string; 
+  fileName: string; 
+  fileSize?: number; 
+  fileType?: string;
+}> = ({ fileUrl, fileName, fileSize, fileType }) => {
+  const getFileIcon = () => {
+    if (!fileType) return FileIcon;
+    
+    if (fileType.includes('pdf')) return FileText;
+    if (fileType.includes('image')) return ImageIcon;
+    if (fileType.includes('video')) return Film;
+    if (fileType.includes('audio')) return Music;
+    
+    return FileIcon;
+  };
+
+  const getFileColor = () => {
+    if (!fileType) return 'text-gray-500';
+    
+    if (fileType.includes('pdf')) return 'text-red-500';
+    if (fileType.includes('image')) return 'text-green-500';
+    if (fileType.includes('video')) return 'text-purple-500';
+    if (fileType.includes('audio')) return 'text-blue-500';
+    if (fileType.includes('document') || fileType.includes('word')) return 'text-blue-600';
+    if (fileType.includes('spreadsheet') || fileType.includes('excel')) return 'text-green-600';
+    
+    return 'text-gray-500';
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '';
+    
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+  };
+
+  const handleDownload = () => {
+    const link = document.createElement('a');
+    link.href = fileUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePreview = () => {
+    window.open(fileUrl, '_blank');
+  };
+
+  const FileIconComponent = getFileIcon();
+
+  return (
+    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors max-w-sm">
+      <div className={cn("p-2 rounded-lg bg-white", getFileColor())}>
+        <FileIconComponent className="w-6 h-6" />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm text-gray-900 truncate" title={fileName}>
+          {fileName}
+        </div>
+        {fileSize && (
+          <div className="text-xs text-gray-500">
+            {formatFileSize(fileSize)}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-1">
+        {fileType?.includes('pdf') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handlePreview}
+            className="w-8 h-8 p-0"
+            title="Visualizar"
+          >
+            <Eye className="w-4 h-4" />
+          </Button>
+        )}
+        
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleDownload}
+          className="w-8 h-8 p-0"
+          title="Download"
+        >
+          <Download className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+// 🎯 Componente de Renderização de Conteúdo da Mensagem
+const MessageContent: React.FC<{ 
+  message: ChatMessage; 
+  isHighlighted: boolean; 
+  styles: any;
+  searchQuery?: string;
+}> = ({ message, isHighlighted, styles, searchQuery }) => {
+  // Highlight texto de busca
+  const highlightText = (text: string, query?: string) => {
+    if (!query || !isHighlighted) return text;
+    
+    const regex = new RegExp(`(${query})`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, index) => 
+      regex.test(part) ? (
+        <mark key={index} className="bg-yellow-200 px-1 rounded">
+          {part}
+        </mark>
+      ) : part
+    );
+  };
+
+  // Renderizar conteúdo baseado no tipo da mensagem
+  const renderContent = () => {
+    switch (message.type) {
+      case 'image':
+        return (
+          <div className="space-y-2">
+            <ImageViewer 
+              imageUrl={message.metadata?.fileUrl || message.content} 
+              altText={message.metadata?.fileName || 'Imagem enviada'}
+            />
+            {message.content && message.content !== message.metadata?.fileUrl && (
+              <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words", styles.textAlign)}>
+                {highlightText(message.content, searchQuery)}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'audio':
+        return (
+          <div className="space-y-2">
+            <AudioPlayer 
+              audioUrl={message.metadata?.fileUrl || message.content}
+              duration={message.metadata?.duration}
+            />
+            {message.content && message.content !== message.metadata?.fileUrl && (
+              <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words", styles.textAlign)}>
+                {highlightText(message.content, searchQuery)}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'video':
+        return (
+          <div className="space-y-2">
+            <VideoPlayer 
+              videoUrl={message.metadata?.fileUrl || message.content}
+              thumbnailUrl={message.metadata?.thumbnailUrl}
+            />
+            {message.content && message.content !== message.metadata?.fileUrl && (
+              <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words", styles.textAlign)}>
+                {highlightText(message.content, searchQuery)}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'file':
+        return (
+          <div className="space-y-2">
+            <FileViewer 
+              fileUrl={message.metadata?.fileUrl || message.content}
+              fileName={message.metadata?.fileName || 'Arquivo'}
+              fileSize={message.metadata?.fileSize}
+              fileType={message.metadata?.fileType}
+            />
+            {message.content && message.content !== message.metadata?.fileUrl && (
+              <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words", styles.textAlign)}>
+                {highlightText(message.content, searchQuery)}
+              </div>
+            )}
+          </div>
+        );
+
+      default:
+        return (
+          <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words", styles.textAlign)}>
+            {highlightText(message.content, searchQuery)}
+          </div>
+        );
+    }
+  };
+
+  return <>{renderContent()}</>;
+};
 
 // 👤 Componente de Avatar
 const MessageAvatar: React.FC<{ 
@@ -140,22 +685,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     locale: ptBR 
   });
 
-  // Highlight texto de busca
-  const highlightText = (text: string, query?: string) => {
-    if (!query || !isHighlighted) return text;
-    
-    const regex = new RegExp(`(${query})`, 'gi');
-    const parts = text.split(regex);
-    
-    return parts.map((part, index) => 
-      regex.test(part) ? (
-        <mark key={index} className="bg-yellow-200 px-1 rounded">
-          {part}
-        </mark>
-      ) : part
-    );
-  };
-
   const handleCopy = () => {
     if (onCopy) {
       onCopy(message.content);
@@ -214,9 +743,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             isFavorite && "ring-2 ring-yellow-400 ring-opacity-50",
             isHighlighted && "ring-2 ring-yellow-300 ring-opacity-75"
           )}>
-            <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words", styles.textAlign)}>
-              {highlightText(message.content)}
-            </div>
+            <MessageContent 
+              message={message}
+              isHighlighted={isHighlighted}
+              styles={styles}
+              searchQuery={isHighlighted ? message.content : undefined}
+            />
 
             {/* Timestamp e Status */}
             <div className={cn(

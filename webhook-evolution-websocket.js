@@ -453,20 +453,30 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
 async function saveMessage(ticketId, messageData, instanceName) {
   try {
     const messageId = crypto.randomUUID();
+    
+    // 🎵 PREPARAR METADADOS COMPLETOS
+    const baseMetadata = {
+      evolution_instance: instanceName,
+      whatsapp_message_id: messageData.whatsappMessageId,
+      sender_phone: messageData.senderPhone,
+      is_from_whatsapp: true,
+      timestamp: messageData.timestamp,
+      message_type: messageData.type || 'text'
+    };
+    
+    // 🎵 ADICIONAR METADADOS DE ÁUDIO SE EXISTIREM
+    const finalMetadata = messageData.metadata ? {
+      ...baseMetadata,
+      ...messageData.metadata
+    } : baseMetadata;
+    
     const messageRecord = {
       id: messageId,
       ticket_id: ticketId,
       content: messageData.content,
       sender_name: messageData.senderName,
       type: messageData.type || 'text',
-      metadata: {
-        evolution_instance: instanceName,
-        whatsapp_message_id: messageData.whatsappMessageId,
-        sender_phone: messageData.senderPhone,
-        is_from_whatsapp: true,
-        timestamp: messageData.timestamp,
-        message_type: messageData.type || 'text'
-      },
+      metadata: finalMetadata,
       created_at: new Date().toISOString()
     };
 
@@ -491,7 +501,7 @@ async function saveMessage(ticketId, messageData, instanceName) {
       is_internal: false,
       created_at: messageRecord.created_at,
       type: messageData.type || 'text',
-      metadata: messageRecord.metadata
+      metadata: finalMetadata
     };
 
     // Enviar para todos conectados ao ticket via WebSocket
@@ -694,11 +704,46 @@ function extractMessageContent(messageObj) {
     return `[Documento] ${messageObj.documentMessage.fileName || 'Arquivo'}`;
   }
   
+  // 🎵 MENSAGEM DE ÁUDIO - Extrair URL e metadados
   if (messageObj.audioMessage) {
+    const audioData = messageObj.audioMessage;
+    const duration = audioData.seconds || 0;
+    const mimetype = audioData.mimetype || 'audio/ogg; codecs=opus';
+    
+    // Construir URL do áudio (baseado na Evolution API)
+    const audioUrl = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${audioData.key.remoteJid}/${audioData.key.id}`;
+    
+    console.log('🎵 [AUDIO] Dados extraídos:', {
+      duration: duration,
+      mimetype: mimetype,
+      audioUrl: audioUrl,
+      messageId: audioData.key.id
+    });
+    
     return '[Áudio]';
   }
   
   return '[Mensagem não suportada]';
+}
+
+// 🎵 Função para extrair metadados de áudio
+function extractAudioMetadata(messageObj) {
+  if (!messageObj || !messageObj.audioMessage) return null;
+  
+  const audioData = messageObj.audioMessage;
+  const duration = audioData.seconds || 0;
+  const mimetype = audioData.mimetype || 'audio/ogg; codecs=opus';
+  
+  // Construir URL do áudio
+  const audioUrl = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${audioData.key.remoteJid}/${audioData.key.id}`;
+  
+  return {
+    fileUrl: audioUrl,
+    duration: duration,
+    mimetype: mimetype,
+    messageId: audioData.key.id,
+    isAudio: true
+  };
 }
 
 // Processar mensagem recebida
@@ -723,6 +768,10 @@ async function processMessage(payload) {
     const messageContent = extractMessageContent(messageData.message);
     const senderName = messageData.pushName || `Cliente ${clientPhone?.slice(-4) || 'Unknown'}`;
     
+    // 🎵 DETECTAR SE É MENSAGEM DE ÁUDIO
+    const isAudioMessage = messageData.message && messageData.message.audioMessage;
+    const audioMetadata = isAudioMessage ? extractAudioMetadata(messageData.message) : null;
+    
     if (!clientPhone || !messageContent) {
       console.warn('⚠️ Telefone ou conteúdo da mensagem inválido');
       return { success: false, message: 'Dados da mensagem inválidos' };
@@ -732,7 +781,9 @@ async function processMessage(payload) {
       from: senderName,
       phone: clientPhone,
       content: messageContent.substring(0, 50) + '...',
-      instance: instanceName
+      instance: instanceName,
+      isAudio: isAudioMessage,
+      audioUrl: audioMetadata?.fileUrl
     });
 
     // Buscar ou criar cliente
@@ -747,21 +798,32 @@ async function processMessage(payload) {
       return { success: false, message: 'Erro ao processar ticket' };
     }
 
-    // Salvar mensagem (e enviar via WebSocket automaticamente)
-    const messageId = await saveMessage(ticketId, {
+    // 🎵 PREPARAR DADOS DA MENSAGEM COM METADADOS DE ÁUDIO
+    const messageDataToSave = {
       content: messageContent,
       senderName: senderName,
       senderPhone: clientPhone,
       whatsappMessageId: messageData.key.id,
       timestamp: messageData.messageTimestamp,
-      type: 'text'
-    }, instanceName);
+      type: isAudioMessage ? 'audio' : 'text',
+      metadata: audioMetadata ? {
+        fileUrl: audioMetadata.fileUrl,
+        duration: audioMetadata.duration,
+        mimetype: audioMetadata.mimetype,
+        isAudio: true,
+        messageId: audioMetadata.messageId
+      } : null
+    };
+
+    // Salvar mensagem (e enviar via WebSocket automaticamente)
+    const messageId = await saveMessage(ticketId, messageDataToSave, instanceName);
 
     if (messageId) {
       console.log('✅ [PRODUÇÃO] Mensagem processada com sucesso:', {
         ticketId,
         messageId,
-        broadcast: true
+        broadcast: true,
+        isAudio: isAudioMessage
       });
       
       // 🚀 BROADCAST VIA WEBSOCKET PARA TODOS OS CLIENTES
@@ -773,7 +835,8 @@ async function processMessage(payload) {
         sender_name: senderName,
         is_internal: false,
         created_at: new Date().toISOString(),
-        type: 'text'
+        type: isAudioMessage ? 'audio' : 'text',
+        metadata: audioMetadata
       };
 
       // Enviar para todos conectados ao ticket
@@ -790,7 +853,8 @@ async function processMessage(payload) {
         message: 'Mensagem processada com sucesso',
         ticketId,
         messageId,
-        broadcast: true
+        broadcast: true,
+        isAudio: isAudioMessage
       };
     } else {
       console.log('❌ [PRODUÇÃO] Erro ao salvar mensagem');

@@ -17,7 +17,7 @@ export interface ChatMessage {
   timestamp: Date;
   isInternal: boolean;
   status: MessageStatus;
-  metadata: {
+  metadata?: {
     ticket?: any; // Ticket relacionado à mensagem
     isEdited?: boolean;
     editedAt?: Date;
@@ -28,6 +28,16 @@ export interface ChatMessage {
       userId: string;
       userName: string;
     }>;
+    // 📁 Propriedades para arquivos, áudio, vídeo e imagens
+    fileUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+    fileType?: string;
+    duration?: number; // Para áudio/vídeo em segundos
+    thumbnailUrl?: string; // Para vídeos
+    width?: number; // Para imagens
+    height?: number; // Para imagens
+    // 🔗 Compatibilidade com formato antigo
     attachment?: {
       url: string;
       type: string;

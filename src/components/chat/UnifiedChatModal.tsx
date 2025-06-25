@@ -9,7 +9,8 @@ import {
   Search, Maximize2, Maximize, Download, Settings, Volume2, VolumeX, Copy, Trash2, 
   Edit3, Star, Users, Clock, MessageSquare, AlertCircle, Check, CheckCheck, Loader2,
   Archive, Pin, Flag, FileText, Image, Video as VideoIcon, Mic, MapPin, User, Save,
-  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote, ChevronDown, RefreshCw
+  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote, ChevronDown, RefreshCw,
+  Minus
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { MessageInputTabs } from './MessageInputTabs';
@@ -583,149 +584,87 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 
   // 🎨 Componente do Header otimizado
   const ChatHeader = () => (
-    <div 
-      className={cn(
-        "chat-header chat-animated",
-        "flex items-center justify-between p-4 border-b flex-shrink-0",
-        "bg-gradient-to-r from-blue-50/80 to-green-50/80 backdrop-blur-sm"
-      )}
-      style={headerStyles}
-    >
+    <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
       <div className="flex items-center gap-3">
-        {/* Avatar do Cliente */}
-        <div className="relative">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white font-medium">
-            {clientName?.[0]?.toUpperCase() || "C"}
-          </div>
-          <div className="absolute -bottom-1 -right-1">
-            <Badge variant="secondary" className="h-5 w-5 rounded-full flex items-center justify-center p-0 bg-green-500 hover:bg-green-600">
-              <MessageSquare className="h-3 w-3 text-white" />
-            </Badge>
-          </div>
+        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+          {clientName.charAt(0).toUpperCase()}
         </div>
-
-        {/* Info do Cliente */}
         <div>
-          <h3 className="font-medium">{clientName}</h3>
-          {clientPhone && (
-            <p className="text-sm text-muted-foreground">{clientPhone}</p>
-          )}
+          <h3 className="font-semibold text-gray-900">{clientName}</h3>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span>{clientPhone}</span>
+            <ConnectionStatus 
+              connectionInfo={{
+                status: isConnected ? 'connected' : 'disconnected',
+                latency: isConnected ? 50 : undefined,
+                quality: isConnected ? 'good' : undefined,
+                lastSeen: isConnected ? undefined : new Date(),
+                serverStatus: 'online',
+                clientsOnline: isConnected ? 1 : 0
+              }}
+            />
+          </div>
         </div>
       </div>
-
-      {/* Controles */}
+      
       <div className="flex items-center gap-2">
-        {/* Status de Conexão */}
-        <ConnectionStatus connectionInfo={{
-          status: isConnected ? 'connected' : (isLoading ? 'connecting' : 'disconnected'),
-          error: error || undefined
-        }} />
-
-        {/* 🔧 DEBUG: Status WebSocket Visual */}
-        <div className={`px-2 py-1 rounded text-xs font-mono ${
-          isConnected ? 'bg-green-100 text-green-800' : 
-          isLoading ? 'bg-yellow-100 text-yellow-800' : 
-          'bg-red-100 text-red-800'
-        }`}>
-          WS: {isConnected ? '🟢 ON' : isLoading ? '🟡 ...' : '🔴 OFF'}
-          {isConnected && (
-            <span className="ml-2 text-xs opacity-70">
-              ⚡{messageStats.total}
-            </span>
-          )}
-        </div>
-
-        {/* Controles UX */}
+        {/* 🧪 Botão de teste de áudio (debug) */}
         <Button
           variant="ghost"
-          size="icon"
+          size="sm"
           onClick={() => {
-            console.log('🔄 [UNIFIED-CHAT] Atualizando mensagens manualmente...');
-            load(ticketId);
+            // URLs de teste para áudio (URLs públicas sem CORS)
+            const testAudioUrls = [
+              'https://www.w3schools.com/html/horse.mp3',
+              'https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg',
+              'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3',
+              'https://www.kozco.com/tech/piano2.wav'
+            ];
+            
+            const randomUrl = testAudioUrls[Math.floor(Math.random() * testAudioUrls.length)];
+            
+            console.log('🎵 [AUDIO-TEST] Teste de áudio com URL:', randomUrl);
+            
+            // Criar mensagem de teste usando o send do store
+            const testMessage = `[🎵 Teste Áudio] ${randomUrl}`;
+            send(ticketId, testMessage, false);
           }}
-          className="text-muted-foreground hover:text-blue-600"
-          title="Atualizar mensagens (F5)"
+          className="text-xs"
+          title="Teste de áudio (debug)"
         >
-          <RefreshCw className="h-4 w-4" />
+          🎵 Teste
         </Button>
 
         <Button
           variant="ghost"
-          size="icon"
-          onClick={() => {
-            console.log('🔧 [DEBUG] Forçando reconexão WebSocket...');
-            disconnect();
-            setTimeout(() => {
-              init();
-              setTimeout(() => {
-                if (isConnected) {
-                  join(ticketId);
-                  load(ticketId);
-                }
-              }, 2000);
-            }, 1000);
-          }}
-          className="text-muted-foreground hover:text-green-600"
-          title="🔧 Debug: Reconectar WebSocket"
-        >
-          <Zap className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setSoundEnabled(!soundEnabled)}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
+          size="sm"
           onClick={() => setShowSearch(!showSearch)}
-          className="text-muted-foreground hover:text-foreground"
         >
-          <Search className="h-4 w-4" />
+          <Search className="w-4 h-4" />
         </Button>
-
+        
         <Button
           variant="ghost"
-          size="icon"
+          size="sm"
           onClick={() => setShowSidebar(!showSidebar)}
-          className="text-muted-foreground hover:text-foreground"
         >
-          <Users className="h-4 w-4" />
+          <Settings className="w-4 h-4" />
         </Button>
-
-        {/* Controles de janela */}
-        {onMinimize && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onMinimize}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <Minimize2 className="h-4 w-4" />
-          </Button>
-        )}
-
+        
         <Button
           variant="ghost"
-          size="icon"
-          onClick={() => setIsFullscreen(!isFullscreen)}
-          className="text-muted-foreground hover:text-foreground"
+          size="sm"
+          onClick={onMinimize}
         >
-          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          <Minus className="w-4 h-4" />
         </Button>
-
+        
         <Button
           variant="ghost"
-          size="icon"
+          size="sm"
           onClick={onClose}
-          className="text-muted-foreground hover:text-foreground"
         >
-          <X className="h-4 w-4" />
+          <X className="w-4 h-4" />
         </Button>
       </div>
     </div>
