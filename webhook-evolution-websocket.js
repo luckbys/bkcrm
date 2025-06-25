@@ -390,22 +390,22 @@ async function findOrCreateTicket(customerId, phone, instance) {
     const newTicket = await supabase
       .from('tickets')
       .insert([{
-        id: crypto.randomUUID(),
+      id: crypto.randomUUID(),
         title: `Atendimento WhatsApp - ${phone}`,
         description: `Conversa iniciada via WhatsApp na instância ${instance}`,
-        status: 'open',
-        priority: 'medium',
-        customer_id: customerId,
-        channel: 'whatsapp',
+      status: 'open',
+      priority: 'medium',
+      customer_id: customerId,
+      channel: 'whatsapp',
         nunmsg: phone,
-        metadata: {
+      metadata: {
           whatsapp_phone: phone,
           client_phone: phone,
           instance_name: instance,
-          created_via: 'webhook_evolution',
-          is_whatsapp: true,
-          phone_captured_at: new Date().toISOString()
-        }
+        created_via: 'webhook_evolution',
+        is_whatsapp: true,
+        phone_captured_at: new Date().toISOString()
+      }
       }])
       .select()
       .single();
@@ -432,11 +432,11 @@ async function saveMessage(ticketId, messageData, instanceName) {
       .from('messages')
       .insert([{
         id: crypto.randomUUID(),
-        ticket_id: ticketId,
+      ticket_id: ticketId,
         created_at: new Date().toISOString(),
         whatsapp_message_id: messageData.whatsapp_message_id,
-        content: messageData.content,
-        type: messageData.type || 'text',
+      content: messageData.content,
+      type: messageData.type || 'text',
         is_internal: messageData.is_internal,
         metadata: messageData.metadata,
         sender_name: messageData.sender_name,
@@ -724,14 +724,26 @@ async function processMessage(payload) {
 
     // Processar ticket
     console.log('🎫 [TICKET] Processando ticket para cliente:', { customerId });
-    const ticket = await findOrCreateTicket(customerId, phone, payload.instance);
+    const ticketResponse = await findOrCreateTicket(customerId, phone, payload.instance);
     
-    console.log('🔍 [TICKET] Resultado da busca/criação:', ticket);
+    console.log('🔍 [TICKET] Resultado da busca/criação:', ticketResponse);
     
-    // Corrigir validação - o ticket pode ser um ID string ou um objeto
-    const ticketId = typeof ticket === 'string' ? ticket : ticket?.id;
+    // Extrair o ID do ticket considerando a estrutura de resposta do Supabase
+    let ticketId;
+    if (typeof ticketResponse === 'string') {
+      ticketId = ticketResponse;
+    } else if (ticketResponse?.data?.id) {
+      ticketId = ticketResponse.data.id;
+    } else if (ticketResponse?.data?.data?.id) {
+      ticketId = ticketResponse.data.data.id;
+    } else if (ticketResponse?.id) {
+      ticketId = ticketResponse.id;
+    }
+    
+    console.log('🎫 [TICKET] ID extraído:', ticketId);
     
     if (!ticketId) {
+      console.error('❌ [TICKET] Falha ao extrair ID do ticket da resposta:', ticketResponse);
       throw new Error('Falha ao criar/encontrar ticket - ID não disponível');
     }
 
@@ -1182,7 +1194,7 @@ app.post('/webhook/evolution/messages-upsert', async (req, res) => {
     console.log('✅ [MESSAGES-UPSERT] Resultado:', result);
 
     res.status(200).json({ 
-      received: true,
+      received: true, 
       timestamp: new Date().toISOString(),
       processed: result.success,
       message: result.message,
