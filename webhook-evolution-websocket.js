@@ -133,169 +133,23 @@ const wsManager = new WebSocketManager();
 
 // 🔗 WEBSOCKET EVENT HANDLERS
 io.on('connection', (socket) => {
-  console.log(`✅ [WS] Nova conexão WebSocket: ${socket.id}`);
+  console.log('🔌 [WS] Nova conexão WebSocket estabelecida');
 
-  // Cliente se conecta a um ticket específico
-  socket.on('join-ticket', (data) => {
-    const { ticketId, userId } = data;
-    if (!ticketId) {
-      socket.emit('error', { message: 'ticketId é obrigatório' });
-      return;
-    }
-
-    wsManager.addConnection(socket.id, socket, ticketId, userId);
-    socket.emit('joined-ticket', { ticketId, socketId: socket.id });
-    
-    // Enviar estatísticas atualizadas
-    socket.emit('connection-stats', wsManager.getStats());
+  // Entrar na sala do ticket
+  socket.on('join-ticket', (ticketId) => {
+    console.log(`👥 [WS] Cliente entrou na sala do ticket: ${ticketId}`);
+    socket.join(`ticket:${ticketId}`);
   });
 
-  // Cliente solicita mensagens de um ticket
-  socket.on('request-messages', async (data) => {
-    const { ticketId, limit = 50 } = data;
-    try {
-      const messages = await loadTicketMessages(ticketId, limit);
-      socket.emit('messages-loaded', { ticketId, messages });
-    } catch (error) {
-      socket.emit('error', { message: 'Erro ao carregar mensagens', error: error.message });
-    }
-  });
-
-  // Cliente envia nova mensagem
-  socket.on('send-message', async (data) => {
-    try {
-      const { ticketId, content, isInternal, userId, senderName } = data;
-      
-      console.log(`📨 [WS-SEND] Processando envio:`, {
-        ticketId: ticketId,
-        content: content?.substring(0, 50) + '...',
-        isInternal: isInternal,
-        userId: userId,
-        senderName: senderName
-      });
-      
-      // Salvar mensagem no banco
-      const messageId = await saveMessageFromWebSocket({
-        ticketId,
-        content,
-        isInternal,
-        userId,
-        senderName
-      });
-
-      // Broadcast para todos conectados ao ticket
-      const newMessage = {
-        id: messageId,
-        ticket_id: ticketId,
-        content,
-        sender_id: userId,
-        sender_name: senderName,
-        is_internal: isInternal,
-        created_at: new Date().toISOString(),
-        type: 'text'
-      };
-
-      wsManager.broadcastToTicket(ticketId, 'new-message', newMessage);
-      
-      // 🚀 INTEGRAÇÃO EVOLUTION API: Enviar para WhatsApp se não for mensagem interna
-      if (!isInternal && messageId) {
-        console.log(`🔗 [WS-SEND] Tentando enviar para WhatsApp via Evolution API...`);
-        
-        try {
-          // Buscar dados do ticket para obter telefone
-          const { data: ticketData, error: ticketError } = await supabase
-            .from('tickets')
-            .select('nunmsg, metadata, channel')
-            .eq('id', ticketId)
-            .single();
-          
-          if (ticketError) {
-            console.error(`❌ [WS-SEND] Erro ao buscar ticket ${ticketId}:`, ticketError);
-          } else if (ticketData && (ticketData.channel === 'whatsapp' || ticketData.metadata?.is_whatsapp)) {
-            // Extrair telefone do ticket
-            const phone = ticketData.nunmsg || 
-                         ticketData.metadata?.whatsapp_phone || 
-                         ticketData.metadata?.client_phone;
-            
-            if (phone) {
-              console.log(`📱 [WS-SEND] Enviando para WhatsApp: ${phone}`);
-              
-              // Chamar endpoint interno de envio
-              const evolutionPayload = {
-                phone: phone,
-                text: content,
-                instance: ticketData.metadata?.instance_name || 'atendimento-ao-cliente-suporte',
-                options: {
-                  delay: 1000,
-                  presence: 'composing',
-                  linkPreview: true
-                }
-              };
-              
-              const evolutionResponse = await fetch('http://localhost:4000/webhook/send-message', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(evolutionPayload)
-              });
-              
-              const evolutionResult = await evolutionResponse.json();
-              
-              if (evolutionResponse.ok) {
-                console.log(`✅ [WS-SEND] Mensagem enviada para WhatsApp:`, {
-                  phone: phone,
-                  messageId: evolutionResult.messageId,
-                  status: evolutionResult.status
-                });
-                
-                // Atualizar metadata da mensagem com status de envio
-                await supabase
-                  .from('messages')
-                  .update({
-                    metadata: {
-                      sent_via_websocket: true,
-                      is_internal: isInternal,
-                      evolution_sent: true,
-                      evolution_message_id: evolutionResult.messageId,
-                      evolution_status: evolutionResult.status,
-                      sent_to_whatsapp_at: new Date().toISOString()
-                    }
-                  })
-                  .eq('id', messageId);
-                
-              } else {
-                console.error(`❌ [WS-SEND] Erro ao enviar para WhatsApp:`, evolutionResult);
-              }
-              
-            } else {
-              console.log(`⚠️ [WS-SEND] Ticket ${ticketId} não tem telefone para envio WhatsApp`);
-            }
-          } else {
-            console.log(`📧 [WS-SEND] Ticket ${ticketId} não é WhatsApp (channel: ${ticketData?.channel})`);
-          }
-        } catch (evolutionError) {
-          console.error(`❌ [WS-SEND] Erro na integração Evolution API:`, evolutionError);
-        }
-      } else {
-        console.log(`🔒 [WS-SEND] Mensagem interna, não enviando para WhatsApp`);
-      }
-      
-    } catch (error) {
-      console.error(`❌ [WS-SEND] Erro geral:`, error);
-      socket.emit('error', { message: 'Erro ao enviar mensagem', error: error.message });
-    }
+  // Sair da sala do ticket
+  socket.on('leave-ticket', (ticketId) => {
+    console.log(`👋 [WS] Cliente saiu da sala do ticket: ${ticketId}`);
+    socket.leave(`ticket:${ticketId}`);
   });
 
   // Desconexão
   socket.on('disconnect', () => {
-    console.log(`❌ [WS] Conexão desconectada: ${socket.id}`);
-    wsManager.removeConnection(socket.id);
-  });
-
-  // Ping/Pong para manter conexão viva
-  socket.on('ping', () => {
-    socket.emit('pong', { timestamp: Date.now() });
+    console.log('🔌 [WS] Cliente WebSocket desconectado');
   });
 });
 
@@ -776,6 +630,28 @@ async function processMessage(payload) {
       messageId: savedMessage.id,
       ticketId
     });
+
+    // Preparar mensagem para broadcast
+    const broadcastMessage = {
+      id: savedMessage.id,
+      ticket_id: ticketId,
+      content: textContent,
+      sender: 'client',
+      sender_name: data.pushName || 'Cliente',
+      timestamp: new Date().toISOString(),
+      metadata: messageData.metadata,
+      type: 'text'
+    };
+
+    // Broadcast via WebSocket
+    console.log('📡 [WS] Enviando mensagem via WebSocket:', {
+      event: 'new-message',
+      ticketId,
+      messageId: savedMessage.id
+    });
+
+    // Enviar para todos os clientes conectados ao ticket
+    io.to(`ticket:${ticketId}`).emit('new-message', broadcastMessage);
 
     return {
       success: true,

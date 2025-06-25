@@ -83,139 +83,35 @@ async function findOrCreateCustomer(phone, instanceName, pushName = null) {
 }
 
 // Função para buscar ou criar ticket
-async function findOrCreateTicket(customerId, phone, instanceName) {
+async function findOrCreateTicket(phone, clientName, departmentId) {
   try {
-    console.log(`🎫 Buscando ticket existente para cliente: ${customerId}`);
+    console.log('📋 Buscando/criando ticket para:', { phone, clientName, departmentId });
     
-    // Buscar ticket aberto existente
-    const { data: existingTickets } = await supabase
-      .from('tickets')
-      .select('*')
-      .eq('customer_id', customerId)
-      .in('status', ['open', 'in_progress'])
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (existingTickets && existingTickets.length > 0) {
-      const ticket = existingTickets[0];
-      console.log(`✅ Ticket existente encontrado: ${ticket.id}`);
-      
-      // 📞 ATUALIZAR TELEFONE NO TICKET EXISTENTE (incluindo campo nunmsg)
-      const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
-      const updateData = {
-        nunmsg: phoneFormatted, // 📱 CAMPO PRINCIPAL PARA NÚMERO DA MENSAGEM
-        metadata: {
-          ...ticket.metadata,
-          whatsapp_phone: phoneFormatted,
-          client_phone: phoneFormatted,
-          instance_name: instanceName,
-          is_whatsapp: true,
-          phone_updated_at: new Date().toISOString()
-        },
-        channel: 'whatsapp'
-      };
-      
-      console.log(`📱 Vinculando telefone ${phoneFormatted} ao ticket existente ${ticket.id} no campo nunmsg`);
-      
-      const { error: updateError } = await supabase
-        .from('tickets')
-        .update(updateData)
-        .eq('id', ticket.id);
-        
-      if (updateError) {
-        console.error('⚠️ Erro ao atualizar telefone no ticket:', updateError);
-      } else {
-        console.log(`✅ Telefone vinculado automaticamente ao ticket no campo nunmsg: ${phoneFormatted}`);
-      }
-      
-      return ticket.id;
-    }
-
-    // Criar novo ticket
-    console.log(`➕ Criando novo ticket para cliente ${customerId}`);
-    const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
-    
-    const ticketData = {
-      id: crypto.randomUUID(),
-      title: `Atendimento WhatsApp - ${phoneFormatted}`,
-      description: `Conversa iniciada via WhatsApp na instância ${instanceName}`,
-      status: 'open',
-      priority: 'medium',
-      customer_id: customerId,
-      channel: 'whatsapp',
-      nunmsg: phoneFormatted, // 📱 CAMPO PRINCIPAL PARA NÚMERO DA MENSAGEM
-      metadata: {
-        whatsapp_phone: phoneFormatted,
-        client_phone: phoneFormatted,
-        instance_name: instanceName,
-        created_via: 'webhook_evolution',
-        is_whatsapp: true,
-        phone_captured_at: new Date().toISOString()
-      }
-    };
-
-    const { data: newTicket, error } = await supabase
-      .from('tickets')
-      .insert([ticketData])
-      .select()
-      .single();
+    // Usar a nova função RPC
+    const { data, error } = await supabase
+      .rpc('find_or_create_whatsapp_ticket', {
+        p_phone: phone,
+        p_client_name: clientName,
+        p_department_id: departmentId
+      });
 
     if (error) {
-      console.error('❌ Erro ao criar ticket:', error);
-      return null;
+      console.error('❌ Erro ao buscar/criar ticket:', error);
+      throw error;
     }
 
-    console.log(`✅ Ticket criado: ${newTicket.id} com telefone salvo no campo nunmsg: ${phoneFormatted}`);
-    return newTicket.id;
+    const { ticket_id, is_new, sequence_number } = data[0];
+    
+    console.log('✅ Ticket encontrado/criado:', {
+      ticketId: ticket_id,
+      isNew: is_new,
+      sequenceNumber: sequence_number
+    });
 
+    return ticket_id;
   } catch (error) {
-    console.error('❌ Erro em findOrCreateTicket:', error);
-    
-    // Se erro for relacionado a coluna inexistente, tentar sem os campos extras
-    if (error.message && error.message.includes('column') && error.message.includes('does not exist')) {
-      console.log('⚠️ Tentando criar ticket sem campos extras (compatibilidade)...');
-      
-      const basicTicketData = {
-        id: crypto.randomUUID(),
-        title: `Atendimento WhatsApp - ${phoneFormatted}`,
-        description: `Conversa iniciada via WhatsApp na instância ${instanceName}`,
-        status: 'open',
-        priority: 'medium',
-        customer_id: customerId,
-        channel: 'whatsapp',
-        nunmsg: phoneFormatted, // 📱 CAMPO PRINCIPAL PARA NÚMERO DA MENSAGEM (sempre incluir)
-        metadata: {
-          whatsapp_phone: phoneFormatted,
-          client_phone: phoneFormatted,
-          instance_name: instanceName,
-          created_via: 'webhook_evolution',
-          is_whatsapp: true,
-          phone_captured_at: new Date().toISOString()
-        }
-      };
-      
-      try {
-        const { data: basicTicket, error: basicError } = await supabase
-          .from('tickets')
-          .insert([basicTicketData])
-          .select()
-          .single();
-          
-        if (basicError) {
-          console.error('❌ Erro mesmo com dados básicos:', basicError);
-          return null;
-        }
-        
-        console.log(`✅ Ticket básico criado: ${basicTicket.id} com telefone no campo nunmsg`);
-        return basicTicket.id;
-        
-      } catch (basicErr) {
-        console.error('❌ Erro crítico na criação de ticket:', basicErr);
-        return null;
-      }
-    }
-    
-    return null;
+    console.error('❌ Erro ao processar ticket:', error);
+    throw error;
   }
 }
 
@@ -290,52 +186,28 @@ async function saveMessage(ticketId, messageData, instanceName) {
 }
 
 // Função principal para processar mensagem
-async function processMessage(payload) {
+async function processMessage(data) {
   try {
-    console.log(`🔄 Processando mensagem do evento: ${payload.event}`);
+    console.log('📨 Processando mensagem:', data);
     
-    const messageData = payload.data;
-    const instanceName = payload.instance;
-    const phone = messageData.key?.remoteJid?.replace('@s.whatsapp.net', '');
-    const pushName = messageData.pushName;
+    // Extrair dados do remetente
+    const phone = data.key.remoteJid.replace('@s.whatsapp.net', '');
+    const clientName = data.pushName || 'Cliente WhatsApp';
     
-    if (!phone) {
-      console.log('⚠️ Telefone não encontrado, ignorando mensagem');
-      return null;
-    }
-
-    console.log(`📱 Processando mensagem de: ${phone} (${pushName || 'Sem nome'})`);
-
-    // Passo 1: Buscar/criar cliente
-    const customerId = await findOrCreateCustomer(phone, instanceName, pushName);
-    if (!customerId) {
-      throw new Error('Falha ao criar/encontrar cliente');
-    }
-
-    // Passo 2: Buscar/criar ticket
-    const ticketId = await findOrCreateTicket(customerId, phone, instanceName);
-    if (!ticketId) {
-      throw new Error('Falha ao criar/encontrar ticket');
-    }
-
-    // Passo 3: Salvar mensagem
-    const messageId = await saveMessage(ticketId, messageData, instanceName);
-    if (!messageId) {
-      throw new Error('Falha ao salvar mensagem');
-    }
-
-    console.log(`✅ Mensagem processada com sucesso! Cliente: ${customerId}, Ticket: ${ticketId}, Mensagem: ${messageId}`);
+    // Buscar departamento baseado na instância
+    const departmentId = await findDepartmentByInstance(instanceName);
     
-    return {
-      customerId,
-      ticketId,
-      messageId,
-      processed: true
-    };
+    // Usar função aprimorada para buscar/criar ticket
+    const ticketId = await findOrCreateTicket(phone, clientName, departmentId);
+    
+    // Salvar mensagem
+    await saveMessage(ticketId, data, instanceName);
 
+    console.log('✅ Mensagem processada com sucesso');
+    return true;
   } catch (error) {
-    console.error('❌ Erro no processamento:', error);
-    throw error;
+    console.error('❌ Erro ao processar mensagem:', error);
+    return false;
   }
 }
 

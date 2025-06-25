@@ -21,6 +21,9 @@ import { TypingIndicator, useTypingIndicator } from './TypingIndicator';
 import { ConnectionStatus, useConnectionStatus } from './ConnectionStatus';
 import { cn } from '../../lib/utils';
 import { ChatMessage as BaseChatMessage } from '../../types/chat';
+import io from 'socket.io-client';
+import { wsService } from '@/services/websocket';
+import { Message } from '@/types/chat.types';
 
 // Interface local compatível com as mensagens do WebSocket
 interface LocalChatMessage {
@@ -350,8 +353,6 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       searchInputRef.current.focus();
     }
   }, [showSearch]);
-
-
 
   // 📜 Auto-scroll apenas para novas mensagens quando próximo ao fim
   useEffect(() => {
@@ -721,8 +722,6 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     </div>
   );
 
-
-
   // 🔄 Sistema de debug avançado com force reload manual
   useEffect(() => {
     // Disponibilizar função de debug globalmente
@@ -844,6 +843,80 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       window.removeEventListener('chat-message-received', handleNewMessage as EventListener);
     };
   }, [ticketId, soundEnabled, showInfo, showSuccess, isNearBottom]);
+
+  // WebSocket setup
+  useEffect(() => {
+    if (!ticketId) return;
+
+    console.log('🔌 [CHAT] Iniciando conexão WebSocket para ticket:', ticketId);
+    
+    // Conectar ao WebSocket
+    const socket = wsService.connect(ticketId);
+    
+    // Entrar na sala do ticket
+    wsService.joinTicket(ticketId);
+
+    // Configurar listener de novas mensagens
+    wsService.onNewMessage((message: Message) => {
+      console.log('📨 [CHAT] Nova mensagem recebida:', message);
+      setMessages(prev => [...prev, message]);
+      
+      // Auto-scroll se estiver próximo ao fim
+      if (isNearBottom) {
+        scrollToBottom();
+      }
+    });
+
+    // Cleanup
+    return () => {
+      console.log('👋 [CHAT] Limpando conexão WebSocket');
+      wsService.leaveTicket(ticketId);
+      wsService.disconnect();
+    };
+  }, [ticketId, isNearBottom]);
+
+  // Carregar mensagens iniciais
+  useEffect(() => {
+    if (!ticketId) return;
+
+    const loadMessages = async () => {
+      try {
+        setLoading(true);
+        console.log('📥 [CHAT] Carregando mensagens do ticket:', ticketId);
+        
+        const response = await fetch(`/api/tickets/${ticketId}/messages`);
+        const data = await response.json();
+        
+        if (data.success) {
+          console.log(`✅ [CHAT] ${data.messages.length} mensagens carregadas`);
+          setMessages(data.messages);
+          scrollToBottom();
+        } else {
+          console.error('❌ [CHAT] Erro ao carregar mensagens:', data.error);
+        }
+      } catch (error) {
+        console.error('❌ [CHAT] Erro ao carregar mensagens:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMessages();
+  }, [ticketId]);
+
+  // Função para scroll
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  // Detectar proximidade com o fim
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const bottomThreshold = 100; // pixels do fim
+    setIsNearBottom(scrollHeight - (scrollTop + clientHeight) < bottomThreshold);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
