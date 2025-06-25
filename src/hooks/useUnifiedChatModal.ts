@@ -95,7 +95,8 @@ export const useUnifiedChatModal = ({
     isConnected,
     isLoading,
     error,
-    currentTicket
+    currentTicket,
+    addMessage
   } = useChatStore();
 
   // Estados locais da UI
@@ -173,10 +174,10 @@ export const useUnifiedChatModal = ({
 
   // Auto-scroll para última mensagem
   useEffect(() => {
-    if (!showSearch && messagesEndRef.current) {
+    if (!showSearch && messagesEndRef.current && isNearBottom) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [filteredMessages, showSearch]);
+  }, [filteredMessages, showSearch, isNearBottom]);
 
   // Foco automático na busca quando ativada
   useEffect(() => {
@@ -400,6 +401,36 @@ export const useUnifiedChatModal = ({
     console.log('🔄 Tentando reconectar...');
     connect();
   }, [connect]);
+
+  const handleNewMessage = useCallback((message: any) => {
+    console.log('🔔 [UNIFIED-CHAT-HOOK] Nova mensagem recebida:', {
+      ticketId: message.ticket_id,
+      sender: message.sender,
+      isFromClient: message.metadata?.is_from_client,
+      content: message.content?.substring(0, 50),
+      metadata: message.metadata
+    });
+
+    if (!message || !message.ticket_id) {
+      console.warn('⚠️ [UNIFIED-CHAT-HOOK] Mensagem inválida:', message);
+      return;
+    }
+
+    // Processar a mensagem
+    const processedMessage = {
+      ...message,
+      sender: message.sender || (message.metadata?.is_from_client ? 'client' : 'agent'),
+      senderName: message.sender_name || (message.sender === 'client' ? 'Cliente' : 'Agente')
+    };
+
+    console.log('✅ [UNIFIED-CHAT-HOOK] Mensagem processada:', {
+      ticketId: processedMessage.ticket_id,
+      sender: processedMessage.sender,
+      senderName: processedMessage.senderName
+    });
+
+    addMessage(processedMessage);
+  }, [addMessage]);
 
   return {
     // Estado básico

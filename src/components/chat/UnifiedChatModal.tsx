@@ -126,6 +126,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isSilentLoading, setIsSilentLoading] = useState(false);
+  const [isNearBottom, setIsNearBottom] = useState(true);
   
   // 🆕 Novos estados para funcionalidades avançadas
   const [isDragOver, setIsDragOver] = useState(false);
@@ -164,7 +165,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       const converted: LocalChatMessage = {
         id: msg.id || `msg-${Date.now()}-${Math.random()}`,
         content: msg.content || '',
-        sender: msg.sender === 'client' ? 'client' : 'agent',
+        sender: msg.sender || (msg.metadata?.is_from_client ? 'client' : 'agent'),
         senderName: msg.senderName || (msg.sender === 'client' ? 'Cliente' : 'Agente'),
         timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp || Date.now()),
         isInternal: msg.isInternal || false,
@@ -173,7 +174,19 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
         metadata: msg.metadata || {}
       };
       
-      console.log(`🔄 [UNIFIED-CHAT] Convertendo mensagem:`, { original: msg, converted });
+      console.log(`🔄 [UNIFIED-CHAT] Detalhes da conversão da mensagem:`, {
+        original: {
+          sender: msg.sender,
+          isFromClient: msg.metadata?.is_from_client,
+          senderId: msg.sender_id,
+          metadata: msg.metadata
+        },
+        converted: {
+          sender: converted.sender,
+          senderName: converted.senderName,
+          isInternal: converted.isInternal
+        }
+      });
       return converted;
     });
     
@@ -234,6 +247,27 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     }
   }, [isOpen, ticketId, isConnected, join, load]);
 
+  // 📜 Detecção de scroll e auto-scroll
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+      const scrollBottom = scrollHeight - scrollTop - clientHeight;
+      const newIsNearBottom = scrollBottom < 100;
+      const shouldShowButton = scrollBottom > 200;
+      
+      setIsNearBottom(newIsNearBottom);
+      setShowScrollToBottom(shouldShowButton);
+    };
+
+    scrollArea.addEventListener('scroll', handleScroll);
+    handleScroll(); // Check initial position
+
+    return () => scrollArea.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // 🔄 Carregamento inicial apenas (sem polling automático)
   useEffect(() => {
     if (isOpen && ticketId && isConnected) {
@@ -271,6 +305,20 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     }
   }, [isOpen, ticketId, isConnected]);
 
+  // 🔄 Polling para garantir mensagens em tempo real
+  useEffect(() => {
+    if (!isOpen || !ticketId) return;
+
+    const pollingInterval = setInterval(() => {
+      if (isConnected) {
+        console.log(`🔄 [UNIFIED-CHAT] Polling mensagens do ticket ${ticketId}`);
+        load(ticketId);
+      }
+    }, 3000); // Polling a cada 3 segundos
+
+    return () => clearInterval(pollingInterval);
+  }, [isOpen, ticketId, isConnected, load]);
+
   // 🎯 Reconexão automática quando necessário
   useEffect(() => {
     if (isOpen && !isConnected && !isLoading) {
@@ -285,7 +333,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 
   // 📜 Auto-scroll para última mensagem com transição suave
   useEffect(() => {
-    if (!showSearch && messagesEndRef.current) {
+    if (!showSearch && messagesEndRef.current && isNearBottom) {
       // Usar requestAnimationFrame para scroll mais suave
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ 
@@ -294,7 +342,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
         });
       });
     }
-  }, [ticketMessages, showSearch]);
+  }, [ticketMessages, showSearch, isNearBottom]);
 
   // 🔍 Foco na busca quando abrir
   useEffect(() => {
@@ -303,24 +351,11 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     }
   }, [showSearch]);
 
-  // 📜 Detecção de scroll para mostrar botão de scroll para baixo
+
+
+  // 📜 Auto-scroll apenas para novas mensagens quando próximo ao fim
   useEffect(() => {
-    const scrollArea = scrollAreaRef.current;
-    if (!scrollArea) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollArea;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-      setShowScrollToBottom(!isNearBottom);
-    };
-
-    scrollArea.addEventListener('scroll', handleScroll);
-    return () => scrollArea.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // 🔊 Notificação sonora e visual para novas mensagens
-  useEffect(() => {
-    if (ticketMessages.length > 0) {
+    if (ticketMessages.length > 0 && isNearBottom && messagesEndRef.current) {
       const lastMessage = ticketMessages[ticketMessages.length - 1];
       const isNewMessage = lastMessage && lastMessage.timestamp > lastSeen;
       
@@ -337,7 +372,6 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
           // Som de notificação se habilitado
           if (soundEnabled) {
             try {
-              // Tentar reproduzir som de notificação
               const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAkUXrTp66hVFApGn+D...');
               audio.volume = 0.3;
               audio.play().catch(e => console.log('🔇 Som não pôde ser reproduzido:', e));
@@ -345,22 +379,16 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
               console.log('🔇 Erro ao reproduzir som:', e);
             }
           }
-        } else if (lastMessage.sender === 'agent' && !lastMessage.isInternal) {
-          showSuccess(`✅ Mensagem enviada para ${clientName}`);
         }
 
-        // Scroll automático para nova mensagem com delay sutil
-        if (messagesEndRef.current) {
-          setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ 
-              behavior: 'smooth',
-              block: 'end'
-            });
-          }, 150); // Delay sutil para não ser abrupto
-        }
+        // Scroll suave para a nova mensagem apenas se estiver próximo ao fim
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'end'
+        });
       }
     }
-  }, [ticketMessages, soundEnabled, lastSeen, showInfo, showSuccess, clientName]);
+  }, [ticketMessages, soundEnabled, lastSeen, showInfo, isNearBottom]);
 
   // 💾 Auto-save de rascunhos
   useEffect(() => {
@@ -608,61 +636,84 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       </div>
       
       <div className="flex items-center gap-2">
-        {/* 🧪 Botão de teste de áudio (debug) */}
+        {/* Botões de ação */}
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            // URLs de teste para áudio (URLs públicas sem CORS)
-            const testAudioUrls = [
-              'https://www.w3schools.com/html/horse.mp3',
-              'https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg',
-              'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3',
-              'https://www.kozco.com/tech/piano2.wav'
-            ];
-            
-            const randomUrl = testAudioUrls[Math.floor(Math.random() * testAudioUrls.length)];
-            
-            console.log('🎵 [AUDIO-TEST] Teste de áudio com URL:', randomUrl);
-            
-            // Criar mensagem de teste usando o send do store
-            const testMessage = `[🎵 Teste Áudio] ${randomUrl}`;
-            send(ticketId, testMessage, false);
-          }}
-          className="text-xs"
-          title="Teste de áudio (debug)"
+          onClick={() => setShowSearch(!showSearch)}
+          className={cn("h-8 px-2", showSearch && "bg-blue-50 text-blue-600")}
+          title="Buscar mensagens"
         >
-          🎵 Teste
+          <Search className="w-4 h-4" />
         </Button>
 
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowSearch(!showSearch)}
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className={cn("h-8 px-2", !soundEnabled && "text-gray-400")}
+          title={soundEnabled ? "Desativar som" : "Ativar som"}
         >
-          <Search className="w-4 h-4" />
+          {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setShowSidebar(!showSidebar)}
+          className={cn("h-8 px-2", showSidebar && "bg-purple-50 text-purple-600")}
+          title="Configurações e informações"
         >
           <Settings className="w-4 h-4" />
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
-          onClick={onMinimize}
+          onClick={() => {
+            if (isFullscreen) {
+              setIsFullscreen(false);
+              setIsExpanded(false);
+            } else if (isExpanded) {
+              setIsFullscreen(true);
+            } else {
+              setIsExpanded(true);
+            }
+          }}
+          className="h-8 px-2"
+          title={
+            isFullscreen ? "Sair da tela cheia" :
+            isExpanded ? "Tela cheia" :
+            "Expandir"
+          }
         >
-          <Minus className="w-4 h-4" />
+          {isFullscreen ? (
+            <Minimize2 className="w-4 h-4" />
+          ) : isExpanded ? (
+            <Maximize2 className="w-4 h-4" />
+          ) : (
+            <Maximize className="w-4 h-4" />
+          )}
         </Button>
-        
+
+        {onMinimize && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onMinimize}
+            className="h-8 px-2"
+            title="Minimizar"
+          >
+            <Minus className="w-4 h-4" />
+          </Button>
+        )}
+
         <Button
           variant="ghost"
           size="sm"
           onClick={onClose}
+          className="h-8 px-2 hover:text-red-600"
+          title="Fechar"
         >
           <X className="w-4 h-4" />
         </Button>
@@ -670,12 +721,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     </div>
   );
 
-  // 📜 Scroll automático simples
-  useEffect(() => {
-    if (messagesEndRef.current && !showSearch) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [ticketMessages.length, showSearch]);
+
 
   // 🔄 Sistema de debug avançado com force reload manual
   useEffect(() => {
@@ -751,6 +797,53 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
       }
     }
   }, [ticketMessages, filteredMessages, ticketId, isConnected, isOpen, isLoading, error, messages, searchQuery, load]);
+
+  // 🔄 Atualização em tempo real de mensagens
+  useEffect(() => {
+    const handleNewMessage = (event: CustomEvent) => {
+      const { ticketId: messageTicketId, message } = event.detail;
+      
+      if (messageTicketId === ticketId) {
+        console.log('📨 [UNIFIED-CHAT] Nova mensagem recebida:', message);
+        
+        // Atualizar última visualização
+        setLastSeen(new Date());
+        
+        // Notificação visual e sonora
+        if (message.sender === 'client') {
+          showInfo(`💬 Nova mensagem de ${message.senderName}`);
+          
+          // Som de notificação se habilitado
+          if (soundEnabled) {
+            try {
+              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAkUXrTp66hVFApGn+D...');
+              audio.volume = 0.3;
+              audio.play().catch(e => console.log('🔇 Som não pôde ser reproduzido:', e));
+            } catch (e) {
+              console.log('🔇 Erro ao reproduzir som:', e);
+            }
+          }
+        }
+        
+        // Scroll automático para nova mensagem apenas se estiver próximo ao fim
+        if (messagesEndRef.current && isNearBottom) {
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ 
+              behavior: 'smooth',
+              block: 'end'
+            });
+          }, 150);
+        }
+      }
+    };
+
+    // Registrar listener para eventos de nova mensagem
+    window.addEventListener('chat-message-received', handleNewMessage as EventListener);
+    
+    return () => {
+      window.removeEventListener('chat-message-received', handleNewMessage as EventListener);
+    };
+  }, [ticketId, soundEnabled, showInfo, showSuccess, isNearBottom]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

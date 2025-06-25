@@ -1,0 +1,172 @@
+# BKCRM - Regras de Desenvolvimento
+# Versão 1.0.0
+
+# 1. ESTRUTURA DE DIRETÓRIOS
+structure:
+  root:
+    - src/
+      - components/
+        - chat/
+          - messages/     # Componentes relacionados a mensagens
+          - inputs/       # Componentes de entrada
+          - controls/     # Controles e botões
+          - modals/       # Modais e popups
+          - ai/           # Componentes de IA
+        - ui/            # Componentes de UI reutilizáveis
+        - shared/        # Componentes compartilhados
+      - hooks/           # Custom hooks
+      - stores/          # Gerenciamento de estado
+      - services/        # Serviços e APIs
+      - contexts/        # Contextos React
+      - styles/          # Estilos globais
+      - utils/           # Utilitários
+      - types/           # Tipos TypeScript
+      - lib/            # Bibliotecas e configurações
+
+# 2. PADRÕES DE NOMENCLATURA
+naming:
+  components:
+    pattern: "PascalCase.tsx"
+    examples:
+      - "MessageBubble.tsx"
+      - "ChatInput.tsx"
+  
+  hooks:
+    pattern: "use[Name].ts"
+    examples:
+      - "useChat.ts"
+      - "useWebSocket.ts"
+  
+  types:
+    pattern: "[name].types.ts"
+    examples:
+      - "chat.types.ts"
+      - "message.types.ts"
+
+  styles:
+    pattern: "[name].styles.ts"
+    examples:
+      - "chat.styles.ts"
+      - "modal.styles.ts"
+
+# 3. DESIGN SYSTEM
+design:
+  glassmorphism:
+    background: "rgba(255, 255, 255, 0.1)"
+    backdrop_filter: "blur(10px)"
+    border: "1px solid rgba(255, 255, 255, 0.2)"
+    shadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+  
+  colors:
+    primary: "#3B82F6"
+    secondary: "#6366F1"
+    success: "#22C55E"
+    warning: "#F59E0B"
+    error: "#EF4444"
+    background: "#F8FAFC"
+    text: "#1E293B"
+  
+  spacing:
+    base: "4px"
+    scales: [2, 4, 8, 12, 16, 24, 32, 48, 64]
+  
+  animation:
+    duration: "300ms"
+    timing: "cubic-bezier(0.4, 0, 0.2, 1)"
+
+# 4. INTEGRAÇÃO COM IA
+ai_integration:
+  providers:
+    - name: "Google Gemini"
+      features:
+        - "Análise de sentimento"
+        - "Classificação de tickets"
+        - "Sugestões de resposta"
+        - "Tradução automática"
+    
+  implementation:
+    pattern: "Adapter"
+    location: "src/services/ai/"
+    files:
+      - "geminiService.ts"
+      - "aiTypes.ts"
+      - "aiContext.tsx"
+
+# 5. WEBSOCKET
+websocket:
+  implementation: "Socket.IO"
+  reconnection:
+    attempts: 5
+    delay: 1000
+    max_delay: 5000
+  
+  events:
+    standard:
+      - "connect"
+      - "disconnect"
+      - "error"
+    custom:
+      - "new-message"
+      - "messages-loaded"
+      - "typing"
+      - "read"
+
+# 6. PERFORMANCE
+performance:
+  rules:
+    - "Usar React.memo para componentes puros"
+    - "Implementar virtualização para listas longas"
+    - "Lazy loading para modais e componentes pesados"
+    - "Debounce em inputs de busca (300ms)"
+    - "Throttle em eventos de scroll (100ms)"
+  
+  caching:
+    messages: "30 minutos"
+    user_data: "1 hora"
+    templates: "24 horas"
+
+# 7. ACESSIBILIDADE
+accessibility:
+  requirements:
+    - "WCAG 2.1 AA compliance"
+    - "Suporte a teclado completo"
+    - "Labels ARIA apropriados"
+    - "Contraste mínimo 4.5:1"
+    - "Redução de movimento"
+
+# 8. TESTES
+testing:
+  unit:
+    framework: "Jest"
+    coverage: "80%"
+  
+  integration:
+    framework: "Testing Library"
+    patterns:
+      - "Testar fluxos principais"
+      - "Simular eventos WebSocket"
+      - "Validar integração com IA"
+
+# 9. DOCUMENTAÇÃO
+documentation:
+  components:
+    - "README.md por componente"
+    - "Props documentadas com JSDoc"
+    - "Exemplos de uso"
+  
+  api:
+    - "OpenAPI/Swagger para endpoints"
+    - "Documentação de eventos WebSocket"
+    - "Guias de integração com IA"
+
+# 10. COMMITS
+git:
+  pattern: "tipo(escopo): descrição"
+  tipos:
+    - "feat: Nova funcionalidade"
+    - "fix: Correção de bug"
+    - "docs: Documentação"
+    - "style: Formatação"
+    - "refactor: Refatoração"
+    - "test: Testes"
+    - "chore: Tarefas" 

@@ -10,6 +10,8 @@ interface ChatMessage {
   sender: 'agent' | 'client';
   isInternal: boolean;
   timestamp: Date;
+  type: string;
+  metadata: Record<string, any>;
 }
 
 interface ChatState {
@@ -251,10 +253,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ticketId: data.ticket_id || data.ticketId,
         content: data.content,
         senderName: data.sender_name || 'Desconhecido',
-        sender: data.sender_id ? 'agent' : 'client',
+        sender: data.sender || (data.metadata?.is_from_client ? 'client' : 'agent'),
         isInternal: data.is_internal || false,
-        timestamp: new Date(data.created_at || Date.now())
+        timestamp: new Date(data.created_at || Date.now()),
+        type: data.type || 'text',
+        metadata: data.metadata || {}
       };
+
+      console.log('📨 [CHAT] Detalhes da identificação do remetente:', {
+        sender: message.sender,
+        originalSender: data.sender,
+        isFromClient: data.metadata?.is_from_client,
+        senderId: data.sender_id,
+        metadata: data.metadata
+      });
 
       console.log('📨 [CHAT] Mensagem processada:', {
         id: message.id,
@@ -262,7 +274,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sender: message.sender,
         content: message.content.substring(0, 50),
         senderName: message.senderName,
-        isInternal: message.isInternal
+        isInternal: message.isInternal,
+        type: message.type,
+        metadata: message.metadata
       });
 
       set((state) => {
@@ -288,6 +302,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           totalAfter: currentMessages.length + 1
         });
 
+        // Forçar atualização do estado
         const newState = {
           ...state,
           messages: {
@@ -459,7 +474,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           senderName: 'Você (offline)',
           sender: 'agent',
           isInternal,
-          timestamp: new Date()
+          timestamp: new Date(),
+          type: 'text',
+          metadata: {}
         };
 
         set((state) => ({
