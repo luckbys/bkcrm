@@ -1,0 +1,20 @@
+{
+  "name": "bkcrm",
+  "build": {
+    "type": "buildpack",
+    "stack": "heroku-24",
+    "buildpacks": [
+      "heroku/nodejs",
+      "https://github.com/heroku/heroku-buildpack-static"
+    ]
+  },
+  "web": {
+    "port": "$PORT",
+    "command": "npm run start"
+  },
+  "env": {
+    "NODE_ENV": "production",
+    "NPM_CONFIG_PRODUCTION": "true",
+    "VITE_APP_ENV": "production"
+  }
+} 

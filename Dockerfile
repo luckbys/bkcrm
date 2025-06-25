@@ -1,13 +1,16 @@
 ﻿# Multi-stage build para EasyPanel via GitHub
-FROM node:18-alpine AS build
+FROM node:18 AS build
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --silent --only=production
+# Verify Node.js and npm are available
+RUN node --version && npm --version
+
+# Install dependencies with verbose logging
+RUN npm ci --verbose
 
 # Copy source code
 COPY . .
@@ -18,8 +21,11 @@ RUN echo "export default {};" > src/config/index.ts || true
 RUN echo "export default {};" > src/services/database/index.ts || true
 RUN echo "export default {};" > src/services/whatsapp/index.ts || true
 
-# Build the application
-RUN npm run build
+# List files for debugging
+RUN ls -la && ls -la src/
+
+# Build the application with verbose output
+RUN npm run build --verbose
 
 # Production stage
 FROM nginx:alpine

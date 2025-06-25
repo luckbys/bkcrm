@@ -1,6 +1,6 @@
 {
-  "name": "BKCRM - Customer Relationship Management",
-  "description": "Sistema de CRM com integração WhatsApp via Evolution API",
+  "name": "BKCRM",
+  "description": "Sistema CRM com integração WhatsApp",
   "keywords": [
     "crm",
     "whatsapp",
@@ -12,17 +12,26 @@
   "website": "https://github.com/seu-usuario/bkcrm",
   "repository": "https://github.com/seu-usuario/bkcrm",
   "success_url": "/",
+  "stack": "heroku-24",
   "buildpacks": [
     {
       "url": "heroku/nodejs"
     },
     {
-      "url": "heroku/static"
+      "url": "https://github.com/heroku/heroku-buildpack-static"
     }
   ],
   "env": {
     "NODE_ENV": {
-      "description": "Environment for Node.js",
+      "description": "Node environment",
+      "value": "production"
+    },
+    "NPM_CONFIG_PRODUCTION": {
+      "description": "Production build",
+      "value": "true"
+    },
+    "VITE_APP_ENV": {
+      "description": "Vite environment",
       "value": "production"
     },
     "VITE_SUPABASE_URL": {
@@ -42,7 +51,9 @@
       "value": "429683C4C977415CAAFCCE10F7D57E11"
     }
   },
-  "stack": "heroku-24",
+  "scripts": {
+    "postdeploy": "echo 'Deploy completed successfully'"
+  },
   "formation": {
     "web": {
       "quantity": 1,
