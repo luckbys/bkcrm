@@ -1,0 +1,24 @@
+﻿{
+  "name": "bkcrm",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build",
+    "start": "vite preview --port 80 --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "^3.21.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@supabase/supabase-js": "^2.50.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.26.2",
+    "socket.io-client": "^4.8.1",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.5.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.4"
+  }
+}

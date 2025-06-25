@@ -1,0 +1,124 @@
+# Dockerfile otimizado para EasyPanel
+# Resolve problemas de build e conexão com Docker daemon
+
+FROM node:18-alpine AS base
+
+# Instalar dependências do sistema
+RUN apk add --no-cache \
+    curl \
+    bash \
+    dumb-init
+
+# Criar usuário não-root
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S bkcrm -u 1001 -G nodejs
+
+# Configurar diretório de trabalho
+WORKDIR /app
+
+# Stage 1: Instalar dependências
+FROM base AS dependencies
+
+# Copiar arquivos de configuração de dependências
+COPY --chown=bkcrm:nodejs package*.json ./
+
+# Instalar dependências com otimizações para build
+RUN npm ci --only=production --silent --no-audit --no-fund && \
+    npm cache clean --force
+
+# Stage 2: Build da aplicação
+FROM base AS builder
+
+# Copiar dependências do stage anterior
+COPY --from=dependencies --chown=bkcrm:nodejs /app/node_modules ./node_modules
+COPY --chown=bkcrm:nodejs package*.json ./
+
+# Copiar código fonte
+COPY --chown=bkcrm:nodejs . .
+
+# Build da aplicação
+RUN npm run build
+
+# Stage 3: Imagem de produção
+FROM nginx:alpine AS production
+
+# Instalar Node.js para o webhook
+RUN apk add --no-cache \
+    nodejs \
+    npm \
+    curl \
+    bash
+
+# Copiar build da aplicação React
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copiar webhook do WebSocket
+COPY --chown=root:root webhook-evolution-websocket.js /app/
+COPY --chown=root:root package*.json /app/
+
+# Instalar dependências do webhook
+WORKDIR /app
+RUN npm ci --only=production --silent --no-audit --no-fund
+
+# Configurar nginx
+COPY --chown=root:root deployment/nginx-easypanel.conf /etc/nginx/nginx.conf
+
+# Criar script de inicialização
+RUN cat > /start.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "🚀 Iniciando BKCRM EasyPanel..."
+
+# Verificar variáveis de ambiente
+echo "📋 Verificando configurações..."
+echo "NODE_ENV: $NODE_ENV"
+echo "PORT: $PORT"
+
+# Iniciar webhook em background
+echo "🔗 Iniciando WebSocket webhook..."
+cd /app
+node webhook-evolution-websocket.js &
+WEBHOOK_PID=$!
+
+# Aguardar webhook inicializar
+sleep 5
+
+# Verificar se webhook está rodando
+if curl -f http://localhost:4000/webhook/health > /dev/null 2>&1; then
+    echo "✅ WebSocket iniciado com sucesso"
+else
+    echo "❌ Erro ao iniciar WebSocket"
+    exit 1
+fi
+
+# Iniciar nginx
+echo "🌐 Iniciando servidor web..."
+nginx -g 'daemon off;' &
+NGINX_PID=$!
+
+# Monitorar processos
+echo "📊 Processos iniciados:"
+echo "- WebSocket PID: $WEBHOOK_PID"
+echo "- Nginx PID: $NGINX_PID"
+
+# Aguardar qualquer processo finalizar
+wait $WEBHOOK_PID $NGINX_PID
+EOF
+
+RUN chmod +x /start.sh
+
+# Health check otimizado
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/health || \
+        curl -f http://localhost:4000/webhook/health || exit 1
+
+# Configurar variáveis de ambiente
+ENV NODE_ENV=production
+ENV PORT=80
+
+# Expor portas
+EXPOSE 80 4000
+
+# Usar dumb-init para gerenciamento de processos
+ENTRYPOINT ["/start.sh"] 
