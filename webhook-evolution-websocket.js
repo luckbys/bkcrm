@@ -366,158 +366,93 @@ async function findOrCreateCustomer(phone, instanceName, pushName = null) {
 }
 
 // Buscar ou criar ticket
-async function findOrCreateTicket(customerId, phone, instanceName) {
+async function findOrCreateTicket(customerId, phone, instance) {
   try {
-    console.log(`🎫 Buscando ticket existente para cliente: ${customerId}`);
+    console.log('🎫 [TICKET] Buscando/criando ticket:', { customerId, phone, instance });
     
-    // Buscar ticket aberto existente
-    const { data: existingTickets } = await supabase
+    // Primeiro tenta encontrar um ticket existente
+    const existingTicket = await supabase
       .from('tickets')
       .select('*')
       .eq('customer_id', customerId)
-      .in('status', ['open', 'in_progress'])
+      .eq('status', 'open')
+      .eq('instance', instance)
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (existingTickets && existingTickets.length > 0) {
-      const ticket = existingTickets[0];
-      console.log(`✅ Ticket existente encontrado: ${ticket.id}`);
-      
-      // Atualizar telefone no ticket existente
-      const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
-      const updateData = {
-        nunmsg: phoneFormatted,
-        metadata: {
-          ...ticket.metadata,
-          whatsapp_phone: phoneFormatted,
-          client_phone: phoneFormatted,
-          instance_name: instanceName,
-          is_whatsapp: true,
-          phone_updated_at: new Date().toISOString()
-        },
-        channel: 'whatsapp'
-      };
-      
-      await supabase
-        .from('tickets')
-        .update(updateData)
-        .eq('id', ticket.id);
-      
-      return ticket.id;
+    if (existingTicket && existingTicket.length > 0) {
+      const ticket = existingTicket[0];
+      console.log('✅ [TICKET] Ticket existente encontrado:', ticket);
+      return ticket;
     }
 
-    // Criar novo ticket
-    console.log(`➕ Criando novo ticket para cliente ${customerId}`);
-    const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
-    
-    const ticketData = {
-      id: crypto.randomUUID(),
-      title: `Atendimento WhatsApp - ${phoneFormatted}`,
-      description: `Conversa iniciada via WhatsApp na instância ${instanceName}`,
-      status: 'open',
-      priority: 'medium',
-      customer_id: customerId,
-      channel: 'whatsapp',
-      nunmsg: phoneFormatted,
-      metadata: {
-        whatsapp_phone: phoneFormatted,
-        client_phone: phoneFormatted,
-        instance_name: instanceName,
-        created_via: 'webhook_evolution',
-        is_whatsapp: true,
-        phone_captured_at: new Date().toISOString()
-      }
-    };
-
-    const { data: newTicket, error } = await supabase
+    // Se não encontrar, cria um novo ticket
+    const newTicket = await supabase
       .from('tickets')
-      .insert([ticketData])
+      .insert([{
+        id: crypto.randomUUID(),
+        title: `Atendimento WhatsApp - ${phone}`,
+        description: `Conversa iniciada via WhatsApp na instância ${instance}`,
+        status: 'open',
+        priority: 'medium',
+        customer_id: customerId,
+        channel: 'whatsapp',
+        nunmsg: phone,
+        metadata: {
+          whatsapp_phone: phone,
+          client_phone: phone,
+          instance_name: instance,
+          created_via: 'webhook_evolution',
+          is_whatsapp: true,
+          phone_captured_at: new Date().toISOString()
+        }
+      }])
       .select()
       .single();
 
-    if (error) {
-      console.error('❌ Erro ao criar ticket:', error);
-      return null;
-    }
-
-    console.log(`✅ Ticket criado: ${newTicket.id} com telefone salvo no campo nunmsg: ${phoneFormatted}`);
-    return newTicket.id;
+    console.log('✅ [TICKET] Novo ticket criado:', newTicket);
+    return newTicket;
 
   } catch (error) {
-    console.error('❌ Erro em findOrCreateTicket:', error);
-    return null;
+    console.error('❌ [TICKET] Erro ao buscar/criar ticket:', error);
+    throw new Error(`Erro ao processar ticket: ${error.message}`);
   }
 }
 
 // Salvar mensagem no banco
 async function saveMessage(ticketId, messageData, instanceName) {
   try {
-    const messageId = crypto.randomUUID();
-    
-    // 🎵 PREPARAR METADADOS COMPLETOS
-    const baseMetadata = {
-      evolution_instance: instanceName,
-      whatsapp_message_id: messageData.whatsappMessageId,
-      sender_phone: messageData.senderPhone,
-      is_from_whatsapp: true,
-      timestamp: messageData.timestamp,
-      message_type: messageData.type || 'text'
-    };
-    
-    // 🎵 ADICIONAR METADADOS DE ÁUDIO SE EXISTIREM
-    const finalMetadata = messageData.metadata ? {
-      ...baseMetadata,
-      ...messageData.metadata
-    } : baseMetadata;
-    
-    const messageRecord = {
-      id: messageId,
-      ticket_id: ticketId,
-      content: messageData.content,
-      sender_name: messageData.senderName,
-      type: messageData.type || 'text',
-      metadata: finalMetadata,
-      created_at: new Date().toISOString()
-    };
+    console.log('💾 [DB] Salvando mensagem no banco:', {
+      ticketId,
+      instance: instanceName,
+      messageType: messageData.type || 'text'
+    });
 
-    const { error } = await supabase
+    const result = await supabase
       .from('messages')
-      .insert([messageRecord]);
+      .insert([{
+        id: crypto.randomUUID(),
+        ticket_id: ticketId,
+        created_at: new Date().toISOString(),
+        whatsapp_message_id: messageData.whatsapp_message_id,
+        content: messageData.content,
+        type: messageData.type || 'text',
+        is_internal: messageData.is_internal,
+        metadata: messageData.metadata,
+        sender_name: messageData.sender_name,
+        instance: instanceName,
+        sender: messageData.sender,
+        message_type: messageData.message_type || 'text'
+      }])
+      .select()
+      .single();
 
-    if (error) {
-      console.error('❌ Erro ao salvar mensagem:', error);
-      return null;
-    }
-
-    console.log(`✅ Mensagem salva: ${messageId}`);
-    
-    // 🚀 BROADCAST VIA WEBSOCKET
-    const broadcastMessage = {
-      id: messageId,
-      ticket_id: ticketId,
-      content: messageData.content,
-      sender_name: messageData.senderName,
-      sender_id: null, // Mensagem de cliente
-      is_internal: false,
-      created_at: messageRecord.created_at,
-      type: messageData.type || 'text',
-      metadata: finalMetadata
-    };
-
-    // Enviar para todos conectados ao ticket via WebSocket
-    const sent = wsManager.broadcastToTicket(ticketId, 'new-message', broadcastMessage);
-    
-    if (sent) {
-      console.log(`📡 [WS] Mensagem transmitida via WebSocket para ticket ${ticketId}`);
-    } else {
-      console.log(`📭 [WS] Nenhuma conexão ativa para ticket ${ticketId}`);
-    }
-
-    return messageId;
+    console.log('✅ [DB] Mensagem salva com sucesso:', result);
+    return result;
 
   } catch (error) {
-    console.error('❌ Erro ao salvar mensagem:', error);
-    return null;
+    console.error('❌ [DB] Erro ao salvar mensagem:', error);
+    throw new Error(`Erro ao salvar mensagem: ${error.message}`);
   }
 }
 
@@ -753,8 +688,14 @@ async function processMessage(payload) {
     const messageKey = data.key;
     const messageContent = data.message;
     
-    // CORREÇÃO: Verificar se é realmente uma mensagem nossa
-    // Antes verificava apenas fromMe, agora verifica também se é uma mensagem de teste
+    console.log('📨 [MESSAGE] Iniciando processamento:', {
+      instance: payload.instance,
+      messageId: messageKey?.id,
+      fromMe: messageKey?.fromMe,
+      isTest: data.isTestMessage
+    });
+
+    // Verificar se é mensagem do sistema
     if (messageKey.fromMe && !data.isTestMessage) {
       console.log('📤 Mensagem enviada pelo sistema, ignorando');
       return { success: true, message: 'Mensagem do sistema ignorada' };
@@ -764,28 +705,56 @@ async function processMessage(payload) {
     const textContent = messageContent.conversation || messageContent.extendedTextMessage?.text;
     
     if (!textContent) {
+      console.log('ℹ️ [MESSAGE] Mensagem sem texto - ignorada');
       return { success: true, message: 'Mensagem sem texto - ignorada' };
     }
 
-    // Processar a mensagem normalmente
+    // Processar cliente
+    console.log('👤 [CUSTOMER] Processando cliente:', { phone, instance: payload.instance });
     const customer = await findOrCreateCustomer(phone, payload.instance, data.pushName);
+    
+    if (!customer || !customer.id) {
+      throw new Error('Falha ao criar/encontrar cliente');
+    }
+
+    // Processar ticket
+    console.log('🎫 [TICKET] Processando ticket para cliente:', { customerId: customer.id });
     const ticket = await findOrCreateTicket(customer.id, phone, payload.instance);
     
+    if (!ticket || !ticket.id) {
+      throw new Error('Falha ao criar/encontrar ticket');
+    }
+
+    // Preparar dados da mensagem
     const messageData = {
+      ticket_id: ticket.id,
       content: textContent,
       sender: 'client',
-      senderName: data.pushName || customer.name,
-      whatsappMessageId: messageKey.id,
+      sender_name: data.pushName || customer.name,
+      whatsapp_message_id: messageKey.id,
       timestamp: data.messageTimestamp,
       phone: phone,
       metadata: {
         is_from_client: true,
-        is_test_message: data.isTestMessage || false
+        is_test_message: data.isTestMessage || false,
+        message_type: 'text',
+        timestamp: data.messageTimestamp
       }
     };
 
+    // Salvar mensagem
+    console.log('💾 [MESSAGE] Salvando mensagem:', {
+      ticketId: ticket.id,
+      content: textContent.substring(0, 50) + '...'
+    });
+    
     const savedMessage = await saveMessage(ticket.id, messageData, payload.instance);
     
+    console.log('✅ [MESSAGE] Mensagem processada com sucesso:', {
+      messageId: savedMessage.id,
+      ticketId: ticket.id
+    });
+
     return {
       success: true,
       customerId: customer.id,
@@ -795,7 +764,7 @@ async function processMessage(payload) {
     };
 
   } catch (error) {
-    console.error('❌ Erro ao processar mensagem:', error);
+    console.error('❌ [MESSAGE] Erro ao processar mensagem:', error);
     return { success: false, message: error.message };
   }
 }
