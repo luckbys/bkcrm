@@ -1,0 +1,1409 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
+import { Button } from '../ui/button';
+import { ScrollArea } from '../ui/scroll-area';
+import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
+import { 
+  X, Minimize2, Phone, Video, Send, Paperclip, Smile, MoreVertical, Wifi, WifiOff,
+  Search, Maximize2, Maximize, Download, Settings, Volume2, VolumeX, Copy, Trash2, 
+  Edit3, Star, Users, Clock, MessageSquare, AlertCircle, Check, CheckCheck, Loader2,
+  Archive, Pin, Flag, FileText, Image, Video as VideoIcon, Mic, MapPin, User, Save,
+  Upload, Link2, Bookmark, Zap, Moon, Sun, Palette, History, Quote, ChevronDown, RefreshCw,
+  Minus
+} from 'lucide-react';
+import { MessageBubble } from './MessageBubble';
+import { MessageInputTabs } from './MessageInputTabs';
+import { ReplyPreview } from './ReplyPreview';
+import { EmojiPicker } from './EmojiPicker';
+import { NotificationToast, useNotificationToast } from './NotificationToast';
+import { TypingIndicator, useTypingIndicator } from './TypingIndicator';
+import { ConnectionStatus, useConnectionStatus } from './ConnectionStatus';
+import { cn } from '../../lib/utils';
+import { ChatMessage as BaseChatMessage } from '../../types/chat';
+import io from 'socket.io-client';
+import { wsService } from '@/services/websocket';
+import { Message } from '@/types/chat.types';
+
+// Interface local compatível com as mensagens do WebSocket
+interface LocalChatMessage {
+  id: string;
+  content: string;
+  sender: 'agent' | 'client' | 'system';
+  senderName: string;
+  timestamp: Date;
+  isInternal: boolean;
+  type?: 'text' | 'image' | 'file' | 'audio' | 'video';
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  metadata?: any;
+}
+
+// 📝 Templates de resposta rápida
+const QUICK_TEMPLATES = [
+  { id: 'greeting', title: 'Saudação', content: 'Olá! Como posso ajudá-lo hoje?' },
+  { id: 'thanks', title: 'Agradecimento', content: 'Obrigado pelo contato! Fico à disposição.' },
+  { id: 'wait', title: 'Aguarde', content: 'Por favor, aguarde um momento enquanto verifico isso para você.' },
+  { id: 'resolved', title: 'Resolvido', content: 'Problema resolvido! Há mais alguma coisa em que posso ajudar?' },
+  { id: 'followup', title: 'Acompanhamento', content: 'Gostaria de fazer um acompanhamento sobre sua solicitação.' },
+  { id: 'escalate', title: 'Escalar', content: 'Vou escalar sua solicitação para um especialista.' }
+];
+
+import { useChatStore } from '../../stores/chatStore';
+import { useAuth } from '../../hooks/useAuth';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+interface UnifiedChatModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onMinimize?: () => void;
+  ticketId: string;
+  clientName?: string;
+  clientPhone?: string;
+  className?: string;
+}
+
+export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
+  isOpen,
+  onClose,
+  onMinimize,
+  ticketId,
+  clientName = "Cliente",
+  clientPhone,
+  className
+}: UnifiedChatModalProps): JSX.Element | null => {
+  // 🚫 EARLY RETURN - DEVE ESTAR ANTES DE TODOS OS HOOKS
+  if (!isOpen) {
+    return null;
+  }
+
+  const { user } = useAuth();
+  
+  // 📌 Refs
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // 🎯 Hooks avançados de UX
+  const { 
+    success: showSuccess, 
+    error: showError, 
+    info: showInfo, 
+    warning: showWarning, 
+    NotificationContainer 
+  } = useNotificationToast();
+  
+  const {
+    connectionInfo
+  } = useConnectionStatus();
+  
+  // 🔗 Hook do Chat Store com WebSocket real
+  const {
+    isConnected,
+    isLoading,
+    isSending,
+    error,
+    messages,
+    init,
+    disconnect,
+    join,
+    send,
+    load
+  } = useChatStore();
+
+  // 📝 Estados da UI
+  const [messageText, setMessageText] = useState('');
+  const [activeMode, setActiveMode] = useState<'message' | 'internal'>('message');
+  const [replyingTo, setReplyingTo] = useState<LocalChatMessage | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [favoriteMessages, setFavoriteMessages] = useState<Set<string>>(new Set());
+  const [lastSeen, setLastSeen] = useState<Date>(new Date());
+  const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isSilentLoading, setIsSilentLoading] = useState(false);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  
+  // 🆕 Novos estados para funcionalidades avançadas
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showLinkPreview, setShowLinkPreview] = useState(true);
+  const [actionHistory, setActionHistory] = useState<Array<{id: string, action: string, timestamp: Date}>>([]);
+  
+  // 🔄 Estados simplificados
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  // 🎯 Cache de mensagens otimizado
+  const messageCache = useRef(new Map());
+  
+  // 💬 Mensagens do ticket atual com debug melhorado
+  const ticketMessages = useMemo(() => {
+    const rawMessages = messages[ticketId] || [];
+    
+    console.log(`🔍 [UNIFIED-CHAT] Debug mensagens para ticket ${ticketId}:`, {
+      ticketId,
+      totalMessages: rawMessages.length,
+      messagesKeys: Object.keys(messages),
+      firstMessage: rawMessages[0],
+      lastMessage: rawMessages[rawMessages.length - 1],
+      allMessages: rawMessages
+    });
+    
+    // Converter para o formato local se necessário
+    const convertedMessages = rawMessages.map((msg: any) => {
+      // Verificar se já está no formato correto
+      if (msg.sender && msg.senderName && msg.timestamp instanceof Date) {
+        return msg as LocalChatMessage;
+      }
+      
+      // Converter do formato do store para o formato local
+      const converted: LocalChatMessage = {
+        id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+        content: msg.content || '',
+        sender: msg.sender || (msg.metadata?.is_from_client ? 'client' : 'agent'),
+        senderName: msg.senderName || (msg.sender === 'client' ? 'Cliente' : 'Agente'),
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp || Date.now()),
+        isInternal: msg.isInternal || false,
+        type: msg.type || 'text',
+        status: msg.status || 'sent',
+        metadata: msg.metadata || {}
+      };
+      
+      console.log(`🔄 [UNIFIED-CHAT] Detalhes da conversão da mensagem:`, {
+        original: {
+          sender: msg.sender,
+          isFromClient: msg.metadata?.is_from_client,
+          senderId: msg.sender_id,
+          metadata: msg.metadata
+        },
+        converted: {
+          sender: converted.sender,
+          senderName: converted.senderName,
+          isInternal: converted.isInternal
+        }
+      });
+      return converted;
+    });
+    
+    console.log(`✅ [UNIFIED-CHAT] ${convertedMessages.length} mensagens convertidas para ticket ${ticketId}`);
+    return convertedMessages;
+  }, [messages, ticketId]);
+
+  // 🔍 Mensagens filtradas por busca
+  const filteredMessages = useMemo(() => {
+    if (!searchQuery.trim()) return ticketMessages;
+    
+    const query = searchQuery.toLowerCase();
+    return ticketMessages.filter((msg: LocalChatMessage) => {
+      const contentMatch = msg.content?.toLowerCase().includes(query);
+      const senderMatch = msg.senderName?.toLowerCase().includes(query);
+      return Boolean(contentMatch || senderMatch);
+    });
+  }, [ticketMessages, searchQuery]);
+
+  // 📊 Estatísticas das mensagens
+  const messageStats = useMemo(() => {
+    const total = ticketMessages.length;
+    const fromClient = ticketMessages.filter(msg => msg.sender === 'client').length;
+    const fromAgent = ticketMessages.filter(msg => msg.sender === 'agent').length;
+    const internal = ticketMessages.filter(msg => msg.isInternal).length;
+    const unread = ticketMessages.filter(msg => msg.timestamp > lastSeen).length;
+    
+    // Debug das mensagens
+    console.log(`📊 [UNIFIED-CHAT] Stats do ticket ${ticketId}:`, {
+      total,
+      fromClient,
+      fromAgent,
+      internal,
+      unread,
+      lastUpdate: ticketMessages.length > 0 ? ticketMessages[ticketMessages.length - 1].timestamp : null
+    });
+    
+    return { total, fromClient, fromAgent, internal, unread };
+  }, [ticketMessages, lastSeen, ticketId]);
+
+  // 🔄 Inicialização do WebSocket
+  useEffect(() => {
+    if (isOpen && !isConnected) {
+      console.log('🚀 [UNIFIED-CHAT] Inicializando WebSocket...');
+      init();
+    }
+  }, [isOpen, isConnected, init]);
+
+  // 🔗 Entrar no ticket quando conectar
+  useEffect(() => {
+    if (isOpen && ticketId && isConnected) {
+      console.log(`🎯 [UNIFIED-CHAT] Entrando no ticket ${ticketId}`);
+      join(ticketId);
+      
+      // Carregar mensagens sempre que entrar no ticket
+      console.log(`📥 [UNIFIED-CHAT] Carregando mensagens do ticket...`);
+      load(ticketId);
+    }
+  }, [isOpen, ticketId, isConnected, join, load]);
+
+  // 📜 Detecção de scroll e auto-scroll
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+      const scrollBottom = scrollHeight - scrollTop - clientHeight;
+      const newIsNearBottom = scrollBottom < 100;
+      const shouldShowButton = scrollBottom > 200;
+      
+      setIsNearBottom(newIsNearBottom);
+      setShowScrollToBottom(shouldShowButton);
+    };
+
+    scrollArea.addEventListener('scroll', handleScroll);
+    handleScroll(); // Check initial position
+
+    return () => scrollArea.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // 🔄 Carregamento inicial apenas (sem polling automático)
+  useEffect(() => {
+    if (isOpen && ticketId && isConnected) {
+      console.log(`🔍 [UNIFIED-CHAT] === DEBUG CARREGAMENTO INICIAL ===`);
+      console.log(`📋 [UNIFIED-CHAT] Estado atual:`, {
+        isOpen,
+        ticketId,
+        isConnected,
+        isLoading,
+        totalTicketsComMensagens: Object.keys(messages).length,
+        mensagensDoTicketAtual: messages[ticketId]?.length || 0,
+        todasMensagens: messages
+      });
+      
+      // Carregar mensagens apenas uma vez quando abrir
+      console.log(`📥 [UNIFIED-CHAT] Iniciando carregamento de mensagens do ticket ${ticketId}...`);
+      load(ticketId);
+      
+      // Debug adicional - verificar mensagens após 2 segundos
+      setTimeout(() => {
+        const updatedMessages = messages[ticketId] || [];
+        console.log(`🔍 [UNIFIED-CHAT] === DEBUG PÓS-CARREGAMENTO (2s) ===`);
+        console.log(`📊 [UNIFIED-CHAT] Mensagens após carregamento:`, {
+          ticketId,
+          totalMensagens: updatedMessages.length,
+          primeirasMensagens: updatedMessages.slice(0, 3),
+          ultimasMensagens: updatedMessages.slice(-3)
+        });
+        
+        if (updatedMessages.length === 0) {
+          console.warn(`⚠️ [UNIFIED-CHAT] PROBLEMA: Nenhuma mensagem carregada para ticket ${ticketId}`);
+          console.warn(`💡 [UNIFIED-CHAT] Possíveis causas: WebSocket não conectado, ticket não existe, erro no servidor`);
+        }
+      }, 2000);
+    }
+  }, [isOpen, ticketId, isConnected]);
+
+  // 🔄 Polling para garantir mensagens em tempo real
+  useEffect(() => {
+    if (!isOpen || !ticketId) return;
+
+    const pollingInterval = setInterval(() => {
+      if (isConnected) {
+        console.log(`🔄 [UNIFIED-CHAT] Polling mensagens do ticket ${ticketId}`);
+        load(ticketId);
+      }
+    }, 3000); // Polling a cada 3 segundos
+
+    return () => clearInterval(pollingInterval);
+  }, [isOpen, ticketId, isConnected, load]);
+
+  // 🎯 Reconexão automática quando necessário
+  useEffect(() => {
+    if (isOpen && !isConnected && !isLoading) {
+      console.log('🔄 [UNIFIED-CHAT] Tentando reconectar...');
+      const reconnectTimer = setTimeout(() => {
+        init();
+      }, 2000);
+
+      return () => clearTimeout(reconnectTimer);
+    }
+  }, [isOpen, isConnected, isLoading, init]);
+
+  // 📜 Auto-scroll para última mensagem com transição suave
+  useEffect(() => {
+    if (!showSearch && messagesEndRef.current && isNearBottom) {
+      // Usar requestAnimationFrame para scroll mais suave
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'end'
+        });
+      });
+    }
+  }, [ticketMessages, showSearch, isNearBottom]);
+
+  // 🔍 Foco na busca quando abrir
+  useEffect(() => {
+    if (showSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [showSearch]);
+
+  // 📜 Auto-scroll apenas para novas mensagens quando próximo ao fim
+  useEffect(() => {
+    if (ticketMessages.length > 0 && isNearBottom && messagesEndRef.current) {
+      const lastMessage = ticketMessages[ticketMessages.length - 1];
+      const isNewMessage = lastMessage && lastMessage.timestamp > lastSeen;
+      
+      if (isNewMessage) {
+        console.log('🔔 [UNIFIED-CHAT] Nova mensagem detectada:', lastMessage);
+        
+        // Atualizar timestamp de última visualização
+        setLastSeen(new Date());
+        
+        // Notificação visual baseada no remetente
+        if (lastMessage.sender === 'client') {
+          showInfo(`💬 Nova mensagem de ${lastMessage.senderName}`);
+          
+          // Som de notificação se habilitado
+          if (soundEnabled) {
+            try {
+              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAkUXrTp66hVFApGn+D...');
+              audio.volume = 0.3;
+              audio.play().catch(e => console.log('🔇 Som não pôde ser reproduzido:', e));
+            } catch (e) {
+              console.log('🔇 Erro ao reproduzir som:', e);
+            }
+          }
+        }
+
+        // Scroll suave para a nova mensagem apenas se estiver próximo ao fim
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'end'
+        });
+      }
+    }
+  }, [ticketMessages, soundEnabled, lastSeen, showInfo, isNearBottom]);
+
+  // 💾 Auto-save de rascunhos
+  useEffect(() => {
+    if (messageText.trim() && messageText.length > 10) {
+      const draftKey = `draft_${ticketId}`;
+      localStorage.setItem(draftKey, messageText);
+    }
+  }, [messageText, ticketId]);
+
+  // 📝 Restaurar rascunho salvo
+  useEffect(() => {
+    if (isOpen && ticketId && !draftRestored) {
+      const draftKey = `draft_${ticketId}`;
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft && !messageText) {
+        setMessageText(savedDraft);
+        setDraftRestored(true);
+        showInfo('Rascunho restaurado!');
+      }
+    }
+  }, [isOpen, ticketId, draftRestored, messageText, showInfo]);
+
+  // ⌨️ Indicador de digitação
+  const handleTypingStart = useCallback(() => {
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      // Parar indicador de digitação após 3 segundos
+    }, 3000);
+    
+    setTypingTimeout(timeout);
+  }, [typingTimeout]);
+
+  // 📤 Enviar mensagem
+  const handleSendMessage = useCallback(async () => {
+    if (!messageText.trim() || isSending) return;
+    
+    console.log(`📤 [UNIFIED-CHAT] Enviando mensagem: "${messageText}" (interno: ${activeMode === 'internal'})`);
+    
+    // Adicionar ao histórico de ações
+    const newAction = {
+      id: Date.now().toString(),
+      action: `Enviou mensagem: "${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}"`,
+      timestamp: new Date()
+    };
+    setActionHistory(prev => [newAction, ...prev.slice(0, 9)]); // Manter apenas 10 ações
+    
+    try {
+      await send(ticketId, messageText, activeMode === 'internal');
+      setMessageText('');
+      setReplyingTo(null);
+      
+      // Limpar rascunho salvo
+      const draftKey = `draft_${ticketId}`;
+      localStorage.removeItem(draftKey);
+      setDraftRestored(false);
+      
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+        setTypingTimeout(null);
+      }
+      
+      // Focus de volta no input
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+
+      showSuccess('Mensagem enviada com sucesso!');
+    } catch (error) {
+      console.error('❌ [UNIFIED-CHAT] Erro ao enviar mensagem:', error);
+      showError('Erro ao enviar mensagem');
+    }
+  }, [messageText, activeMode, isSending, send, ticketId, typingTimeout, showSuccess, showError]);
+
+  // 📂 Drag & Drop para anexos
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileUpload(files);
+    }
+  }, []);
+
+  const handleFileUpload = useCallback((files: File[]) => {
+    files.forEach(file => {
+      // Validar tipos de arquivo
+      const allowedTypes = ['image/', 'text/', 'application/pdf', 'application/msword'];
+      const isAllowed = allowedTypes.some(type => file.type.startsWith(type));
+      
+      if (!isAllowed) {
+        showWarning(`Tipo de arquivo não permitido: ${file.name}`);
+        return;
+      }
+      
+      if (file.size > 10 * 1024 * 1024) { // 10MB
+        showWarning(`Arquivo muito grande: ${file.name}`);
+        return;
+      }
+      
+      console.log('📎 [UNIFIED-CHAT] Uploading file:', file.name);
+      showInfo(`Fazendo upload de: ${file.name}`);
+      
+      // Aqui você implementaria o upload real do arquivo
+      // Por enquanto, apenas simular
+      setTimeout(() => {
+        showSuccess(`Arquivo ${file.name} enviado!`);
+      }, 2000);
+    });
+  }, [showWarning, showInfo, showSuccess]);
+
+  // 📝 Usar template
+  const handleUseTemplate = useCallback((template: { id: string; title: string; content: string }) => {
+    setMessageText(template.content);
+    setShowTemplates(false);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+    showInfo(`Template "${template.title}" aplicado!`);
+  }, [showInfo]);
+
+  // 🎨 Funções auxiliares
+  const getClientInitials = useCallback(() => {
+    return clientName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'CL';
+  }, [clientName]);
+
+  const getModalClasses = useCallback(() => {
+    const base = "p-0 gap-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-white flex flex-col transition-all duration-300";
+    if (isFullscreen) return cn(base, "w-screen h-screen max-w-none rounded-none");
+    if (isExpanded) return cn(base, "max-w-7xl h-[95vh]");
+    return cn(base, "max-w-5xl h-[90vh]");
+  }, [isFullscreen, isExpanded]);
+
+  const handleToggleFavorite = useCallback((messageId: string) => {
+    setFavoriteMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleCopyMessage = useCallback((content: string) => {
+    navigator.clipboard.writeText(content);
+    showSuccess('Mensagem copiada!');
+  }, [showSuccess]);
+
+  const handleReplyToMessage = useCallback((message: LocalChatMessage) => {
+    setReplyingTo(message);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, []);
+
+  // 🎯 Status de conexão
+  const connectionStatus = useMemo(() => {
+    if (isLoading) return { icon: Loader2, text: 'Conectando...', color: 'text-yellow-500' };
+    if (isConnected) return { icon: Wifi, text: 'Online', color: 'text-green-500' };
+    if (error) return { icon: AlertCircle, text: 'Erro', color: 'text-red-500' };
+    return { icon: WifiOff, text: 'Offline', color: 'text-gray-500' };
+  }, [isLoading, isConnected, error]);
+
+  // ⌨️ Escuta de atalhos de teclado
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (!isOpen) return;
+      
+      // F5 ou Ctrl+R para atualizar mensagens
+      if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+        e.preventDefault();
+        console.log('🔄 [UNIFIED-CHAT] Atualizando silenciosamente via teclado...');
+        setIsSilentLoading(true);
+        if (isConnected) {
+          await load(ticketId);
+        } else {
+          await init();
+        }
+        setIsSilentLoading(false);
+      }
+
+      // Ctrl+I para alternar modo interno
+      if (e.ctrlKey && e.key === 'i') {
+        e.preventDefault();
+        setActiveMode(prev => prev === 'internal' ? 'message' : 'internal');
+      }
+
+      // ESC para fechar
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isConnected, load, ticketId, init, onClose]);
+
+  // 🎨 Estilos críticos para o header
+  const headerStyles = useMemo(() => ({
+    transition: 'all 700ms cubic-bezier(0.4, 0, 0.2, 1)',
+    willChange: 'transform, opacity',
+    transformOrigin: 'center center',
+    backfaceVisibility: 'hidden' as const,
+    perspective: '1000px'
+  }), []);
+
+  // 🎨 Componente do Header otimizado
+  const ChatHeader = () => (
+    <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+          {clientName.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <h3 className="font-semibold text-gray-900">{clientName}</h3>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span>{clientPhone}</span>
+            <ConnectionStatus 
+              connectionInfo={{
+                status: isConnected ? 'connected' : 'disconnected',
+                latency: isConnected ? 50 : undefined,
+                quality: isConnected ? 'good' : undefined,
+                lastSeen: isConnected ? undefined : new Date(),
+                serverStatus: 'online',
+                clientsOnline: isConnected ? 1 : 0
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-2">
+        {/* Botões de ação */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowSearch(!showSearch)}
+          className={cn("h-8 px-2", showSearch && "bg-blue-50 text-blue-600")}
+          title="Buscar mensagens"
+        >
+          <Search className="w-4 h-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className={cn("h-8 px-2", !soundEnabled && "text-gray-400")}
+          title={soundEnabled ? "Desativar som" : "Ativar som"}
+        >
+          {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowSidebar(!showSidebar)}
+          className={cn("h-8 px-2", showSidebar && "bg-purple-50 text-purple-600")}
+          title="Configurações e informações"
+        >
+          <Settings className="w-4 h-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            if (isFullscreen) {
+              setIsFullscreen(false);
+              setIsExpanded(false);
+            } else if (isExpanded) {
+              setIsFullscreen(true);
+            } else {
+              setIsExpanded(true);
+            }
+          }}
+          className="h-8 px-2"
+          title={
+            isFullscreen ? "Sair da tela cheia" :
+            isExpanded ? "Tela cheia" :
+            "Expandir"
+          }
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-4 h-4" />
+          ) : isExpanded ? (
+            <Maximize2 className="w-4 h-4" />
+          ) : (
+            <Maximize className="w-4 h-4" />
+          )}
+        </Button>
+
+        {onMinimize && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onMinimize}
+            className="h-8 px-2"
+            title="Minimizar"
+          >
+            <Minus className="w-4 h-4" />
+          </Button>
+        )}
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="h-8 px-2 hover:text-red-600"
+          title="Fechar"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  // 🔄 Sistema de debug avançado com force reload manual
+  useEffect(() => {
+    // Disponibilizar função de debug globalmente
+    const debugUnifiedChat = () => {
+      const currentState = {
+        isOpen,
+        ticketId,
+        isConnected,
+        isLoading,
+        error,
+        totalMessages: ticketMessages.length,
+        messageStats,
+        socketStatus: isConnected ? 'CONECTADO' : 'DESCONECTADO',
+        allMessages: messages,
+        currentTicketMessages: messages[ticketId] || []
+      };
+      
+      console.log(`🔍 [DEBUG-UNIFIED-CHAT] === ESTADO COMPLETO ===`, currentState);
+      
+      // Forçar reload das mensagens
+      if (isConnected && ticketId) {
+        console.log(`🔄 [DEBUG-UNIFIED-CHAT] Forçando reload das mensagens...`);
+        load(ticketId);
+      } else {
+        console.warn(`⚠️ [DEBUG-UNIFIED-CHAT] Não é possível recarregar: isConnected=${isConnected}, ticketId=${ticketId}`);
+      }
+      
+      return currentState;
+    };
+    
+    // Disponibilizar no console do navegador
+    (window as any).debugUnifiedChat = debugUnifiedChat;
+    
+    return () => {
+      delete (window as any).debugUnifiedChat;
+    };
+  }, [isOpen, ticketId, isConnected, isLoading, error, ticketMessages, messageStats, messages, load]);
+
+  // 🔄 Debug das mensagens em tempo real
+  useEffect(() => {
+    console.log(`🔍 [UNIFIED-CHAT] === MUDANÇA NO ESTADO DAS MENSAGENS ===`);
+    console.log(`📊 [UNIFIED-CHAT] Ticket ${ticketId}:`, {
+      totalMensagens: ticketMessages.length,
+      mensagensDetalhadas: ticketMessages.map(msg => ({
+        id: msg.id,
+        sender: msg.sender,
+        content: msg.content.substring(0, 30),
+        timestamp: msg.timestamp
+      })),
+      filteredCount: filteredMessages.length,
+      searchActive: Boolean(searchQuery.trim())
+    });
+    
+    // Se não há mensagens, fornecer debugging adicional
+    if (ticketMessages.length === 0) {
+      console.warn(`⚠️ [UNIFIED-CHAT] PROBLEMA: Zero mensagens para ticket ${ticketId}`);
+      console.warn(`🔍 [UNIFIED-CHAT] Debug completo:`, {
+        isSocketConnected: isConnected,
+        isModalOpen: isOpen,
+        allTicketsWithMessages: Object.keys(messages),
+        rawMessagesFromStore: messages[ticketId],
+        isLoading,
+        error
+      });
+      
+      // Tentar recarregar automaticamente se conectado
+      if (isConnected && isOpen && !isLoading) {
+        console.log(`🔄 [UNIFIED-CHAT] Auto-retry: Tentando recarregar mensagens automaticamente...`);
+        setTimeout(() => {
+          load(ticketId);
+        }, 1000);
+      }
+    }
+  }, [ticketMessages, filteredMessages, ticketId, isConnected, isOpen, isLoading, error, messages, searchQuery, load]);
+
+  // 🔄 Atualização em tempo real de mensagens
+  useEffect(() => {
+    const handleNewMessage = (event: CustomEvent) => {
+      const { ticketId: messageTicketId, message } = event.detail;
+      
+      if (messageTicketId === ticketId) {
+        console.log('📨 [UNIFIED-CHAT] Nova mensagem recebida:', message);
+        
+        // Atualizar última visualização
+        setLastSeen(new Date());
+        
+        // Notificação visual e sonora
+        if (message.sender === 'client') {
+          showInfo(`💬 Nova mensagem de ${message.senderName}`);
+          
+          // Som de notificação se habilitado
+          if (soundEnabled) {
+            try {
+              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAkUXrTp66hVFApGn+D...');
+              audio.volume = 0.3;
+              audio.play().catch(e => console.log('🔇 Som não pôde ser reproduzido:', e));
+            } catch (e) {
+              console.log('🔇 Erro ao reproduzir som:', e);
+            }
+          }
+        }
+        
+        // Scroll automático para nova mensagem apenas se estiver próximo ao fim
+        if (messagesEndRef.current && isNearBottom) {
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ 
+              behavior: 'smooth',
+              block: 'end'
+            });
+          }, 150);
+        }
+      }
+    };
+
+    // Registrar listener para eventos de nova mensagem
+    window.addEventListener('chat-message-received', handleNewMessage as EventListener);
+    
+    return () => {
+      window.removeEventListener('chat-message-received', handleNewMessage as EventListener);
+    };
+  }, [ticketId, soundEnabled, showInfo, showSuccess, isNearBottom]);
+
+  // WebSocket setup
+  useEffect(() => {
+    if (!ticketId) return;
+
+    console.log('🔌 [CHAT] Iniciando conexão WebSocket para ticket:', ticketId);
+    
+    // Conectar ao WebSocket
+    const socket = wsService.connect(ticketId);
+    
+    // Entrar na sala do ticket
+    wsService.joinTicket(ticketId);
+
+    // Configurar listener de novas mensagens
+    wsService.onNewMessage((message: Message) => {
+      console.log('📨 [CHAT] Nova mensagem recebida:', message);
+      setMessages(prev => [...prev, message]);
+      
+      // Auto-scroll se estiver próximo ao fim
+      if (isNearBottom) {
+        scrollToBottom();
+      }
+    });
+
+    // Cleanup
+    return () => {
+      console.log('👋 [CHAT] Limpando conexão WebSocket');
+      wsService.leaveTicket(ticketId);
+      wsService.disconnect();
+    };
+  }, [ticketId, isNearBottom]);
+
+  // Carregar mensagens iniciais
+  useEffect(() => {
+    if (!ticketId) return;
+
+    const loadMessages = async () => {
+      try {
+        setLoading(true);
+        console.log('📥 [CHAT] Carregando mensagens do ticket:', ticketId);
+        
+        const response = await fetch(`/api/tickets/${ticketId}/messages`);
+        const data = await response.json();
+        
+        if (data.success) {
+          console.log(`✅ [CHAT] ${data.messages.length} mensagens carregadas`);
+          setMessages(data.messages);
+          scrollToBottom();
+        } else {
+          console.error('❌ [CHAT] Erro ao carregar mensagens:', data.error);
+        }
+      } catch (error) {
+        console.error('❌ [CHAT] Erro ao carregar mensagens:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMessages();
+  }, [ticketId]);
+
+  // Função para scroll
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  // Detectar proximidade com o fim
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const bottomThreshold = 100; // pixels do fim
+    setIsNearBottom(scrollHeight - (scrollTop + clientHeight) < bottomThreshold);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className={cn(getModalClasses(), "[&>button]:hidden")}>
+        <DialogTitle className="sr-only">
+          Chat do Ticket {ticketId} - {clientName}
+        </DialogTitle>
+        
+        {/* 🎨 Header Avançado */}
+        <ChatHeader />
+
+        {/* 🔍 Barra de Busca */}
+        {showSearch && (
+          <div className="p-3 border-b bg-gray-50">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                ref={searchInputRef}
+                placeholder="Buscar mensagens, remetente..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-10"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+            
+            {searchQuery && (
+              <div className="mt-2 text-xs text-gray-500">
+                {filteredMessages.length} de {ticketMessages.length} mensagens encontradas
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 🏗️ Layout Principal */}
+        <div className="flex flex-1 min-h-0">
+          {/* 💬 Área de Mensagens */}
+          <div 
+            className="flex flex-col flex-1 min-h-0 relative"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* Overlay de Drag & Drop */}
+            {isDragOver && (
+              <div className="absolute inset-0 z-50 bg-blue-500/20 border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                <div className="text-center text-blue-700">
+                  <Upload className="w-12 h-12 mx-auto mb-3 animate-bounce" />
+                  <h3 className="text-lg font-semibold mb-1">Solte seus arquivos aqui</h3>
+                  <p className="text-sm opacity-75">Imagens, PDFs, documentos até 10MB</p>
+                </div>
+              </div>
+            )}
+            
+            {/* 📱 Área de Mensagens com Transições Suaves */}
+            <div className="flex-1 overflow-hidden relative">
+                          {/* Área limpa sem indicadores que causam re-render */}
+              
+              <ScrollArea 
+                ref={scrollAreaRef}
+                className="h-full px-4"
+              >
+                <div className="space-y-3 py-4">
+                  {filteredMessages.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">
+                        {searchQuery ? 'Nenhuma mensagem encontrada' : 'Nenhuma mensagem ainda'}
+                      </p>
+                      {!searchQuery && (
+                        <p className="text-xs mt-1">Inicie uma conversa enviando uma mensagem</p>
+                      )}
+                    </div>
+                  ) : (
+                    filteredMessages.map((message: LocalChatMessage, index: number) => {
+                      return (
+                        <div
+                          key={message.id}
+                          className="transition-all duration-300 ease-out"
+                        >
+                          <MessageBubble
+                            message={{
+                              ...message,
+                              type: message.type || 'text',
+                              status: message.status || 'sent',
+                              metadata: message.metadata || {}
+                            }}
+                            isFromCurrentUser={message.sender === 'agent'}
+                            onReply={() => setReplyingTo(message)}
+                            onToggleFavorite={() => handleToggleFavorite(message.id)}
+                            isFavorite={favoriteMessages.has(message.id)}
+                            isHighlighted={Boolean(
+                              searchQuery.trim() && 
+                              message.content && 
+                              message.content.toLowerCase().includes(searchQuery.toLowerCase())
+                            )}
+                            onCopy={() => handleCopyMessage(message.content)}
+                          />
+                        </div>
+                      );
+                    })
+                  )}
+                  
+                  {/* Indicador de digitação */}
+                  <TypingIndicator typingUsers={[]} />
+                  
+                  {/* Âncora para scroll */}
+                  <div ref={messagesEndRef} className="h-1" />
+                </div>
+              </ScrollArea>
+              
+              {/* Botão de scroll para baixo (sutil) */}
+              {showScrollToBottom && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                  className="absolute bottom-4 right-4 h-8 w-8 bg-white/80 backdrop-blur-sm border shadow-sm hover:bg-white/90 transition-all duration-200"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            
+            {/* 🔄 Preview de Resposta */}
+            {replyingTo && (
+              <ReplyPreview
+                replyingTo={replyingTo}
+                onCancel={() => setReplyingTo(null)}
+              />
+            )}
+
+            {/* ⌨️ Área de Input */}
+            <div className="border-t p-4 bg-white">
+              <MessageInputTabs
+                activeMode={activeMode}
+                onModeChange={setActiveMode}
+                messageText={messageText}
+                onMessageChange={(text) => {
+                  setMessageText(text);
+                  handleTypingStart();
+                }}
+                onSend={handleSendMessage}
+                isLoading={isSending}
+                ref={textareaRef}
+              />
+              
+              {/* 🎛️ Controles do Input */}
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center gap-2">
+                  {/* Anexar */}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-8 px-3 text-gray-600 hover:text-blue-600"
+                      title="Anexar arquivo (Drag & Drop)"
+                    >
+                      <Paperclip className="w-4 h-4 mr-1" />
+                      Anexar
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.txt"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length > 0) {
+                          handleFileUpload(files);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Templates de Resposta */}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTemplates(!showTemplates)}
+                      className={cn(
+                        "h-8 px-3 text-gray-600 hover:text-purple-600",
+                        showTemplates && "bg-purple-50 text-purple-600"
+                      )}
+                      title="Templates de resposta rápida"
+                    >
+                      <Zap className="w-4 h-4 mr-1" />
+                      Templates
+                    </Button>
+                    
+                    {showTemplates && (
+                      <div className="absolute bottom-full mb-2 left-0 z-50 bg-white border rounded-lg shadow-lg p-2 w-64">
+                        <div className="text-xs font-medium text-gray-700 mb-2 px-2">Templates de Resposta</div>
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {QUICK_TEMPLATES.map((template) => (
+                            <button
+                              key={template.id}
+                              onClick={() => handleUseTemplate(template)}
+                              className="w-full text-left p-2 hover:bg-gray-50 rounded text-sm"
+                            >
+                              <div className="font-medium text-gray-800">{template.title}</div>
+                              <div className="text-gray-500 text-xs truncate">{template.content}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="border-t mt-2 pt-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowTemplates(false)}
+                            className="w-full text-xs"
+                          >
+                            Fechar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Emoji */}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                      className={cn(
+                        "h-8 px-3 text-gray-600 hover:text-yellow-600",
+                        showEmojiPicker && "bg-yellow-50 text-yellow-600"
+                      )}
+                      title="Emojis"
+                    >
+                      <Smile className="w-4 h-4 mr-1" />
+                      Emoji
+                    </Button>
+                    
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-full mb-2 left-0 z-50">
+                        <EmojiPicker
+                          onEmojiSelect={(emoji) => {
+                            setMessageText(prev => prev + emoji);
+                            setShowEmojiPicker(false);
+                          }}
+                          onClose={() => setShowEmojiPicker(false)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Informações adicionais */}
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <span>Ticket #{ticketId}</span>
+                  <span>•</span>
+                  <span className={cn(
+                    messageText.length > 1800 ? "text-red-500" : 
+                    messageText.length > 1500 ? "text-yellow-500" : "text-gray-400"
+                  )}>
+                    {messageText.length}/2000
+                  </span>
+                  {draftRestored && (
+                    <>
+                      <span>•</span>
+                      <span className="text-green-500 flex items-center gap-1">
+                        <Save className="w-3 h-3" />
+                        Rascunho salvo
+                      </span>
+                    </>
+                  )}
+                  {replyingTo && (
+                    <>
+                      <span>•</span>
+                      <span className="text-blue-500 flex items-center gap-1">
+                        <Quote className="w-3 h-3" />
+                        Respondendo
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              {/* Atalhos de teclado */}
+              <div className="mt-2 text-xs text-gray-400 text-center">
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded">Enter</kbd> para enviar • 
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Shift+Enter</kbd> nova linha • 
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Ctrl+I</kbd> nota interna • 
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">F5</kbd> atualizar
+              </div>
+            </div>
+          </div>
+          
+          {/* 📊 Sidebar Informativa */}
+          {showSidebar && (
+            <div className="w-80 border-l bg-white flex flex-col">
+              {/* Header da Sidebar */}
+              <div className="p-4 border-b bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-800">Informações</h3>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowSidebar(false)}
+                    className="h-6 w-6"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Conteúdo da Sidebar */}
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-6">
+                  {/* Informações do Cliente */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Cliente
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Nome:</span>
+                        <span className="font-medium">{clientName}</span>
+                      </div>
+                      {clientPhone && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Telefone:</span>
+                          <span className="font-medium text-blue-600">{clientPhone}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Estatísticas */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4" />
+                      Estatísticas
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-blue-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-blue-600">{messageStats.total}</div>
+                        <div className="text-gray-600">Total</div>
+                      </div>
+                      <div className="bg-green-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-green-600">{messageStats.fromClient}</div>
+                        <div className="text-gray-600">Cliente</div>
+                      </div>
+                      <div className="bg-purple-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-purple-600">{messageStats.fromAgent}</div>
+                        <div className="text-gray-600">Agente</div>
+                      </div>
+                      <div className="bg-orange-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-orange-600">{messageStats.internal}</div>
+                        <div className="text-gray-600">Internas</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Ações Rápidas */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                      <Settings className="w-4 h-4" />
+                      Ações
+                    </h4>
+                    <div className="space-y-2">
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        <Archive className="w-4 h-4 mr-2" />
+                        Arquivar conversa
+                      </Button>
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        <Pin className="w-4 h-4 mr-2" />
+                        Fixar conversa
+                      </Button>
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        <Flag className="w-4 h-4 mr-2" />
+                        Marcar importante
+                      </Button>
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        <FileText className="w-4 h-4 mr-2" />
+                        Exportar chat
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Status da Conexão */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                      <Wifi className="w-4 h-4" />
+                      Conexão
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Status:</span>
+                        <Badge variant={isConnected ? "default" : "secondary"} className="text-xs">
+                          {connectionStatus.text}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Última atualização:</span>
+                        <span className="text-gray-800">
+                          {formatDistanceToNow(new Date(), { addSuffix: true, locale: ptBR })}
+                        </span>
+                      </div>
+                      {error && (
+                        <div className="p-2 bg-red-50 rounded text-red-700 text-xs">
+                          {error}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Histórico de Ações */}
+                  {actionHistory.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                        <History className="w-4 h-4" />
+                        Histórico Recente
+                      </h4>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {actionHistory.slice(0, 5).map((action) => (
+                          <div key={action.id} className="text-xs p-2 bg-gray-50 rounded">
+                            <div className="text-gray-800 font-medium">{action.action}</div>
+                            <div className="text-gray-500">
+                              {formatDistanceToNow(action.timestamp, { addSuffix: true, locale: ptBR })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {actionHistory.length > 5 && (
+                        <div className="text-xs text-gray-500 text-center mt-2">
+                          +{actionHistory.length - 5} ações anteriores
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Configurações Avançadas */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                      <Settings className="w-4 h-4" />
+                      Preferências
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Som de notificações</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSoundEnabled(!soundEnabled)}
+                          className={cn("h-6 w-10 p-0", soundEnabled ? "bg-green-100" : "bg-gray-100")}
+                        >
+                          {soundEnabled ? <Volume2 className="w-3 h-3 text-green-600" /> : <VolumeX className="w-3 h-3 text-gray-400" />}
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Pré-visualizar links</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowLinkPreview(!showLinkPreview)}
+                          className={cn("h-6 w-10 p-0", showLinkPreview ? "bg-blue-100" : "bg-gray-100")}
+                        >
+                          {showLinkPreview ? <Link2 className="w-3 h-3 text-blue-600" /> : <X className="w-3 h-3 text-gray-400" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+        </div>
+        
+        {/* 🔔 Container de Notificações */}
+        <NotificationContainer />
+      </DialogContent>
+    </Dialog>
+  );
+};
