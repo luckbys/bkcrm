@@ -711,7 +711,7 @@ function extractMessageContent(messageObj) {
     const mimetype = audioData.mimetype || 'audio/ogg; codecs=opus';
     
     // Construir URL do áudio (baseado na Evolution API)
-    const audioUrl = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${audioData.key.remoteJid}/${audioData.key.id}`;
+    const audioUrl = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${audioData.key.remoteJid}/${audioData.key.id}?apikey=${EVOLUTION_API_KEY}`;
     
     console.log('🎵 [AUDIO] Dados extraídos:', {
       duration: duration,
@@ -734,8 +734,8 @@ function extractAudioMetadata(messageObj) {
   const duration = audioData.seconds || 0;
   const mimetype = audioData.mimetype || 'audio/ogg; codecs=opus';
   
-  // Construir URL do áudio
-  const audioUrl = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${audioData.key.remoteJid}/${audioData.key.id}`;
+  // Construir URL do áudio com API key
+  const audioUrl = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${audioData.key.remoteJid}/${audioData.key.id}?apikey=${EVOLUTION_API_KEY}`;
   
   return {
     fileUrl: audioUrl,
