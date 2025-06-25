@@ -749,117 +749,50 @@ function extractAudioMetadata(messageObj) {
 // Processar mensagem recebida
 async function processMessage(payload) {
   try {
-    const messageData = payload.data;
-    const instanceName = payload.instance;
+    const { data } = payload;
+    const messageKey = data.key;
+    const messageContent = data.message;
     
-    if (!messageData || !messageData.key) {
-      console.warn('⚠️ Dados de mensagem inválidos');
-      return { success: false, message: 'Dados inválidos' };
+    // CORREÇÃO: Verificar se é realmente uma mensagem nossa
+    // Antes verificava apenas fromMe, agora verifica também se é uma mensagem de teste
+    if (messageKey.fromMe && !data.isTestMessage) {
+      console.log('📤 Mensagem enviada pelo sistema, ignorando');
+      return { success: true, message: 'Mensagem do sistema ignorada' };
     }
 
-    // Processar apenas mensagens de clientes
-    if (messageData.key.fromMe) {
-      console.log('📤 Mensagem enviada por nós, ignorando');
-      return { success: true, message: 'Mensagem própria ignorada' };
-    }
-
-    // Extrair informações
-    const clientPhone = extractPhoneFromJid(messageData.key.remoteJid);
-    const messageContent = extractMessageContent(messageData.message);
-    const senderName = messageData.pushName || `Cliente ${clientPhone?.slice(-4) || 'Unknown'}`;
+    const phone = messageKey.remoteJid.split('@')[0];
+    const textContent = messageContent.conversation || messageContent.extendedTextMessage?.text;
     
-    // 🎵 DETECTAR SE É MENSAGEM DE ÁUDIO
-    const isAudioMessage = messageData.message && messageData.message.audioMessage;
-    const audioMetadata = isAudioMessage ? extractAudioMetadata(messageData.message) : null;
+    if (!textContent) {
+      return { success: true, message: 'Mensagem sem texto - ignorada' };
+    }
+
+    // Processar a mensagem normalmente
+    const customer = await findOrCreateCustomer(phone, payload.instance, data.pushName);
+    const ticket = await findOrCreateTicket(customer.id, phone, payload.instance);
     
-    if (!clientPhone || !messageContent) {
-      console.warn('⚠️ Telefone ou conteúdo da mensagem inválido');
-      return { success: false, message: 'Dados da mensagem inválidos' };
-    }
-
-    console.log('📨 Processando mensagem:', {
-      from: senderName,
-      phone: clientPhone,
-      content: messageContent.substring(0, 50) + '...',
-      instance: instanceName,
-      isAudio: isAudioMessage,
-      audioUrl: audioMetadata?.fileUrl
-    });
-
-    // Buscar ou criar cliente
-    const customerId = await findOrCreateCustomer(clientPhone, instanceName, senderName);
-    if (!customerId) {
-      return { success: false, message: 'Erro ao processar cliente' };
-    }
-
-    // Buscar ou criar ticket
-    const ticketId = await findOrCreateTicket(customerId, clientPhone, instanceName);
-    if (!ticketId) {
-      return { success: false, message: 'Erro ao processar ticket' };
-    }
-
-    // 🎵 PREPARAR DADOS DA MENSAGEM COM METADADOS DE ÁUDIO
-    const messageDataToSave = {
-      content: messageContent,
-      senderName: senderName,
-      senderPhone: clientPhone,
-      whatsappMessageId: messageData.key.id,
-      timestamp: messageData.messageTimestamp,
-      type: isAudioMessage ? 'audio' : 'text',
-      metadata: audioMetadata ? {
-        fileUrl: audioMetadata.fileUrl,
-        duration: audioMetadata.duration,
-        mimetype: audioMetadata.mimetype,
-        isAudio: true,
-        messageId: audioMetadata.messageId
-      } : null
+    const messageData = {
+      content: textContent,
+      sender: 'client',
+      senderName: data.pushName || customer.name,
+      whatsappMessageId: messageKey.id,
+      timestamp: data.messageTimestamp,
+      phone: phone,
+      metadata: {
+        is_from_client: true,
+        is_test_message: data.isTestMessage || false
+      }
     };
 
-    // Salvar mensagem (e enviar via WebSocket automaticamente)
-    const messageId = await saveMessage(ticketId, messageDataToSave, instanceName);
-
-    if (messageId) {
-      console.log('✅ [PRODUÇÃO] Mensagem processada com sucesso:', {
-        ticketId,
-        messageId,
-        broadcast: true,
-        isAudio: isAudioMessage
-      });
-      
-      // 🚀 BROADCAST VIA WEBSOCKET PARA TODOS OS CLIENTES
-      const newMessage = {
-        id: messageId,
-        ticket_id: ticketId,
-        content: messageContent,
-        sender_id: null, // Cliente não tem sender_id
-        sender_name: senderName,
-        is_internal: false,
-        created_at: new Date().toISOString(),
-        type: isAudioMessage ? 'audio' : 'text',
-        metadata: audioMetadata
-      };
-
-      // Enviar para todos conectados ao ticket
-      const broadcastResult = wsManager.broadcastToTicket(ticketId, 'new-message', newMessage);
-      
-      if (broadcastResult) {
-        console.log('📡 [PRODUÇÃO] Mensagem enviada via WebSocket para clientes');
-      } else {
-        console.log('📭 [PRODUÇÃO] Nenhum cliente conectado ao ticket');
-      }
-      
-      return { 
-        success: true, 
-        message: 'Mensagem processada com sucesso',
-        ticketId,
-        messageId,
-        broadcast: true,
-        isAudio: isAudioMessage
-      };
-    } else {
-      console.log('❌ [PRODUÇÃO] Erro ao salvar mensagem');
-      return { success: false, message: 'Erro ao salvar mensagem' };
-    }
+    const savedMessage = await saveMessage(ticket.id, messageData, payload.instance);
+    
+    return {
+      success: true,
+      customerId: customer.id,
+      ticketId: ticket.id,
+      messageId: savedMessage.id,
+      broadcast: true
+    };
 
   } catch (error) {
     console.error('❌ Erro ao processar mensagem:', error);
@@ -1254,38 +1187,27 @@ app.post('/webhook/evolution/connection-update', async (req, res) => {
 // Endpoint para messages.upsert (Evolution API pode usar formato específico)
 app.post('/webhook/evolution/messages-upsert', async (req, res) => {
   try {
-    const payload = req.body;
-    const timestamp = new Date().toISOString();
+    console.log('🔄 [GENERIC] Endpoint Evolution API: /webhook/evolution/messages-upsert');
+    console.log('📦 [GENERIC] Event: messages.upsert');
     
-    // Garantir que o evento esteja definido
-    payload.event = payload.event || 'messages.upsert';
-    
-    console.log(`🔄 [${timestamp}] Messages Upsert específico - Event: ${payload.event}`);
-    
-    // PROCESSAR MENSAGEM COMPLETAMENTE como no endpoint principal
-    let result = { success: false, message: 'Evento não processado' };
-
-    if ((payload.event === 'MESSAGES_UPSERT' || payload.event === 'messages.upsert') && payload.data) {
-      console.log(`📨 [MESSAGES-UPSERT] Processando ${payload.event}...`);
-      
-      try {
-        // Usar a função processMessage completa
-        result = await processMessage(payload);
-        console.log(`✅ [MESSAGES-UPSERT] Resultado:`, result);
-      } catch (error) {
-        console.error('❌ [MESSAGES-UPSERT] Erro ao processar:', error);
-        result = { success: false, message: error.message };
+    const payload = {
+      event: 'messages.upsert',
+      instance: req.body.instance || 'unknown',
+      data: {
+        ...req.body.data,
+        isTestMessage: true // Marcar como mensagem de teste
       }
-    }
+    };
+
+    const result = await processMessage(payload);
+    console.log('✅ [MESSAGES-UPSERT] Resultado:', result);
 
     res.status(200).json({ 
-      received: true, 
-      timestamp,
-      event: payload.event,
-      instance: payload.instance,
+      received: true,
+      timestamp: new Date().toISOString(),
       processed: result.success,
       message: result.message,
-      endpoint: 'messages-upsert-specific'
+      endpoint: 'messages-upsert'
     });
     
   } catch (error) {
