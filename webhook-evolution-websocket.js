@@ -713,24 +713,34 @@ async function processMessage(payload) {
     console.log('👤 [CUSTOMER] Processando cliente:', { phone, instance: payload.instance });
     const customer = await findOrCreateCustomer(phone, payload.instance, data.pushName);
     
-    if (!customer || !customer.id) {
-      throw new Error('Falha ao criar/encontrar cliente');
+    console.log('🔍 [CUSTOMER] Resultado da busca/criação:', customer);
+    
+    // Corrigir validação - o customer pode ser um ID string ou um objeto
+    const customerId = typeof customer === 'string' ? customer : customer?.id;
+    
+    if (!customerId) {
+      throw new Error('Falha ao criar/encontrar cliente - ID não disponível');
     }
 
     // Processar ticket
-    console.log('🎫 [TICKET] Processando ticket para cliente:', { customerId: customer.id });
-    const ticket = await findOrCreateTicket(customer.id, phone, payload.instance);
+    console.log('🎫 [TICKET] Processando ticket para cliente:', { customerId });
+    const ticket = await findOrCreateTicket(customerId, phone, payload.instance);
     
-    if (!ticket || !ticket.id) {
-      throw new Error('Falha ao criar/encontrar ticket');
+    console.log('🔍 [TICKET] Resultado da busca/criação:', ticket);
+    
+    // Corrigir validação - o ticket pode ser um ID string ou um objeto
+    const ticketId = typeof ticket === 'string' ? ticket : ticket?.id;
+    
+    if (!ticketId) {
+      throw new Error('Falha ao criar/encontrar ticket - ID não disponível');
     }
 
     // Preparar dados da mensagem
     const messageData = {
-      ticket_id: ticket.id,
+      ticket_id: ticketId,
       content: textContent,
       sender: 'client',
-      sender_name: data.pushName || customer.name,
+      sender_name: data.pushName || 'Cliente',
       whatsapp_message_id: messageKey.id,
       timestamp: data.messageTimestamp,
       phone: phone,
@@ -744,21 +754,21 @@ async function processMessage(payload) {
 
     // Salvar mensagem
     console.log('💾 [MESSAGE] Salvando mensagem:', {
-      ticketId: ticket.id,
+      ticketId,
       content: textContent.substring(0, 50) + '...'
     });
     
-    const savedMessage = await saveMessage(ticket.id, messageData, payload.instance);
+    const savedMessage = await saveMessage(ticketId, messageData, payload.instance);
     
     console.log('✅ [MESSAGE] Mensagem processada com sucesso:', {
       messageId: savedMessage.id,
-      ticketId: ticket.id
+      ticketId
     });
 
     return {
       success: true,
-      customerId: customer.id,
-      ticketId: ticket.id,
+      customerId,
+      ticketId,
       messageId: savedMessage.id,
       broadcast: true
     };
