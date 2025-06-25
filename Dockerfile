@@ -1,28 +1,42 @@
-FROM node:18-alpine
+﻿# Multi-stage build para EasyPanel via GitHub
+FROM node:18-alpine AS build
 
 WORKDIR /app
 
-# Instalar curl para health checks
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --silent --only=production
+
+# Copy source code
+COPY . .
+
+# Create missing directories if they don't exist
+RUN mkdir -p src/config src/services/database src/services/whatsapp || true
+RUN echo "export default {};" > src/config/index.ts || true
+RUN echo "export default {};" > src/services/database/index.ts || true
+RUN echo "export default {};" > src/services/whatsapp/index.ts || true
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM nginx:alpine
+
+# Install curl for healthchecks
 RUN apk add --no-cache curl
 
-# Copiar package.json
-COPY package.json ./
+# Copy built application
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Instalar dependências (usar npm install ao invés de npm ci)
-RUN npm install --only=production
-
-# Copiar código do WebSocket server
-COPY webhook-evolution-websocket.js ./
-
-# Criar usuário não-root para segurança
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
-RUN chown -R nodejs:nodejs /app
-USER nodejs
+# Copy nginx configuration
+COPY nginx.deploy.conf /etc/nginx/conf.d/default.conf
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:4000/webhook/health || exit 1
+  CMD curl -f http://localhost/health || exit 1
 
-EXPOSE 4000
-CMD ["node", "webhook-evolution-websocket.js"] 
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

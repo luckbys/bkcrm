@@ -1,27 +1,23 @@
-# Dependências
-node_modules/
+﻿# Dependencies
+node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Arquivos de desenvolvimento
+# Production build
+dist
+build
+
+# Environment files
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Logs
-logs/
-*.log
-
-# Git
-.git/
-.gitignore
-
 # IDE
-.vscode/
-.idea/
+.vscode
+.idea
 *.swp
 *.swo
 
@@ -29,46 +25,34 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Build outputs
-dist/
-build/
-.next/
+# Git
+.git
+.gitignore
 
-# Documentação
-docs/
-README*.md
+# Documentation
 *.md
+docs/
+README.md
 
-# Arquivos de teste
-__tests__/
-*.test.js
-*.spec.js
+# Development
+.eslintrc.js
+.prettierrc
 
-# Coverage
-coverage/
+# Deployment folders
+deploy-*
+deployment/
+backend/
+tests/
 
-# Outros arquivos não necessários para produção
-.eslintrc*
-.prettierrc*
-tsconfig*.json
-webpack.config.js
-babel.config.js
+# Logs
+logs
+*.log
 
-# Adicionais
-.env.development
-.env.test
-.env.production.local
-.vscode
-.idea
+# Cache
 .cache
-.parcel-cache
-.temp
-.tmp
-*.tgz
-*.tar.gz
-supabase
-evolution-api
-src
-public
-Dockerfile.webhook
-docker-compose*.yml 
+.npm
+.yarn
+
+# Temporary
+tmp/
+temp/

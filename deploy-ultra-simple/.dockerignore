@@ -1,0 +1,11 @@
+﻿node_modules
+.git
+dist
+*.md
+docs
+backend
+deployment
+tests
+.env*
+.vscode
+*.log
