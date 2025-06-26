@@ -21,8 +21,8 @@ ENV PORT=4000
 # Copy package files
 COPY package*.json ./
 
-# Instalar apenas dependências de produção
-RUN npm ci --only=production
+# Instalar dependências de produção
+RUN npm install --omit=dev
 
 # Copy source files
 COPY webhook-evolution-websocket.cjs ./
