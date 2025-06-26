@@ -79,7 +79,17 @@
 }
 ```
 
-### 4. **Arquivos Atualizados**
+### 4. **Sonner (Toast Notifications)**
+**Problema**: `App.tsx` e componente `sonner.tsx` estavam importando `sonner` sem declaração.
+
+**Solução**:
+```json
+"dependencies": {
+  "sonner": "^1.5.0"
+}
+```
+
+### 5. **Arquivos Atualizados**
 - ✅ `package.json`
 - ✅ `package-build.json`
 - ✅ Instalação local confirmada
@@ -122,10 +132,10 @@ dist/assets/index-DDfvgkGa.js     975.45 kB │ gzip: 262.73 kB
 ```
 
 ### Estatísticas
-- **Dependências Adicionadas**: 22 pacotes
-- **Tempo de Build**: 32.16s
-- **Bundle Size**: 975.45 kB (minificado)
-- **Gzip Size**: 262.73 kB
+- **Dependências Adicionadas**: 23 pacotes (22 Radix UI + 1 Sonner)
+- **Tempo de Build**: 33.92s
+- **Bundle Size**: 974.57 kB (minificado)
+- **Gzip Size**: 262.67 kB
 
 ---
 
@@ -188,6 +198,7 @@ git push origin main
 - [x] **tailwindcss-animate** instalado
 - [x] **Todos os pacotes Radix UI** adicionados
 - [x] **react-day-picker** incluído
+- [x] **sonner** (toast notifications) adicionado
 - [x] **Build local** funcionando
 - [x] **package.json** atualizado
 - [x] **package-build.json** sincronizado
