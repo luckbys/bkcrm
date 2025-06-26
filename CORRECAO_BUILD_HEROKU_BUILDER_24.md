@@ -85,13 +85,25 @@
 **Solução**:
 ```json
 "dependencies": {
-  "sonner": "^1.5.0"
+  "sonner": "^1.7.4"
 }
 ```
 
-### 5. **Arquivos Atualizados**
-- ✅ `package.json`
-- ✅ `package-build.json`
+### 5. **Configuração ES Modules**
+**Problema**: `postcss.config.js` usava sintaxe ES modules mas Node.js estava carregando como CommonJS.
+
+**Solução**:
+```json
+// package.json & package-build.json
+{
+  "type": "module"
+}
+```
+
+### 6. **Arquivos Atualizados**
+- ✅ `package.json` (adicionado "type": "module")
+- ✅ `package-build.json` (adicionado "type": "module")  
+- ✅ `postcss.config.js` (mantido ES modules syntax)
 - ✅ Instalação local confirmada
 
 ---
@@ -124,18 +136,19 @@ npm list [package-name]
 ### Build Bem-Sucedido
 ```bash
 ✓ 2959 modules transformed.
-✓ built in 32.16s
+✓ built in 32.81s
 
 dist/index.html                    1.27 kB │ gzip:   0.50 kB
 dist/assets/index-B1sZxOsw.css    127.94 kB │ gzip:  21.23 kB
-dist/assets/index-DDfvgkGa.js     975.45 kB │ gzip: 262.73 kB
+dist/assets/index-C2eAJpS3.js     974.57 kB │ gzip: 262.67 kB
 ```
 
 ### Estatísticas
 - **Dependências Adicionadas**: 23 pacotes (22 Radix UI + 1 Sonner)
-- **Tempo de Build**: 33.92s
+- **Tempo de Build**: 32.81s
 - **Bundle Size**: 974.57 kB (minificado)
 - **Gzip Size**: 262.67 kB
+- **ES Modules**: Configurado corretamente
 
 ---
 
