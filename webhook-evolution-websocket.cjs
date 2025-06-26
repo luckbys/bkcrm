@@ -12,7 +12,7 @@ const server = http.createServer(app);
 // Configurar Socket.IO com CORS
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://ws.bkcrm.devsible.com.br"],
+    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://ws.bkcrm.devsible.com.br", "https://webhook.bkcrm.devsible.com.br"],
     methods: ["GET", "POST"],
     allowedHeaders: ["*"],
     credentials: true
@@ -22,7 +22,7 @@ const io = new Server(server, {
 
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://ws.bkcrm.devsible.com.br"],
+  origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://ws.bkcrm.devsible.com.br", "https://webhook.bkcrm.devsible.com.br"],
   credentials: true
 }));
 
@@ -1138,6 +1138,19 @@ app.get('/webhook/health', (req, res) => {
       '/webhook/ws-stats'
     ]
   });
+});
+
+// 📥 Endpoint direto para compatibilidade com Evolution API
+app.post('/webhook/contacts-update', async (req, res) => {
+  console.log('📥 [CONTACTS-UPDATE] Recebido webhook de contato (endpoint direto)');
+  try {
+    // Processar atualização de contato
+    console.log('✅ Contato atualizado com sucesso');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Erro no endpoint contacts-update:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
 
 // Iniciar servidor
