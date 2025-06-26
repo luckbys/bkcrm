@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  bkcrm-webhook:
+    build:
+      context: .
+      dockerfile: webhook.dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+    restart: unless-stopped
+    container_name: bkcrm-webhook
+    networks:
+      - bkcrm-network
+
+networks:
+  bkcrm-network:
+    driver: bridge 

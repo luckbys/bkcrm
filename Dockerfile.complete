@@ -1,0 +1,47 @@
+# Dockerfile Completo: Frontend + Webhook
+FROM node:18-alpine as builder
+
+WORKDIR /app
+
+# Copiar package.json e instalar dependências
+COPY package.json package-lock.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Copiar código fonte
+COPY . .
+
+# Build do frontend
+RUN npm run build
+
+# Estágio de produção
+FROM node:18-alpine as production
+
+WORKDIR /app
+
+# Instalar serve para frontend e curl para health checks
+RUN npm install -g serve && \
+    apk add --no-cache curl
+
+# Copiar build do frontend
+COPY --from=builder /app/dist ./dist
+
+# Copiar webhook e dependências
+COPY webhook-evolution-websocket.cjs ./
+COPY package.json ./
+
+# Instalar dependências do webhook
+RUN npm install express cors socket.io @supabase/supabase-js --production
+
+# Copiar script de inicialização
+COPY start-both.sh ./
+RUN chmod +x start-both.sh
+
+# Expor portas
+EXPOSE 3000 4000
+
+# Health check combinado
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000 && curl -f http://localhost:4000/webhook/health
+
+# Iniciar ambos serviços
+CMD ["./start-both.sh"] 

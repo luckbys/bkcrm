@@ -1,0 +1,43 @@
+{
+  "name": "bkcrm-webhook",
+  "description": "Servidor Webhook Evolution API + WebSocket para BKCRM",
+  "type": "app",
+  "source": {
+    "type": "github",
+    "owner": "luckbys",
+    "repo": "bkcrm",
+    "branch": "main",
+    "autoDeploy": true
+  },
+  "build": {
+    "type": "dockerfile",
+    "dockerfile": "webhook-deploy/Dockerfile"
+  },
+  "deploy": {
+    "type": "service",
+    "replicas": 1,
+    "ports": [
+      {
+        "published": 4000,
+        "target": 4000,
+        "protocol": "tcp"
+      }
+    ],
+    "env": [
+      {
+        "key": "PORT",
+        "value": "4000"
+      },
+      {
+        "key": "NODE_ENV",
+        "value": "production"
+      }
+    ]
+  },
+  "domains": [
+    {
+      "name": "webhook.bkcrm.devsible.com.br",
+      "port": 4000
+    }
+  ]
+} 

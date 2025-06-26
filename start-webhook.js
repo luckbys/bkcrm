@@ -7,14 +7,18 @@
  * executando o webhook com a extensão .cjs
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 console.log('🚀 Iniciando Webhook Evolution API + WebSocket...');
 console.log('📂 Diretório:', __dirname);
 
 // Verificar se o arquivo webhook existe
-const webhookFile = path.join(__dirname, 'webhook-evolution-websocket.cjs');
+const webhookFile = join(__dirname, 'webhook-evolution-websocket.cjs');
 
 console.log('📄 Arquivo webhook:', webhookFile);
 
