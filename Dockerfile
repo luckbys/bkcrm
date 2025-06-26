@@ -11,14 +11,17 @@ ENV NPM_CONFIG_FUND=false
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Instalar dependências necessárias
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ git
 
 # Copiar arquivos de dependências
 COPY package*.json ./
-COPY . .
 
 # Instalar todas as dependências (incluindo devDependencies)
-RUN npm install
+RUN npm install --no-optional && \
+    npm install @rollup/rollup-linux-x64-gnu@4.9.0 @rollup/rollup-linux-x64-musl@4.9.0
+
+# Copiar o resto dos arquivos
+COPY . .
 
 # Build da aplicação
 RUN npm run build

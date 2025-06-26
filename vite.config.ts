@@ -5,15 +5,18 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
+    target: 'es2015',
+    outDir: 'dist',
+    assetsDir: 'assets',
     minify: 'esbuild',
     rollupOptions: {
-      external: [],
       output: {
-        manualChunks: undefined
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'supabase-vendor': ['@supabase/supabase-js', '@supabase/gotrue-js'],
+        }
       }
     },
-    target: 'es2018',
-    outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
     chunkSizeWarningLimit: 1000,
@@ -23,12 +26,10 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    esbuildOptions: {
-      target: 'es2018'
-    }
+    include: ['react', 'react-dom', 'react-router-dom']
   },
   server: {
-    port: Number(process.env.PORT) || 3000,
+    port: 3000,
     host: true
   }
 })
