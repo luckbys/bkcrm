@@ -29,12 +29,17 @@ RUN npm ci --only=production --silent --no-audit --no-fund && \
 # Stage 2: Build da aplicação
 FROM base AS builder
 
-# Copiar dependências do stage anterior
-COPY --from=dependencies --chown=bkcrm:nodejs /app/node_modules ./node_modules
-COPY --chown=bkcrm:nodejs package*.json ./
+# Instalar dependências básicas
+RUN apk add --no-cache python3 make g++
 
-# Copiar código fonte
-COPY --chown=bkcrm:nodejs . .
+# Copiar apenas arquivos necessários para instalar dependências
+COPY package*.json ./
+
+# Instalar dependências com fallback para npm
+RUN npm install || (rm -rf node_modules && npm install)
+
+# Copiar o resto dos arquivos
+COPY . .
 
 # Build da aplicação
 RUN npm run build
