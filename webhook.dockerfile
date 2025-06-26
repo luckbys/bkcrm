@@ -2,6 +2,9 @@
 # Para uso no EasyPanel como serviço separado
 FROM node:18-alpine
 
+# Instalar curl para health check
+RUN apk add --no-cache curl
+
 # Definir diretório de trabalho
 WORKDIR /app
 
@@ -17,10 +20,13 @@ ENV PORT=4000
 
 # Copy package files
 COPY package*.json ./
-RUN npm ci
+
+# Instalar apenas dependências de produção
+RUN npm ci --only=production
 
 # Copy source files
-COPY . .
+COPY webhook-evolution-websocket.cjs ./
+COPY .env* ./
 
 # Criar usuário não-root para segurança
 RUN addgroup -g 1001 -S nodejs

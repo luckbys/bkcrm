@@ -7,6 +7,13 @@
       "port": 4000
     }
   ],
+  "ports": [
+    {
+      "published": 4000,
+      "target": 4000,
+      "protocol": "tcp"
+    }
+  ],
   "build": {
     "dockerfile": "webhook.dockerfile",
     "context": ".",
@@ -24,5 +31,12 @@
   "resources": {
     "cpu": 1,
     "memory": 1024
+  },
+  "healthCheck": {
+    "path": "/webhook/health",
+    "port": 4000,
+    "interval": "30s",
+    "timeout": "10s",
+    "retries": 3
   }
 } 
