@@ -37,9 +37,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copiar configuração customizada do Nginx
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Criar usuário não-root para segurança
-RUN addgroup -g 1001 -S nginx
-RUN adduser -S frontend -u 1001
+# O nginx:alpine já vem com usuário nginx configurado adequadamente
 
 # Expor porta 80
 EXPOSE 80
