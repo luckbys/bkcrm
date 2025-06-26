@@ -5,14 +5,26 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: 'dist',
-    sourcemap: false,
-    minify: 'terser',
-    target: 'es2018',
+    minify: 'esbuild',
     rollupOptions: {
+      external: [],
       output: {
         manualChunks: undefined
       }
+    },
+    target: 'es2018',
+    outDir: 'dist',
+    emptyOutDir: true,
+    sourcemap: false,
+    chunkSizeWarningLimit: 1000,
+    commonjsOptions: {
+      include: [/node_modules/],
+      extensions: ['.js', '.cjs']
+    }
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'es2018'
     }
   },
   server: {
