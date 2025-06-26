@@ -1,5 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Declarações de tipos
+declare global {
+  interface Window {
+    env?: Record<string, string>;
+  }
+}
+
 // Tenta obter as variáveis de ambiente de diferentes fontes
 const getEnvVar = (key: string) => {
   // Tenta obter do import.meta.env primeiro
@@ -18,9 +25,9 @@ const getEnvVar = (key: string) => {
   }
   
   // Valores padrão para desenvolvimento local
-  const defaults = {
+  const defaults: Record<string, string> = {
     VITE_SUPABASE_URL: 'https://ajlgjjjvuglwgfnyqqvb.supabase.co',
-    VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU'
+    VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.KKnJRh4rqWKV3WlHWNLcfccULlK2GGGQFtGHqOC_4zI'
   };
   
   return defaults[key];
