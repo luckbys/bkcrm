@@ -1,0 +1,41 @@
+{
+  "name": "bkcrm-frontend",
+  "description": "BKCRM Frontend React/Vite Application",
+  "repository": "https://github.com/luckbys/bkcrm.git",
+  "branch": "main",
+  "dockerfile": "frontend.dockerfile",
+  "buildContext": ".",
+  "port": 80,
+  "healthCheck": {
+    "path": "/health",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3,
+    "startPeriod": 10
+  },
+  "environment": {
+    "NODE_ENV": "production"
+  },
+  "domains": [
+    {
+      "domain": "bkcrm.devsible.com.br",
+      "enableSSL": true,
+      "forceSSL": true
+    }
+  ],
+  "resources": {
+    "memory": "256Mi",
+    "cpu": "0.25"
+  },
+  "replicas": 1,
+  "autoScale": {
+    "enabled": true,
+    "minReplicas": 1,
+    "maxReplicas": 3,
+    "targetCPU": 70,
+    "targetMemory": 80
+  },
+  "volumes": [],
+  "buildArgs": {},
+  "secrets": []
+} 
