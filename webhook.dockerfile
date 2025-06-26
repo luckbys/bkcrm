@@ -5,6 +5,16 @@ FROM node:18-alpine
 # Definir diretório de trabalho
 WORKDIR /app
 
+# Define build arguments
+ARG SUPABASE_URL
+ARG SUPABASE_ANON_KEY
+
+# Set environment variables
+ENV SUPABASE_URL=$SUPABASE_URL
+ENV SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+ENV NODE_ENV=production
+ENV PORT=4000
+
 # Copy package files
 COPY package*.json ./
 RUN npm ci
@@ -28,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/webhook/health || exit 1
 
 # Start the webhook server
-CMD ["npm", "run", "webhook"] 
+CMD ["node", "webhook-evolution-websocket.cjs"] 

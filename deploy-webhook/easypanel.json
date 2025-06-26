@@ -1,22 +1,26 @@
 {
-  "name": "bkcrm",
-  "image": "easypanel/press/bkcrm",
+  "name": "bkcrm-webhook",
+  "image": "easypanel/press/bkcrm-webhook",
   "domains": [
     {
-      "domain": "bkcrm.devsible.com.br",
-      "port": 80
+      "domain": "webhook.bkcrm.devsible.com.br",
+      "port": 4000
     }
   ],
-  "variables": {
-    "VITE_SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
-    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU"
+  "build": {
+    "dockerfile": "webhook.dockerfile",
+    "context": ".",
+    "args": {
+      "SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
+      "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU"
+    }
   },
-  "ports": [
-    {
-      "published": 80,
-      "target": 80
-    }
-  ],
+  "environment": {
+    "NODE_ENV": "production",
+    "PORT": "4000",
+    "SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU"
+  },
   "resources": {
     "cpu": 1,
     "memory": 1024
