@@ -1,0 +1,47 @@
+{
+  "name": "bkcrm-webhook",
+  "description": "BKCRM Webhook Server - Evolution API Integration",
+  "repository": "https://github.com/luckbys/bkcrm.git",
+  "branch": "main",
+  "dockerfile": "webhook.dockerfile",
+  "buildContext": ".",
+  "port": 4000,
+  "healthCheck": {
+    "path": "/webhook/health",
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3,
+    "startPeriod": 5
+  },
+  "environment": {
+    "NODE_ENV": "production",
+    "PORT": "4000",
+    "SUPABASE_URL": "${SUPABASE_URL}",
+    "SUPABASE_SERVICE_KEY": "${SUPABASE_SERVICE_KEY}",
+    "EVOLUTION_API_URL": "${EVOLUTION_API_URL}",
+    "EVOLUTION_API_KEY": "${EVOLUTION_API_KEY}",
+    "CORS_ORIGINS": "https://bkcrm.devsible.com.br,https://webhook.bkcrm.devsible.com.br"
+  },
+  "domains": [
+    {
+      "domain": "webhook.bkcrm.devsible.com.br",
+      "enableSSL": true,
+      "forceSSL": true
+    }
+  ],
+  "resources": {
+    "memory": "512Mi",
+    "cpu": "0.5"
+  },
+  "replicas": 1,
+  "autoScale": {
+    "enabled": false
+  },
+  "volumes": [],
+  "secrets": [
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY", 
+    "EVOLUTION_API_URL",
+    "EVOLUTION_API_KEY"
+  ]
+} 

@@ -1,0 +1,37 @@
+# =========================================
+# WEBHOOK BKCRM - Variáveis de Ambiente
+# =========================================
+# Copie este arquivo e ajuste os valores
+
+# Configuração Básica
+NODE_ENV=production
+PORT=4000
+
+# Supabase Database
+SUPABASE_URL=https://sua-instancia.supabase.co
+SUPABASE_SERVICE_KEY=sua_service_key_aqui
+
+# Evolution API
+EVOLUTION_API_URL=https://sua-evolution-api.com
+EVOLUTION_API_KEY=sua_evolution_key_aqui
+
+# CORS Origins (separados por vírgula)
+CORS_ORIGINS=https://bkcrm.devsible.com.br,https://webhook.bkcrm.devsible.com.br
+
+# =========================================
+# INSTRUÇÕES:
+# =========================================
+# 1. SUPABASE_URL: Encontre em Settings > API > Project URL
+# 2. SUPABASE_SERVICE_KEY: Encontre em Settings > API > service_role (secret)
+# 3. EVOLUTION_API_URL: URL da sua instância Evolution API
+# 4. EVOLUTION_API_KEY: API Key da Evolution API
+# 5. CORS_ORIGINS: Adicione todos os domínios que vão acessar o webhook
+
+# =========================================
+# VALORES DE EXEMPLO:
+# =========================================
+# SUPABASE_URL=https://abcdefghijklmnop.supabase.co
+# SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# EVOLUTION_API_URL=https://evolution-api.exemplo.com
+# EVOLUTION_API_KEY=ApiKey_123456789
+# CORS_ORIGINS=https://bkcrm.devsible.com.br,https://localhost:3000 
