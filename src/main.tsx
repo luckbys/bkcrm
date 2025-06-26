@@ -168,7 +168,7 @@ import { useChatStore } from './stores/chatStore'
 (globalThis as any).forceTicketReload = forceTicketReload;
 
 // Importar e registrar funções de teste de vinculação automática
-import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js';
+// import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js'; // Removido para produção
 
 // Helper para debug de vinculação
 (globalThis as any).debugCustomerAssignment = () => {
