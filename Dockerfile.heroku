@@ -1,0 +1,45 @@
+# Dockerfile otimizado para Heroku
+FROM node:18-alpine
+
+# Instalar utilitários básicos
+RUN apk add --no-cache curl bash
+
+# Configurar diretório de trabalho
+WORKDIR /app
+
+# Copiar apenas package.json simplificado
+COPY package.heroku.json package.json
+
+# Instalar dependências
+RUN npm install --silent
+
+# Copiar arquivos essenciais
+COPY index.heroku.html index.html
+COPY vite.heroku.config.js vite.config.js
+COPY postcss.config.js ./
+COPY tailwind.heroku.config.js tailwind.config.js
+
+# Copiar código fonte
+COPY public/ ./public/
+COPY src/ ./src/
+
+# Criar arquivos faltantes
+RUN mkdir -p src/config src/services/database src/services/whatsapp && \
+    echo "export default {};" > src/config/index.ts && \
+    echo "export default {};" > src/services/database/index.ts && \
+    echo "export default {};" > src/services/whatsapp/index.ts
+
+# Build simplificado
+RUN npm run build
+
+# Instalar nginx para servir
+RUN apk add --no-cache nginx
+
+# Configurar nginx simples
+RUN echo 'server { listen $PORT; root /app/dist; index index.html; location / { try_files $uri $uri/ /index.html; } }' > /etc/nginx/conf.d/default.conf
+
+# Script de start para Heroku
+RUN echo '#!/bin/sh\nnginx -g "daemon off;"' > start.sh && chmod +x start.sh
+
+# Heroku usa PORT dinâmico
+CMD ["./start.sh"] 
