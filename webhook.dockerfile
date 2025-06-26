@@ -5,14 +5,12 @@ FROM node:18-alpine
 # Definir diretório de trabalho
 WORKDIR /app
 
-# Copiar apenas arquivos necessários para o webhook
-COPY package.json package-lock.json ./
+# Copy package files
+COPY package*.json ./
+RUN npm ci
 
-# Instalar dependências (incluindo as do webhook)
-RUN npm ci --only=production
-
-# Copiar arquivo principal do webhook
-COPY webhook-evolution-websocket.cjs ./
+# Copy source files
+COPY . .
 
 # Criar usuário não-root para segurança
 RUN addgroup -g 1001 -S nodejs
@@ -29,5 +27,5 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/webhook/health || exit 1
 
-# Comando para iniciar o webhook
-CMD ["node", "webhook-evolution-websocket.cjs"] 
+# Start the webhook server
+CMD ["npm", "run", "webhook"] 

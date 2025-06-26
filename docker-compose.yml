@@ -4,41 +4,30 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: frontend.dockerfile
     ports:
-      - "3000:80"
-    environment:
-      - NODE_ENV=production
-      - VITE_WEBSOCKET_URL=https://ws.bkcrm.devsible.com.br
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    
-  websocket:
+      - "80:80"
+    volumes:
+      - ./deploy-webhook/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - webhook
+    networks:
+      - bkcrm-network
+
+  webhook:
     build:
       context: .
-      dockerfile: Dockerfile.websocket
-    ports:
-      - "4000:4000"
+      dockerfile: webhook.dockerfile
     environment:
       - NODE_ENV=production
+      - PORT=4000
       - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-    restart: unless-stopped
-    depends_on:
-      - frontend
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/webhook/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    ports:
+      - "4000:4000"
+    networks:
+      - bkcrm-network
 
 networks:
-  default:
-    name: bkcrm-network 
+  bkcrm-network:
+    driver: bridge 

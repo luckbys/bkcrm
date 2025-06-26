@@ -1,25 +1,20 @@
 # Dockerfile para Frontend BKCRM React/Vite
 # Para uso no EasyPanel como serviço separado do webhook
-FROM node:18-alpine AS builder
+
+# Build stage
+FROM node:18-alpine as build
 
 # Definir diretório de trabalho
 WORKDIR /app
 
 # Copiar arquivos de dependências
-COPY package.json package-lock.json ./
+COPY package*.json ./
 
 # Instalar TODAS as dependências (incluindo devDependencies para build)
 RUN npm ci
 
 # Copiar código fonte (excluindo node_modules e outros desnecessários)
-COPY src ./src
-COPY public ./public
-COPY index.html ./
-COPY vite.config.ts ./
-COPY tsconfig.json ./
-COPY tailwind.config.ts ./
-COPY postcss.config.js ./
-COPY components.json ./
+COPY . .
 
 # Definir variáveis de ambiente para build
 ENV NODE_ENV=production
@@ -28,14 +23,14 @@ ENV VITE_API_URL=https://webhook.bkcrm.devsible.com.br
 # Build da aplicação React/Vite
 RUN npm run build
 
-# Estágio final - Nginx para servir arquivos estáticos
+# Production stage
 FROM nginx:alpine
 
 # Copiar arquivos buildados
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html
 
 # Copiar configuração customizada do Nginx
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY deploy-webhook/nginx.conf /etc/nginx/nginx.conf
 
 # O nginx:alpine já vem com usuário nginx configurado adequadamente
 
