@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build --mode production",
     "preview": "vite preview --port 3000 --host 0.0.0.0",
-    "start": "vite preview --port 3000 --host 0.0.0.0",
+    "start": "vite preview --port $PORT --host 0.0.0.0",
     "heroku-postbuild": "npm run build",
     "webhook": "node webhook-evolution-websocket.cjs",
     "webhook:dev": "node webhook-evolution-websocket.cjs",
@@ -81,9 +84,6 @@
     "tailwindcss-animate": "1.0.7",
     "typescript": "5.6.3",
     "vite": "5.4.10"
-  },
-  "engines": {
-    "node": "18.x"
   },
   "optionalDependencies": {
     "@rollup/rollup-darwin-x64": "4.9.0",

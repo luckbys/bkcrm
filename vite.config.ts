@@ -77,7 +77,14 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3000,
-      host: true
+      host: '0.0.0.0',
+      strictPort: false
+    },
+    preview: {
+      port: parseInt(process.env.PORT || '3000'),
+      host: '0.0.0.0',
+      strictPort: false,
+      cors: true
     }
   }
 })
