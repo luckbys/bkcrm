@@ -11,7 +11,7 @@ WORKDIR /app
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 
-# Set environment variables
+# Set environment variables for build time
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 
@@ -23,6 +23,10 @@ RUN npm ci
 
 # Copiar código fonte (excluindo node_modules e outros desnecessários)
 COPY . .
+
+# Create .env file with build arguments
+RUN echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" > .env && \
+    echo "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
 
 # Definir variáveis de ambiente para build
 ENV NODE_ENV=production

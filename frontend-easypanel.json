@@ -1,5 +1,6 @@
 {
   "name": "bkcrm-frontend",
+  "image": "easypanel/press/bkcrm",
   "description": "BKCRM Frontend React/Vite Application",
   "repository": "https://github.com/luckbys/bkcrm.git",
   "branch": "main",
@@ -15,19 +16,18 @@
   },
   "environment": {
     "NODE_ENV": "production",
-    "VITE_SUPABASE_URL": "${VITE_SUPABASE_URL}",
-    "VITE_SUPABASE_ANON_KEY": "${VITE_SUPABASE_ANON_KEY}"
+    "VITE_SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU"
   },
   "domains": [
     {
       "domain": "bkcrm.devsible.com.br",
-      "enableSSL": true,
-      "forceSSL": true
+      "port": 80
     }
   ],
   "resources": {
-    "memory": "256Mi",
-    "cpu": "0.25"
+    "cpu": 1,
+    "memory": 1024
   },
   "replicas": 1,
   "autoScale": {
@@ -38,7 +38,10 @@
     "targetMemory": 80
   },
   "volumes": [],
-  "buildArgs": {},
+  "buildArgs": {
+    "VITE_SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU"
+  },
   "secrets": [
     "VITE_SUPABASE_URL",
     "VITE_SUPABASE_ANON_KEY"
