@@ -1,8 +1,8 @@
 import axios, { AxiosError } from 'axios';
 
 // Configurações da Evolution API
-const EVOLUTION_API_URL = process.env.VITE_EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
-const API_KEY = process.env.VITE_EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
+const API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
 // Rate limiting e retry configuration
 const MAX_RETRIES = 3;
