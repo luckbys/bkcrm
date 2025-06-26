@@ -7,6 +7,14 @@ FROM node:18-alpine AS build
 # Definir diretório de trabalho
 WORKDIR /app
 
+# Define build arguments
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
+# Set environment variables
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
 # Copiar arquivos de dependências
 COPY package*.json ./
 

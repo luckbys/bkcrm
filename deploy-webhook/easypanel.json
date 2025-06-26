@@ -1,23 +1,24 @@
 {
-  "name": "evolution-webhook",
-  "type": "app",
-  "source": {
-    "type": "dockerfile",
-    "dockerfile": "Dockerfile"
-  },
+  "name": "bkcrm",
+  "image": "easypanel/press/bkcrm",
   "domains": [
     {
-      "host": "bkcrm.devsible.com.br",
-      "path": "/webhook",
-      "port": 4000,
-      "https": true
+      "domain": "bkcrm.devsible.com.br",
+      "port": 80
     }
   ],
-  "healthcheck": {
-    "path": "/health",
-    "port": 4000,
-    "interval": 30,
-    "timeout": 10,
-    "retries": 3
+  "variables": {
+    "VITE_SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU"
+  },
+  "ports": [
+    {
+      "published": 80,
+      "target": 80
+    }
+  ],
+  "resources": {
+    "cpu": 1,
+    "memory": 1024
   }
 } 
