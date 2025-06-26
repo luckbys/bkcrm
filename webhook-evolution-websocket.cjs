@@ -1153,6 +1153,84 @@ app.post('/webhook/contacts-update', async (req, res) => {
   }
 });
 
+// 📥 Endpoint direto para connection-update (compatibilidade Evolution API)
+app.post('/webhook/connection-update', async (req, res) => {
+  console.log('📥 [CONNECTION-UPDATE] Recebido webhook de conexão (endpoint direto)');
+  try {
+    console.log('📋 [CONNECTION-UPDATE] Dados recebidos:', JSON.stringify(req.body, null, 2));
+    
+    const { data, instance } = req.body;
+    
+    if (data && data.state === 'open') {
+      console.log(`✅ [CONNECTION-UPDATE] Instância ${instance} conectada com sucesso`);
+      
+      // Emitir via WebSocket para clientes conectados
+      io.emit('connection-update', {
+        instance,
+        state: data.state,
+        profileName: data.profileName,
+        wuid: data.wuid,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    res.json({ success: true, message: 'Connection update processado' });
+  } catch (error) {
+    console.error('❌ Erro no endpoint connection-update:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// 📥 Endpoint direto para messages-upsert (compatibilidade Evolution API)
+app.post('/webhook/messages-upsert', async (req, res) => {
+  console.log('📥 [MESSAGES-UPSERT] Recebido webhook de mensagem (endpoint direto)');
+  try {
+    console.log('📋 [MESSAGES-UPSERT] Dados recebidos:', JSON.stringify(req.body, null, 2));
+    
+    const { data, instance } = req.body;
+    
+    if (data && data.length > 0) {
+      for (const message of data) {
+        console.log(`📨 [MESSAGES-UPSERT] Processando mensagem da instância ${instance}`);
+        
+        // Emitir via WebSocket para clientes conectados
+        io.emit('message-received', {
+          instance,
+          message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+    
+    res.json({ success: true, message: 'Messages upsert processado' });
+  } catch (error) {
+    console.error('❌ Erro no endpoint messages-upsert:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// 📥 Endpoint direto para qr-code (compatibilidade Evolution API)
+app.post('/webhook/qr-code', async (req, res) => {
+  console.log('📥 [QR-CODE] Recebido webhook de QR Code (endpoint direto)');
+  try {
+    console.log('📋 [QR-CODE] Dados recebidos:', JSON.stringify(req.body, null, 2));
+    
+    const { data, instance } = req.body;
+    
+    // Emitir via WebSocket para clientes conectados
+    io.emit('qr-code-update', {
+      instance,
+      qrCode: data,
+      timestamp: new Date().toISOString()
+    });
+    
+    res.json({ success: true, message: 'QR Code processado' });
+  } catch (error) {
+    console.error('❌ Erro no endpoint qr-code:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Iniciar servidor
 server.listen(PORT, () => {
   console.log(`🚀 Servidor Webhook Evolution + WebSocket rodando na porta ${PORT}`);
