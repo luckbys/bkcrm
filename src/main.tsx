@@ -215,6 +215,9 @@ import './utils/test-websocket-production'
 // 🔗 Importar testes do sistema WebSocket
 import './utils/test-websocket-system'
 
+// 🔧 Importar debug para mensagens vazias
+import './utils/debug-mensagens-vazias'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>

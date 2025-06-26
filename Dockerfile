@@ -1,45 +1,55 @@
-﻿# Multi-stage build para EasyPanel via GitHub
-FROM node:18 AS build
+﻿# Ultra-optimized Dockerfile para resolver problema de espaço em disco
+FROM node:18-alpine AS build
 
 WORKDIR /app
 
-# Copy package files
+# Otimizações de npm
+ENV NPM_CONFIG_LOGLEVEL=error
+ENV NPM_CONFIG_CACHE=/tmp/.npm
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
+# Copy apenas package files primeiro
 COPY package*.json ./
 
-# Verify Node.js and npm are available
-RUN node --version && npm --version
+# Install apenas production dependencies
+RUN npm ci --only=production --silent --no-audit --no-fund
 
-# Install dependencies with verbose logging
-RUN npm ci --verbose
+# Install dev dependencies apenas para build
+RUN npm ci --silent --no-audit --no-fund
 
 # Copy source code
 COPY . .
 
-# Create missing directories if they don't exist
-RUN mkdir -p src/config src/services/database src/services/whatsapp || true
-RUN echo "export default {};" > src/config/index.ts || true
-RUN echo "export default {};" > src/services/database/index.ts || true
-RUN echo "export default {};" > src/services/whatsapp/index.ts || true
+# Criar diretórios faltantes de forma mínima
+RUN mkdir -p src/config src/services/database src/services/whatsapp && \
+    echo "export default {};" > src/config/index.ts && \
+    echo "export default {};" > src/services/database/index.ts && \
+    echo "export default {};" > src/services/whatsapp/index.ts
 
-# List files for debugging
-RUN ls -la && ls -la src/
+# Build com otimizações
+ENV NODE_ENV=production
+RUN npm run build
 
-# Build the application with verbose output
-RUN npm run build --verbose
+# Limpar cache e node_modules para reduzir tamanho
+RUN rm -rf node_modules .npm /tmp/.npm
 
-# Production stage
-FROM nginx:alpine
+# Install apenas runtime dependencies
+RUN npm ci --only=production --silent --no-audit --no-fund
 
-# Install curl for healthchecks
-RUN apk add --no-cache curl
+# Production stage ultra-lightweight
+FROM nginx:alpine AS production
 
-# Copy built application
+# Install apenas curl
+RUN apk add --no-cache curl && \
+    rm -rf /var/cache/apk/*
+
+# Copy built app
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration
+# Copy nginx config
 COPY nginx.deploy.conf /etc/nginx/conf.d/default.conf
 
-# Health check
+# Lightweight health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost/health || exit 1
 

@@ -844,79 +844,51 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
     };
   }, [ticketId, soundEnabled, showInfo, showSuccess, isNearBottom]);
 
-  // WebSocket setup
+  // 🔌 WebSocket setup integrado com chatStore
   useEffect(() => {
-    if (!ticketId) return;
+    if (!ticketId || !isConnected) return;
 
-    console.log('🔌 [CHAT] Iniciando conexão WebSocket para ticket:', ticketId);
+    console.log('🔌 [CHAT] Iniciando integração WebSocket para ticket:', ticketId);
     
-    // Conectar ao WebSocket
-    const socket = wsService.connect(ticketId);
-    
-    // Entrar na sala do ticket
-    wsService.joinTicket(ticketId);
-
     // Configurar listener de novas mensagens
-    wsService.onNewMessage((message: Message) => {
-      console.log('📨 [CHAT] Nova mensagem recebida:', message);
-      setMessages(prev => [...prev, message]);
+    const handleNewMessage = (event: CustomEvent) => {
+      const { ticketId: messageTicketId, message } = event.detail;
       
-      // Auto-scroll se estiver próximo ao fim
-      if (isNearBottom) {
-        scrollToBottom();
+      if (messageTicketId === ticketId) {
+        console.log('📨 [CHAT] Nova mensagem recebida via WebSocket:', message);
+        
+        // Auto-scroll se estiver próximo ao fim
+        if (isNearBottom && messagesEndRef.current) {
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 150);
+        }
       }
-    });
+    };
 
+    // Registrar listener
+    window.addEventListener('chat-message-received', handleNewMessage as EventListener);
+    
     // Cleanup
     return () => {
-      console.log('👋 [CHAT] Limpando conexão WebSocket');
-      wsService.leaveTicket(ticketId);
-      wsService.disconnect();
+      console.log('👋 [CHAT] Limpando listeners WebSocket');
+      window.removeEventListener('chat-message-received', handleNewMessage as EventListener);
     };
-  }, [ticketId, isNearBottom]);
-
-  // Carregar mensagens iniciais
-  useEffect(() => {
-    if (!ticketId) return;
-
-    const loadMessages = async () => {
-      try {
-        setLoading(true);
-        console.log('📥 [CHAT] Carregando mensagens do ticket:', ticketId);
-        
-        const response = await fetch(`/api/tickets/${ticketId}/messages`);
-        const data = await response.json();
-        
-        if (data.success) {
-          console.log(`✅ [CHAT] ${data.messages.length} mensagens carregadas`);
-          setMessages(data.messages);
-          scrollToBottom();
-        } else {
-          console.error('❌ [CHAT] Erro ao carregar mensagens:', data.error);
-        }
-      } catch (error) {
-        console.error('❌ [CHAT] Erro ao carregar mensagens:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadMessages();
-  }, [ticketId]);
+  }, [ticketId, isConnected, isNearBottom]);
 
   // Função para scroll
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  };
+  }, []);
 
   // Detectar proximidade com o fim
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     const bottomThreshold = 100; // pixels do fim
     setIsNearBottom(scrollHeight - (scrollTop + clientHeight) < bottomThreshold);
-  };
+  }, []);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -987,6 +959,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
               <ScrollArea 
                 ref={scrollAreaRef}
                 className="h-full px-4"
+                onScroll={handleScroll}
               >
                 <div className="space-y-3 py-4">
                   {filteredMessages.length === 0 ? (

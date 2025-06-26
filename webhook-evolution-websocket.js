@@ -225,18 +225,28 @@ async function findOrCreateTicket(customerId, phone, instance) {
     console.log('🎫 [TICKET] Buscando/criando ticket:', { customerId, phone, instance });
     
     // Primeiro tenta encontrar um ticket existente
-    const existingTicket = await supabase
+    const { data: existingTickets, error: searchError } = await supabase
       .from('tickets')
       .select('*')
       .eq('customer_id', customerId)
       .eq('status', 'open')
-      .eq('instance', instance)
+      .eq('channel', 'whatsapp')
+      .or(`nunmsg.eq.${phone},metadata->>whatsapp_phone.eq.${phone},metadata->>client_phone.eq.${phone}`)
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (existingTicket && existingTicket.length > 0) {
-      const ticket = existingTicket[0];
-      console.log('✅ [TICKET] Ticket existente encontrado:', ticket);
+    if (searchError) {
+      console.error('❌ [TICKET] Erro ao buscar tickets existentes:', searchError);
+    }
+
+    if (existingTickets && existingTickets.length > 0) {
+      const ticket = existingTickets[0];
+      console.log('✅ [TICKET] Ticket existente encontrado:', {
+        id: ticket.id,
+        customer_id: ticket.customer_id,
+        nunmsg: ticket.nunmsg,
+        metadata: ticket.metadata
+      });
       return ticket;
     }
 
@@ -286,17 +296,19 @@ async function saveMessage(ticketId, messageData, instanceName) {
       .from('messages')
       .insert([{
         id: crypto.randomUUID(),
-      ticket_id: ticketId,
+        ticket_id: ticketId,
         created_at: new Date().toISOString(),
-        whatsapp_message_id: messageData.whatsapp_message_id,
-      content: messageData.content,
-      type: messageData.type || 'text',
-        is_internal: messageData.is_internal,
-        metadata: messageData.metadata,
+        content: messageData.content,
+        type: messageData.type || 'text',
+        is_internal: messageData.is_internal || false,
         sender_name: messageData.sender_name,
-        instance: instanceName,
-        sender: messageData.sender,
-        message_type: messageData.message_type || 'text'
+        metadata: {
+          ...messageData.metadata,
+          evolution_instance: instanceName,
+          whatsapp_message_id: messageData.whatsapp_message_id,
+          sender: messageData.sender,
+          message_type: messageData.message_type || 'text'
+        }
       }])
       .select()
       .single();
