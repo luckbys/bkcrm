@@ -60,7 +60,7 @@ CMD ["nginx", "-g", "daemon off;"]
 FROM node:18-alpine AS frontend-build
 
 # Install basic utilities and configure npm
-RUN apk add --no-cache curl bash && \
+RUN apk add --no-cache curl bash dos2unix && \
     npm config set loglevel error && \
     npm config set progress=false && \
     npm config set fetch-retry-maxtimeout 600000
@@ -87,6 +87,9 @@ COPY postcss.config.js ./
 COPY public/ ./public/
 COPY src/ ./src/
 
+# Fix line endings and remove BOM
+RUN find . -type f \( -name "*.js" -o -name "*.ts" -o -name "*.json" -o -name "*.css" \) -exec dos2unix {} \;
+
 # Create necessary directories and files
 RUN mkdir -p src/config src/services/database src/services/whatsapp && \
     echo "export default {};" > src/config/index.ts && \
@@ -94,7 +97,9 @@ RUN mkdir -p src/config src/services/database src/services/whatsapp && \
     echo "export default {};" > src/services/whatsapp/index.ts
 
 # Build the application
-RUN npm run build
+RUN echo "Starting build process..." && \
+    NODE_ENV=production npm run build || (echo "Build failed with error code $?" && exit 1)
+
 RUN ls -la dist/ || (echo "Build failed - directory listing" && exit 1)
 
 # Production stage

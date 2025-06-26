@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => {
       outDir: "dist",
       sourcemap: false,
       minify: "terser",
-      target: "es2015",
+      target: "es2018",
       rollupOptions: {
         onwarn(warning, warn) {
           // Ignorar avisos específicos do TypeScript
