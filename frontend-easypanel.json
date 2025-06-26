@@ -14,7 +14,9 @@
     "startPeriod": 10
   },
   "environment": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "VITE_SUPABASE_URL": "${VITE_SUPABASE_URL}",
+    "VITE_SUPABASE_ANON_KEY": "${VITE_SUPABASE_ANON_KEY}"
   },
   "domains": [
     {
@@ -37,5 +39,8 @@
   },
   "volumes": [],
   "buildArgs": {},
-  "secrets": []
+  "secrets": [
+    "VITE_SUPABASE_URL",
+    "VITE_SUPABASE_ANON_KEY"
+  ]
 } 
