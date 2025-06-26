@@ -563,8 +563,84 @@ async function processMessage(payload) {
 
     // Verificar se é mensagem do sistema
     if (messageKey.fromMe && !data.isTestMessage) {
-      console.log('📤 Mensagem enviada pelo sistema, ignorando');
-      return { success: true, message: 'Mensagem do sistema ignorada' };
+      console.log('📤 [SISTEMA] Mensagem enviada pelo sistema - processando como agente');
+      
+      // Processar como mensagem do agente
+      const phone = messageKey.remoteJid.split('@')[0];
+      const textContent = messageContent.conversation || messageContent.extendedTextMessage?.text;
+      
+      if (!textContent) {
+        console.log('ℹ️ [SISTEMA] Mensagem sem texto - ignorada');
+        return { success: true, message: 'Mensagem do sistema sem texto - ignorada' };
+      }
+
+      // Buscar ticket existente pelo telefone
+      const { data: existingTicket } = await supabase
+        .from('tickets')
+        .select('id')
+        .or(`metadata->>'whatsapp_phone'.eq.${phone},metadata->>'client_phone'.eq.${phone}`)
+        .eq('status', 'open')
+        .single();
+
+      if (!existingTicket) {
+        console.log('⚠️ [SISTEMA] Nenhum ticket aberto encontrado para:', phone);
+        return { success: true, message: 'Nenhum ticket aberto encontrado' };
+      }
+
+      // Preparar dados da mensagem do agente
+      const messageData = {
+        ticket_id: existingTicket.id,
+        content: textContent,
+        sender: 'agent',
+        sender_name: data.pushName || 'Agente Sistema',
+        sender_id: '00000000-0000-0000-0000-000000000001', // UUID do sistema
+        whatsapp_message_id: messageKey.id,
+        timestamp: data.messageTimestamp,
+        is_internal: false, // Resposta pública
+        metadata: {
+          is_from_system: true,
+          message_type: 'text',
+          timestamp: data.messageTimestamp,
+          whatsapp_instance: payload.instance
+        }
+      };
+
+      // Salvar mensagem
+      console.log('💾 [SISTEMA] Salvando mensagem do agente:', {
+        ticketId: existingTicket.id,
+        content: textContent.substring(0, 50) + '...'
+      });
+      
+      const savedMessage = await saveMessage(existingTicket.id, messageData, payload.instance);
+      
+      console.log('✅ [SISTEMA] Mensagem do agente processada:', {
+        messageId: savedMessage.id,
+        ticketId: existingTicket.id
+      });
+
+      // Preparar mensagem para broadcast
+      const broadcastMessage = {
+        id: savedMessage.id,
+        ticket_id: existingTicket.id,
+        content: textContent,
+        sender: 'agent',
+        sender_name: data.pushName || 'Agente Sistema',
+        timestamp: new Date().toISOString(),
+        metadata: messageData.metadata,
+        type: 'text'
+      };
+
+      // Broadcast via WebSocket
+      console.log('📡 [SISTEMA] Enviando mensagem do agente via WebSocket');
+      io.to(`ticket:${existingTicket.id}`).emit('new-message', broadcastMessage);
+
+      return {
+        success: true,
+        ticketId: existingTicket.id,
+        messageId: savedMessage.id,
+        broadcast: true,
+        type: 'agent_message'
+      };
     }
 
     const phone = messageKey.remoteJid.split('@')[0];
