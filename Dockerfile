@@ -61,7 +61,7 @@ FROM node:18-alpine AS frontend-build
 
 # Install basic utilities and configure npm
 RUN apk add --no-cache curl bash dos2unix && \
-    npm config set loglevel error && \
+    npm config set loglevel warn && \
     npm config set progress=false && \
     npm config set fetch-retry-maxtimeout 600000
 
@@ -96,9 +96,15 @@ RUN mkdir -p src/config src/services/database src/services/whatsapp && \
     echo "export default {};" > src/services/database/index.ts && \
     echo "export default {};" > src/services/whatsapp/index.ts
 
+# Debug: Show file structure
+RUN echo "File structure before build:" && \
+    ls -la && \
+    echo "Source files:" && \
+    find src -type f -name "*.ts" -o -name "*.tsx" | head -10
+
 # Build the application
 RUN echo "Starting build process..." && \
-    NODE_ENV=production npm run build || (echo "Build failed with error code $?" && exit 1)
+    NODE_ENV=production npm run build
 
 RUN ls -la dist/ || (echo "Build failed - directory listing" && exit 1)
 
