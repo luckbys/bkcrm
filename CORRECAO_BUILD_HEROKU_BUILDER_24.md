@@ -106,6 +106,24 @@
 - ✅ `postcss.config.js` (mantido ES modules syntax)
 - ✅ Instalação local confirmada
 
+### 7. **Importação Backend**
+**Problema**: `Could not resolve "../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js" from "src/main.tsx"`
+
+**Solução**: Comentada importação problemática no src/main.tsx linha 170
+
+```typescript
+// ANTES (causava erro no Docker):
+import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js';
+
+// DEPOIS (corrigido para produção):
+// import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js'; // Removido para produção
+```
+
+**Motivo:** O arquivo backend/tests/ não existe no container Docker de produção, apenas no desenvolvimento local.
+
+### 8. **Arquivos Atualizados**
+- ✅ `src/main.tsx` (comentada importação problemática)
+
 ---
 
 ## 🔍 PROCESSO DE DIAGNÓSTICO

@@ -218,6 +218,12 @@ import './utils/test-websocket-system'
 // 🔧 Importar debug para mensagens vazias
 import './utils/debug-mensagens-vazias'
 
+// 🔧 Importar correção completa do sistema de chat
+import './utils/fix-chat-messages-debug'
+
+// 🔧 Importar correção de duplicação de tickets
+import './utils/fix-webhook-duplication'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
