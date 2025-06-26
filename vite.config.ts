@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
   build: {
     target: 'es2015',
     outDir: 'dist',
@@ -14,6 +20,7 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'supabase-vendor': ['@supabase/supabase-js', '@supabase/gotrue-js'],
+          'ui-vendor': ['sonner', '@tanstack/react-query']
         }
       }
     },
@@ -26,7 +33,13 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom']
+    include: [
+      'react', 
+      'react-dom', 
+      'react-router-dom',
+      'sonner',
+      '@tanstack/react-query'
+    ]
   },
   server: {
     port: 3000,
