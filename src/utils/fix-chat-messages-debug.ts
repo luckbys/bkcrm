@@ -10,6 +10,28 @@
 
 import { supabase } from '../lib/supabase';
 
+interface ChatMessage {
+  id: string;
+  ticket_id: string;
+  content: string;
+  sender_name: string;
+  sender_id?: string;
+  is_internal: boolean;
+  created_at: string;
+  type: 'message' | 'note' | 'system';
+  metadata?: any;
+}
+
+interface DiagnosticResult {
+  ticketId: string;
+  wsConnected: boolean;
+  messagesInDb: number;
+  messagesInState: number;
+  lastMessage?: ChatMessage;
+  issues: string[];
+  recommendations: string[];
+}
+
 interface ChatDiagnostic {
   ticketId: string;
   isConnected: boolean;
@@ -35,157 +57,126 @@ interface TicketDuplication {
 /**
  * 🔍 Diagnóstico completo do sistema de chat
  */
-const diagnoseChatSystem = async (ticketId?: string): Promise<ChatDiagnostic> => {
-  console.log('🔍 [DIAGNOSE] === DIAGNÓSTICO COMPLETO DO SISTEMA DE CHAT ===');
+const diagnoseChatSystem = async (ticketId: string): Promise<DiagnosticResult> => {
+  console.log(`🔍 [DIAGNÓSTICO] Iniciando análise do ticket: ${ticketId}`);
   
-  const chatStore = (window as any).useChatStore?.getState?.();
-  const diagnostic: ChatDiagnostic = {
-    ticketId: ticketId || 'all',
-    isConnected: chatStore?.isConnected || false,
-    messagesCount: 0,
-    retryCount: 0,
-    lastRequest: null,
-    problem: [],
-    solutions: []
-  };
-
+  const issues: string[] = [];
+  const recommendations: string[] = [];
+  
   try {
-    // 1. Verificar estado do WebSocket
-    if (!chatStore) {
-      diagnostic.problem.push('ChatStore não encontrado');
-      diagnostic.solutions.push('Recarregar a página');
-      return diagnostic;
+    // 1. Verificar WebSocket
+    const wsConnected = !!(window as any).wsSocket?.connected;
+    console.log(`🔗 WebSocket Status: ${wsConnected ? 'Conectado' : 'Desconectado'}`);
+    
+    if (!wsConnected) {
+      issues.push('WebSocket não está conectado');
+      recommendations.push('Reconectar WebSocket');
     }
-
-    if (!chatStore.isConnected) {
-      diagnostic.problem.push('WebSocket desconectado');
-      diagnostic.solutions.push('Reconectar WebSocket: chatStore.init()');
+    
+    // 2. Buscar mensagens diretamente do banco
+    const { data: dbMessages, error: dbError } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
+    
+    if (dbError) {
+      console.error('❌ Erro ao buscar mensagens do banco:', dbError);
+      issues.push(`Erro no banco de dados: ${dbError.message}`);
     }
-
-    // 2. Verificar mensagens específicas do ticket
-    if (ticketId) {
-      const messages = chatStore.messages[ticketId] || [];
-      diagnostic.messagesCount = messages.length;
-      
-      if (messages.length === 0) {
-        diagnostic.problem.push(`Zero mensagens para ticket ${ticketId}`);
-        
-        // Verificar se existe mensagens no banco
-        const { data: dbMessages, error } = await supabase
-          .from('messages')
-          .select('id, content, sender_id, created_at')
-          .eq('ticket_id', ticketId)
-          .order('created_at', { ascending: true });
-
-        if (error) {
-          diagnostic.problem.push(`Erro ao buscar no banco: ${error.message}`);
-          diagnostic.solutions.push('Verificar conexão com Supabase');
-        } else if (dbMessages && dbMessages.length > 0) {
-          diagnostic.problem.push(`${dbMessages.length} mensagens no banco, mas 0 no frontend`);
-          diagnostic.solutions.push('Problema na conversão WebSocket → Frontend');
-          diagnostic.solutions.push('Executar: forceReloadMessages()');
-        } else {
-          diagnostic.problem.push('Ticket sem mensagens no banco de dados');
-          diagnostic.solutions.push('Criar mensagem de teste ou verificar se ticket é válido');
-        }
-      }
+    
+    const messagesInDb = dbMessages?.length || 0;
+    console.log(`💾 Mensagens no banco: ${messagesInDb}`);
+    
+    // 3. Verificar estado local
+    const chatStore = (window as any).useChatStore?.getState?.();
+    const messagesInState = chatStore?.messages?.[ticketId]?.length || 0;
+    console.log(`📱 Mensagens no estado local: ${messagesInState}`);
+    
+    // 4. Última mensagem
+    const lastMessage = dbMessages?.[dbMessages.length - 1];
+    
+    // 5. Análise de problemas
+    if (messagesInDb > 0 && messagesInState === 0) {
+      issues.push('Mensagens existem no banco mas não estão sendo carregadas no frontend');
+      recommendations.push('Recarregar mensagens manualmente');
+      recommendations.push('Verificar formato de dados do WebSocket');
     }
-
-    // 3. Verificar qualidade da conexão WebSocket
-    if (chatStore.socket) {
-      const transport = chatStore.socket.io?.engine?.transport?.name;
-      console.log(`🔗 [DIAGNOSE] Transport: ${transport}`);
-      
-      if (transport !== 'websocket') {
-        diagnostic.problem.push(`Usando ${transport} ao invés de websocket`);
-        diagnostic.solutions.push('Verificar configuração do servidor WebSocket');
-      }
+    
+    if (messagesInDb === 0) {
+      issues.push('Nenhuma mensagem encontrada no banco de dados');
+      recommendations.push('Verificar se o ticket_id está correto');
+      recommendations.push('Criar mensagem de teste');
     }
-
-    // 4. Verificar se está em loop de retry
-    const lastLog = performance.now();
-    setTimeout(() => {
-      // Simular verificação de retry excessivo
-      if (diagnostic.problem.includes('Zero mensagens') && chatStore.isLoading) {
-        diagnostic.problem.push('Possível loop infinito de retry');
-        diagnostic.solutions.push('Parar auto-retry: stopAutoRetry()');
-      }
-    }, 1000);
-
-    console.log('📊 [DIAGNOSE] Resultado:', diagnostic);
-    return diagnostic;
-
+    
+    if (wsConnected && messagesInState !== messagesInDb) {
+      issues.push('Sincronização entre WebSocket e banco está desatualizada');
+      recommendations.push('Forçar reload das mensagens');
+    }
+    
+    return {
+      ticketId,
+      wsConnected,
+      messagesInDb,
+      messagesInState,
+      lastMessage,
+      issues,
+      recommendations
+    };
+    
   } catch (error) {
-    diagnostic.problem.push(`Erro no diagnóstico: ${error}`);
-    return diagnostic;
+    console.error('❌ Erro no diagnóstico:', error);
+    issues.push(`Erro interno: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    
+    return {
+      ticketId,
+      wsConnected: false,
+      messagesInDb: 0,
+      messagesInState: 0,
+      issues,
+      recommendations: ['Verificar conexão com o banco de dados']
+    };
   }
 };
 
 /**
  * 🔧 Correção forçada de carregamento de mensagens
  */
-const forceReloadMessages = async (ticketId: string) => {
-  console.log(`🔧 [FIX] Forçando reload de mensagens para ticket ${ticketId}`);
+const forceReloadMessages = async (ticketId: string): Promise<void> => {
+  console.log(`🔄 [RELOAD] Forçando reload das mensagens para ticket: ${ticketId}`);
   
   try {
-    // 1. Parar qualquer loading/retry em andamento
-    const chatStore = (window as any).useChatStore?.getState?.();
-    if (chatStore) {
-      // Resetar estados problemáticos
-      chatStore.setLoading?.(false);
-      chatStore.setError?.(null);
-    }
-
-    // 2. Buscar mensagens diretamente do banco
+    // 1. Buscar mensagens atualizadas do banco
     const { data: messages, error } = await supabase
       .from('messages')
-      .select(`
-        id,
-        content,
-        sender_id,
-        sender_name,
-        sender_email,
-        is_internal,
-        type,
-        created_at,
-        metadata
-      `)
+      .select('*')
       .eq('ticket_id', ticketId)
       .order('created_at', { ascending: true });
-
+    
     if (error) {
-      console.error('❌ [FIX] Erro ao buscar mensagens:', error);
-      return false;
+      console.error('❌ Erro ao buscar mensagens:', error);
+      return;
     }
-
-    console.log(`📥 [FIX] ${messages?.length || 0} mensagens encontradas no banco`);
-
-    // 3. Converter e atualizar diretamente no store
-    if (messages && messages.length > 0 && chatStore) {
-      const convertedMessages = messages.map(msg => ({
-        id: msg.id,
-        content: msg.content,
-        sender: msg.sender_id ? 'agent' : 'client',
-        senderName: msg.sender_name || 'Cliente',
-        senderEmail: msg.sender_email || '',
-        isInternal: msg.is_internal || false,
-        type: msg.type || 'text',
-        timestamp: new Date(msg.created_at).toISOString(),
-        metadata: msg.metadata || {}
-      }));
-
-      // Atualizar store diretamente
-      chatStore.setMessages?.(ticketId, convertedMessages);
-      
-      console.log(`✅ [FIX] ${convertedMessages.length} mensagens carregadas com sucesso`);
-      return true;
+    
+    console.log(`✅ ${messages?.length || 0} mensagens encontradas`);
+    
+    // 2. Atualizar store do chat se disponível
+    const chatStore = (window as any).useChatStore?.getState?.();
+    if (chatStore && chatStore.messages) {
+      chatStore.messages[ticketId] = messages || [];
+      console.log('✅ Estado local atualizado');
     }
-
-    return false;
-
+    
+    // 3. Disparar evento personalizado para notificar componentes
+    const event = new CustomEvent('chat-messages-reloaded', {
+      detail: { ticketId, messages: messages || [] }
+    });
+    window.dispatchEvent(event);
+    
+    console.log('✅ Evento de reload disparado');
+    
   } catch (error) {
-    console.error('❌ [FIX] Erro ao forçar reload:', error);
-    return false;
+    console.error('❌ Erro ao forçar reload:', error);
   }
 };
 
@@ -307,173 +298,187 @@ const fixTicketDuplication = async (phone: string, keepLatest: boolean = true) =
 };
 
 /**
- * 🔧 Parar loop de auto-retry
+ * 🛑 Parar loop de auto-retry
  */
 const stopAutoRetry = () => {
-  console.log('🛑 [STOP] Parando auto-retry...');
+  console.log('🛑 [STOP] Parando loops de auto-retry...');
   
-  const chatStore = (window as any).useChatStore?.getState?.();
-  if (chatStore) {
-    // Parar loading
-    chatStore.setLoading?.(false);
-    
-    // Limpar error
-    chatStore.setError?.(null);
-    
-    // Parar qualquer interval de retry
-    if ((window as any).chatRetryInterval) {
-      clearInterval((window as any).chatRetryInterval);
-      (window as any).chatRetryInterval = null;
-    }
-    
-    console.log('✅ [STOP] Auto-retry interrompido');
+  // Limpar timeouts e intervalos
+  for (let i = 1; i < 99999; i++) {
+    window.clearTimeout(i);
+    window.clearInterval(i);
   }
+  
+  // Parar reconexões do WebSocket
+  if ((window as any).wsSocket) {
+    (window as any).wsSocket.disconnect();
+    (window as any).wsSocket = null;
+  }
+  
+  console.log('✅ Auto-retry loops interrompidos');
 };
 
 /**
- * 🧪 Simular mensagem para teste
+ * 🧪 Criar mensagem de teste
  */
-const createTestMessage = async (ticketId: string, fromClient: boolean = true) => {
-  console.log(`🧪 [TEST] Criando mensagem de teste para ticket ${ticketId}`);
+const createTestMessage = async (ticketId: string): Promise<void> => {
+  console.log(`🧪 [TEST] Criando mensagem de teste para ticket: ${ticketId}`);
   
   try {
-    const messageData = {
+    const testMessage = {
       ticket_id: ticketId,
-      content: `📝 Mensagem de teste ${fromClient ? 'do cliente' : 'do agente'} - ${new Date().toLocaleTimeString()}`,
-      sender_id: fromClient ? null : '00000000-0000-0000-0000-000000000001', // UUID do sistema para agente
-      sender_name: fromClient ? 'Cliente Teste' : 'Agente Sistema',
-      sender_type: fromClient ? 'client' : 'agent',
-      type: 'text',
-      is_internal: false,
-      created_at: new Date().toISOString(),
-      metadata: {
-        test_message: true,
-        created_by: 'debug_script'
-      }
+      content: `Mensagem de teste criada em ${new Date().toLocaleString()}`,
+      sender_name: 'Sistema de Debug',
+      sender_id: 'debug-system',
+      is_internal: true,
+      type: 'system',
+      metadata: { source: 'debug-script', timestamp: Date.now() }
     };
-
-    const { data: message, error } = await supabase
+    
+    const { data, error } = await supabase
       .from('messages')
-      .insert([messageData])
+      .insert([testMessage])
       .select()
       .single();
-
+    
     if (error) {
-      console.error('❌ [TEST] Erro ao criar mensagem:', error);
-      return false;
+      console.error('❌ Erro ao criar mensagem de teste:', error);
+      return;
     }
-
-    console.log('✅ [TEST] Mensagem de teste criada:', message.id);
     
-    // Tentar recarregar mensagens após criar
-    setTimeout(() => forceReloadMessages(ticketId), 1000);
+    console.log('✅ Mensagem de teste criada:', data);
     
-    return true;
-
+    // Forçar reload após criar a mensagem
+    await forceReloadMessages(ticketId);
+    
   } catch (error) {
-    console.error('❌ [TEST] Erro ao criar mensagem de teste:', error);
-    return false;
+    console.error('❌ Erro ao criar mensagem de teste:', error);
   }
 };
 
 /**
- * 🔧 Correção completa para um ticket
+ * 🔧 Função principal de correção
  */
-const fixAllProblems = async (ticketId: string) => {
-  console.log(`🔧 [FIX-ALL] === CORREÇÃO COMPLETA PARA TICKET ${ticketId} ===`);
+const fixAllProblems = async (ticketId: string): Promise<void> => {
+  console.log(`🔧 [FIX-ALL] Iniciando correção completa para ticket: ${ticketId}`);
   
   try {
-    // 1. Parar retry
-    stopAutoRetry();
-    
-    // 2. Diagnóstico
+    // 1. Diagnóstico
+    console.log('\n🩺 Fase 1: Diagnóstico...');
     const diagnostic = await diagnoseChatSystem(ticketId);
     
-    // 3. Se não tem mensagens, tentar força reload
-    if (diagnostic.messagesCount === 0) {
-      console.log('🔄 [FIX-ALL] Tentando forçar reload...');
-      const reloaded = await forceReloadMessages(ticketId);
-      
-      if (!reloaded) {
-        console.log('🧪 [FIX-ALL] Criando mensagem de teste...');
-        await createTestMessage(ticketId, true);
-      }
+    console.table({
+      'Ticket ID': diagnostic.ticketId,
+      'WebSocket': diagnostic.wsConnected ? '✅ Conectado' : '❌ Desconectado',
+      'Mensagens DB': diagnostic.messagesInDb,
+      'Mensagens Local': diagnostic.messagesInState,
+      'Problemas': diagnostic.issues.length,
+      'Última Mensagem': diagnostic.lastMessage?.content?.substring(0, 50) || 'Nenhuma'
+    });
+    
+    if (diagnostic.issues.length > 0) {
+      console.log('\n⚠️ Problemas encontrados:');
+      diagnostic.issues.forEach((issue, i) => console.log(`${i + 1}. ${issue}`));
     }
     
-    // 4. Detectar e corrigir duplicação
-    const duplicates = await detectTicketDuplication();
-    if (duplicates.length > 0) {
-      console.log('🔧 [FIX-ALL] Corrigindo duplicações...');
-      for (const dup of duplicates) {
-        await fixTicketDuplication(dup.phone);
-      }
+    // 2. Parar loops de retry
+    console.log('\n🛑 Fase 2: Parando auto-retry...');
+    stopAutoRetry();
+    
+    // 3. Forçar reload
+    console.log('\n🔄 Fase 3: Recarregando mensagens...');
+    await forceReloadMessages(ticketId);
+    
+    // 4. Criar mensagem de teste se necessário
+    if (diagnostic.messagesInDb === 0) {
+      console.log('\n🧪 Fase 4: Criando mensagem de teste...');
+      await createTestMessage(ticketId);
     }
     
-    console.log('✅ [FIX-ALL] Correção completa finalizada');
+    // 5. Diagnóstico final
+    console.log('\n🔍 Fase 5: Verificação final...');
+    const finalDiagnostic = await diagnoseChatSystem(ticketId);
+    
+    console.log('\n✅ CORREÇÃO FINALIZADA');
+    console.table({
+      'Antes - DB': diagnostic.messagesInDb,
+      'Depois - DB': finalDiagnostic.messagesInDb,
+      'Antes - Local': diagnostic.messagesInState,
+      'Depois - Local': finalDiagnostic.messagesInState,
+      'Problemas Restantes': finalDiagnostic.issues.length
+    });
+    
+    if (finalDiagnostic.issues.length === 0) {
+      console.log('🎉 Todos os problemas foram resolvidos!');
+    } else {
+      console.log('⚠️ Problemas restantes:');
+      finalDiagnostic.issues.forEach((issue, i) => console.log(`${i + 1}. ${issue}`));
+    }
     
   } catch (error) {
-    console.error('❌ [FIX-ALL] Erro na correção completa:', error);
+    console.error('❌ Erro na correção completa:', error);
   }
 };
 
-// 🌐 Exportar funções globalmente
-declare global {
-  interface Window {
-    fixChatSystem: {
-      diagnose: (ticketId?: string) => Promise<ChatDiagnostic>;
-      forceReload: (ticketId: string) => Promise<boolean>;
-      detectDuplicates: () => Promise<TicketDuplication[]>;
-      fixDuplicates: (phone: string) => Promise<void>;
-      stopRetry: () => void;
-      createTest: (ticketId: string, fromClient?: boolean) => Promise<boolean>;
-      fixAll: (ticketId: string) => Promise<void>;
-    };
-  }
-}
-
-// Registrar funções globalmente
-if (typeof window !== 'undefined') {
-  window.fixChatSystem = {
-    diagnose: diagnoseChatSystem,
-    forceReload: forceReloadMessages,
-    detectDuplicates: detectTicketDuplication,
-    fixDuplicates: fixTicketDuplication,
-    stopRetry: stopAutoRetry,
-    createTest: createTestMessage,
-    fixAll: fixAllProblems
+// 📊 Análise de performance
+function analyzePerformance(): void {
+  console.log('📊 [PERFORMANCE] Analisando performance do chat...');
+  
+  const performance = {
+    timeouts: {
+      active: 0,
+      cleared: 0
+    },
+    intervals: {
+      active: 0,
+      cleared: 0
+    },
+    websockets: {
+      connections: 0,
+      status: 'unknown'
+    },
+    memory: {
+      used: (performance as any).memory ? `${Math.round((performance as any).memory.usedJSHeapSize / 1024 / 1024)}MB` : 'N/A',
+      total: (performance as any).memory ? `${Math.round((performance as any).memory.totalJSHeapSize / 1024 / 1024)}MB` : 'N/A'
+    }
   };
-
-  console.log(`
-🔧 SISTEMA DE CORREÇÃO DO CHAT ATIVADO
-
-📋 Comandos disponíveis:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔍 DIAGNÓSTICO:
-fixChatSystem.diagnose("TICKET_ID")
-
-🔧 CORREÇÕES:
-fixChatSystem.forceReload("TICKET_ID")     // Recarregar mensagens
-fixChatSystem.stopRetry()                  // Parar loop infinito
-fixChatSystem.createTest("TICKET_ID")      // Criar mensagem teste
-
-🔍 DUPLICAÇÃO:
-fixChatSystem.detectDuplicates()           // Detectar duplicados
-fixChatSystem.fixDuplicates("PHONE")       // Corrigir por telefone
-
-🚀 CORREÇÃO COMPLETA:
-fixChatSystem.fixAll("TICKET_ID")
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  `);
+  
+  // Contar WebSockets ativos
+  if ((window as any).wsSocket) {
+    performance.websockets.connections = 1;
+    performance.websockets.status = (window as any).wsSocket.connected ? 'connected' : 'disconnected';
+  }
+  
+  console.table(performance);
+  
+  // Recomendações
+  console.log('\n💡 Recomendações de Performance:');
+  console.log('1. Use stopAutoRetry() para parar loops infinitos');
+  console.log('2. Use forceReloadMessages(ticketId) para reload manual');
+  console.log('3. Use fixAllProblems(ticketId) para correção completa');
 }
 
-export {
-  diagnoseChatSystem,
-  forceReloadMessages,
-  detectTicketDuplication,
-  fixTicketDuplication,
-  stopAutoRetry,
-  createTestMessage,
-  fixAllProblems
-}; 
+// 🌍 Expor funções globalmente
+const fixChatSystem = {
+  diagnose: diagnoseChatSystem,
+  reload: forceReloadMessages,
+  stopRetry: stopAutoRetry,
+  createTest: createTestMessage,
+  fixAll: fixAllProblems,
+  performance: analyzePerformance
+};
+
+// Adicionar ao window
+(window as any).fixChatSystem = fixChatSystem;
+
+// Log de inicialização
+console.log('🔧 Sistema de correção de chat carregado!');
+console.log('\n📋 Comandos disponíveis:');
+console.log('- fixChatSystem.diagnose("ticket-id") - Diagnóstico completo');
+console.log('- fixChatSystem.reload("ticket-id") - Recarregar mensagens');
+console.log('- fixChatSystem.stopRetry() - Parar loops infinitos');
+console.log('- fixChatSystem.createTest("ticket-id") - Criar mensagem teste');
+console.log('- fixChatSystem.fixAll("ticket-id") - Correção completa');
+console.log('- fixChatSystem.performance() - Análise de performance');
+
+export default fixChatSystem; 

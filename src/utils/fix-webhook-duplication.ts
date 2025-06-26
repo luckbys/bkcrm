@@ -7,126 +7,114 @@
 
 import { supabase } from '../lib/supabase';
 
-interface DuplicateAnalysis {
-  totalDuplicates: number;
-  phoneGroups: Array<{
-    phone: string;
-    tickets: Array<{
-      id: string;
-      title: string;
-      created_at: string;
-      status: string;
-      customer_id?: string;
-    }>;
-    count: number;
-  }>;
-  fixable: number;
-  summary: string;
+interface TicketData {
+  id: string;
+  phone_number: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  customer_id?: string;
+  subject?: string;
+  description?: string;
+}
+
+interface DuplicationAnalysis {
+  totalTickets: number;
+  uniquePhones: number;
+  duplicatedPhones: string[];
+  duplicateGroups: Record<string, TicketData[]>;
+  recommendations: string[];
 }
 
 /**
  * 🔍 Analisar duplicação de tickets
  */
-const analyzeDuplication = async (daysBack: number = 7): Promise<DuplicateAnalysis> => {
-  console.log(`🔍 [DUPLICATE-ANALYSIS] Analisando duplicação dos últimos ${daysBack} dias...`);
-
+const analyzeDuplication = async (): Promise<DuplicationAnalysis> => {
+  console.log('🔍 [ANÁLISE] Iniciando análise de duplicação de tickets...');
+  
   try {
-    const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
-    
-    // Buscar todos os tickets WhatsApp recentes
+    // Buscar todos os tickets com números de telefone
     const { data: tickets, error } = await supabase
       .from('tickets')
-      .select('id, title, created_at, status, customer_id, metadata, nunmsg')
-      .gte('created_at', startDate.toISOString())
-      .eq('channel', 'whatsapp')
+      .select('id, phone_number, status, created_at, updated_at, customer_id, subject, description')
+      .not('phone_number', 'is', null)
       .order('created_at', { ascending: false });
-
+    
     if (error) {
-      console.error('❌ [DUPLICATE-ANALYSIS] Erro ao buscar tickets:', error);
+      console.error('❌ Erro ao buscar tickets:', error);
       throw error;
     }
-
-    if (!tickets || tickets.length === 0) {
-      return {
-        totalDuplicates: 0,
-        phoneGroups: [],
-        fixable: 0,
-        summary: 'Nenhum ticket WhatsApp encontrado'
-      };
-    }
-
-    console.log(`📊 [DUPLICATE-ANALYSIS] ${tickets.length} tickets WhatsApp encontrados`);
-
-    // Agrupar por telefone usando múltiplas fontes
-    const phoneGroups: Record<string, any[]> = {};
-
-    tickets.forEach(ticket => {
-      // Extrair telefone de múltiplas fontes
-      const phone = ticket.nunmsg || 
-                   ticket.metadata?.whatsapp_phone || 
-                   ticket.metadata?.client_phone || 
-                   ticket.metadata?.phone ||
-                   extractPhoneFromTitle(ticket.title) ||
-                   'unknown';
-
-      const normalizedPhone = normalizePhone(phone);
-      
-      if (!phoneGroups[normalizedPhone]) {
-        phoneGroups[normalizedPhone] = [];
-      }
-      
-      phoneGroups[normalizedPhone].push({
-        id: ticket.id,
-        title: ticket.title,
-        created_at: ticket.created_at,
-        status: ticket.status,
-        customer_id: ticket.customer_id,
-        original_phone: phone,
-        metadata: ticket.metadata
-      });
-    });
-
-    // Identificar grupos com duplicação
-    const duplicateGroups = Object.entries(phoneGroups)
-      .filter(([phone, groupTickets]) => groupTickets.length > 1 && phone !== 'unknown')
-      .map(([phone, groupTickets]) => ({
-        phone,
-        tickets: groupTickets.map(t => ({
-          id: t.id,
-          title: t.title,
-          created_at: t.created_at,
-          status: t.status,
-          customer_id: t.customer_id
-        })),
-        count: groupTickets.length
-      }));
-
-    const totalDuplicates = duplicateGroups.reduce((sum, group) => sum + (group.count - 1), 0);
-    const fixable = duplicateGroups.filter(group => 
-      group.tickets.some(t => t.status === 'open')
-    ).length;
-
-    const analysis: DuplicateAnalysis = {
-      totalDuplicates,
-      phoneGroups: duplicateGroups,
-      fixable,
-      summary: `${duplicateGroups.length} telefones com duplicação, ${totalDuplicates} tickets duplicados, ${fixable} grupos corrigíveis`
-    };
-
-    console.log(`📊 [DUPLICATE-ANALYSIS] Resultado:`, analysis.summary);
     
-    // Log detalhado dos grupos
-    duplicateGroups.forEach(group => {
-      console.log(`📱 [DUPLICATE-ANALYSIS] ${group.phone}: ${group.count} tickets`);
-      group.tickets.forEach(ticket => {
-        console.log(`   • ${ticket.id} - ${ticket.status} - ${new Date(ticket.created_at).toLocaleString()}`);
-      });
+    console.log(`📊 Total de tickets encontrados: ${tickets?.length || 0}`);
+    
+    // Agrupar por número normalizado
+    const phoneGroups: Record<string, TicketData[]> = {};
+    const seenPhones = new Set<string>();
+    
+    tickets?.forEach(ticket => {
+      const normalizedPhone = normalizePhone(ticket.phone_number);
+      if (normalizedPhone) {
+        if (!phoneGroups[normalizedPhone]) {
+          phoneGroups[normalizedPhone] = [];
+        }
+        phoneGroups[normalizedPhone].push(ticket);
+        seenPhones.add(normalizedPhone);
+      }
     });
-
+    
+    // Identificar duplicações
+    const duplicateGroups: Record<string, TicketData[]> = {};
+    const duplicatedPhones: string[] = [];
+    
+    Object.entries(phoneGroups).forEach(([phone, ticketGroup]) => {
+      if (ticketGroup.length > 1) {
+        duplicatedPhones.push(phone);
+        duplicateGroups[phone] = ticketGroup;
+      }
+    });
+    
+    const recommendations: string[] = [];
+    
+    if (duplicatedPhones.length > 0) {
+      recommendations.push(`Encontrados ${duplicatedPhones.length} números com duplicações`);
+      recommendations.push('Execute fixDuplication() para consolidar tickets');
+      recommendations.push('Considere implementar validação preventiva no webhook');
+    } else {
+      recommendations.push('Nenhuma duplicação encontrada');
+      recommendations.push('Sistema está funcionando corretamente');
+    }
+    
+    const analysis: DuplicationAnalysis = {
+      totalTickets: tickets?.length || 0,
+      uniquePhones: seenPhones.size,
+      duplicatedPhones,
+      duplicateGroups,
+      recommendations
+    };
+    
+    // Log da análise
+    console.log('\n📊 RESULTADO DA ANÁLISE:');
+    console.table({
+      'Total de Tickets': analysis.totalTickets,
+      'Números Únicos': analysis.uniquePhones,
+      'Números Duplicados': analysis.duplicatedPhones.length,
+      'Taxa de Duplicação': `${((analysis.duplicatedPhones.length / analysis.uniquePhones) * 100).toFixed(1)}%`
+    });
+    
+    if (analysis.duplicatedPhones.length > 0) {
+      console.log('\n🔍 DUPLICAÇÕES ENCONTRADAS:');
+      Object.entries(analysis.duplicateGroups).forEach(([phone, tickets]) => {
+        console.log(`\n📞 ${phone} (${tickets.length} tickets):`);
+        tickets.forEach((ticket, index) => {
+          console.log(`  ${index + 1}. ${ticket.id} - ${ticket.status} - ${new Date(ticket.created_at).toLocaleString()}`);
+        });
+      });
+    }
+    
     return analysis;
-
+    
   } catch (error) {
-    console.error('❌ [DUPLICATE-ANALYSIS] Erro na análise:', error);
+    console.error('❌ Erro na análise:', error);
     throw error;
   }
 };
@@ -134,134 +122,93 @@ const analyzeDuplication = async (daysBack: number = 7): Promise<DuplicateAnalys
 /**
  * 🔧 Corrigir duplicação mantendo o ticket mais recente ativo
  */
-const fixDuplication = async (phone: string, dryRun: boolean = false): Promise<boolean> => {
-  console.log(`🔧 [FIX-DUPLICATION] ${dryRun ? 'SIMULANDO' : 'CORRIGINDO'} duplicação para ${phone}`);
-
+const fixDuplication = async (simulate: boolean = true): Promise<void> => {
+  console.log(`🔧 [FIX] ${simulate ? 'SIMULANDO' : 'EXECUTANDO'} correção de duplicações...`);
+  
   try {
-    const normalizedPhone = normalizePhone(phone);
+    // Primeiro fazer análise
+    const analysis = await analyzeDuplication();
     
-    // Buscar todos os tickets deste telefone
-    const { data: tickets, error } = await supabase
-      .from('tickets')
-      .select('id, created_at, status, title, metadata, customer_id')
-      .eq('channel', 'whatsapp')
-      .or(`nunmsg.eq.${normalizedPhone},metadata->>whatsapp_phone.eq.${normalizedPhone},metadata->>client_phone.eq.${normalizedPhone}`)
-      .order('created_at', { ascending: false }); // Mais recente primeiro
-
-    if (error) {
-      console.error('❌ [FIX-DUPLICATION] Erro ao buscar tickets:', error);
-      return false;
+    if (analysis.duplicatedPhones.length === 0) {
+      console.log('✅ Nenhuma duplicação encontrada para corrigir');
+      return;
     }
-
-    if (!tickets || tickets.length <= 1) {
-      console.log(`✅ [FIX-DUPLICATION] Nenhuma duplicação encontrada para ${phone}`);
-      return true;
-    }
-
-    // Encontrar o ticket a manter (mais recente com status open, ou simplesmente o mais recente)
-    const openTickets = tickets.filter(t => t.status === 'open');
-    const keepTicket = openTickets.length > 0 ? openTickets[0] : tickets[0];
-    const duplicateTickets = tickets.filter(t => t.id !== keepTicket.id);
-
-    console.log(`📋 [FIX-DUPLICATION] Mantendo: ${keepTicket.id} (${keepTicket.status})`);
-    console.log(`🗑️ [FIX-DUPLICATION] Fechando: ${duplicateTickets.length} duplicados`);
-
-    if (dryRun) {
-      duplicateTickets.forEach(ticket => {
-        console.log(`   • ${ticket.id} - ${ticket.status} - ${ticket.title}`);
-      });
-      return true;
-    }
-
-    // Fechar tickets duplicados
-    const updates = duplicateTickets.map(ticket => 
-      supabase
-        .from('tickets')
-        .update({
-          status: 'closed',
-          updated_at: new Date().toISOString(),
-          metadata: {
-            ...ticket.metadata,
-            closed_reason: 'duplicate_ticket',
-            merged_into: keepTicket.id,
-            auto_closed_at: new Date().toISOString(),
-            original_status: ticket.status
+    
+    console.log(`\n🔧 Processando ${analysis.duplicatedPhones.length} números duplicados...`);
+    
+    let totalFixed = 0;
+    let totalMerged = 0;
+    
+    for (const [phone, tickets] of Object.entries(analysis.duplicateGroups)) {
+      console.log(`\n📞 Processando ${phone} (${tickets.length} tickets)...`);
+      
+      // Ordenar por data de criação (mais recente primeiro)
+      tickets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      const mainTicket = tickets[0]; // Mais recente
+      const duplicateTickets = tickets.slice(1); // Outros
+      
+      console.log(`  ✅ Mantendo: ${mainTicket.id} (${new Date(mainTicket.created_at).toLocaleString()})`);
+      
+      // Processar duplicatas
+      for (const duplicateTicket of duplicateTickets) {
+        console.log(`  🔄 ${simulate ? 'SIMULARIA' : 'Processando'}: ${duplicateTicket.id}`);
+        
+        if (!simulate) {
+          // 1. Mover mensagens do ticket duplicado para o principal
+          const { error: moveError } = await supabase
+            .from('messages')
+            .update({ ticket_id: mainTicket.id })
+            .eq('ticket_id', duplicateTicket.id);
+          
+          if (moveError) {
+            console.error(`  ❌ Erro ao mover mensagens de ${duplicateTicket.id}:`, moveError);
+            continue;
           }
-        })
-        .eq('id', ticket.id)
-    );
-
-    const results = await Promise.allSettled(updates);
-    const successful = results.filter(r => r.status === 'fulfilled').length;
-    const failed = results.filter(r => r.status === 'rejected').length;
-
-    if (failed > 0) {
-      console.warn(`⚠️ [FIX-DUPLICATION] ${failed} falhas ao fechar tickets duplicados`);
-    }
-
-    console.log(`✅ [FIX-DUPLICATION] ${successful} tickets duplicados fechados para ${phone}`);
-    return failed === 0;
-
-  } catch (error) {
-    console.error('❌ [FIX-DUPLICATION] Erro ao corrigir:', error);
-    return false;
-  }
-};
-
-/**
- * 🔧 Corrigir toda a duplicação automaticamente
- */
-const fixAllDuplication = async (dryRun: boolean = false, maxFix: number = 50) => {
-  console.log(`🔧 [FIX-ALL] ${dryRun ? 'SIMULANDO' : 'CORRIGINDO'} todas as duplicações (max: ${maxFix})`);
-
-  try {
-    const analysis = await analyzeDuplication(7);
-    
-    if (analysis.totalDuplicates === 0) {
-      console.log('✅ [FIX-ALL] Nenhuma duplicação encontrada');
-      return { success: true, fixed: 0, errors: 0 };
-    }
-
-    console.log(`📊 [FIX-ALL] ${analysis.phoneGroups.length} grupos para processar`);
-
-    let fixed = 0;
-    let errors = 0;
-    const toProcess = analysis.phoneGroups.slice(0, maxFix);
-
-    for (const group of toProcess) {
-      try {
-        const success = await fixDuplication(group.phone, dryRun);
-        if (success) {
-          fixed++;
-          console.log(`✅ [FIX-ALL] ${group.phone} - ${group.count - 1} duplicados processados`);
-        } else {
-          errors++;
-          console.error(`❌ [FIX-ALL] Falha ao processar ${group.phone}`);
+          
+          // 2. Atualizar status do ticket duplicado para fechado
+          const { error: updateError } = await supabase
+            .from('tickets')
+            .update({ 
+              status: 'closed',
+              description: `Ticket consolidado em ${mainTicket.id} - ${duplicateTicket.description || ''}`,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', duplicateTicket.id);
+          
+          if (updateError) {
+            console.error(`  ❌ Erro ao fechar ticket ${duplicateTicket.id}:`, updateError);
+            continue;
+          }
+          
+          console.log(`  ✅ Ticket ${duplicateTicket.id} consolidado em ${mainTicket.id}`);
         }
-
-        // Pequeno delay para evitar sobrecarga
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-      } catch (error) {
-        errors++;
-        console.error(`❌ [FIX-ALL] Erro ao processar ${group.phone}:`, error);
+        
+        totalMerged++;
       }
+      
+      totalFixed++;
     }
-
-    const summary = {
-      success: errors === 0,
-      fixed,
-      errors,
-      total: toProcess.length,
-      duplicatesRemoved: analysis.totalDuplicates
-    };
-
-    console.log(`📊 [FIX-ALL] Resumo:`, summary);
-    return summary;
-
+    
+    console.log(`\n✅ CORREÇÃO ${simulate ? 'SIMULADA' : 'CONCLUÍDA'}:`);
+    console.table({
+      'Números Processados': totalFixed,
+      'Tickets Consolidados': totalMerged,
+      'Modo': simulate ? 'Simulação' : 'Execução Real'
+    });
+    
+    if (simulate) {
+      console.log('\n💡 Para executar a correção real, use: fixDuplication(false)');
+    } else {
+      console.log('\n🎉 Duplicações corrigidas com sucesso!');
+      
+      // Análise final
+      console.log('\n🔍 Executando análise final...');
+      await analyzeDuplication();
+    }
+    
   } catch (error) {
-    console.error('❌ [FIX-ALL] Erro geral:', error);
-    return { success: false, fixed: 0, errors: 1 };
+    console.error('❌ Erro na correção:', error);
   }
 };
 
@@ -269,101 +216,101 @@ const fixAllDuplication = async (dryRun: boolean = false, maxFix: number = 50) =
  * 📱 Normalizar número de telefone
  */
 const normalizePhone = (phone: string): string => {
-  if (!phone || phone === 'unknown') return phone;
+  if (!phone) return '';
   
-  // Remover caracteres não numéricos
-  const cleaned = phone.replace(/\D/g, '');
+  // Remover caracteres especiais e espaços
+  let normalized = phone.replace(/[^\d]/g, '');
   
-  // Normalizar formato brasileiro
-  if (cleaned.length === 13 && cleaned.startsWith('55')) {
-    return `+${cleaned}`;
-  }
-  if (cleaned.length === 11 && !cleaned.startsWith('55')) {
-    return `+55${cleaned}`;
-  }
-  if (cleaned.length === 10 && !cleaned.startsWith('55')) {
-    return `+55${cleaned}`;
+  // Remover código do país se presente (55 para Brasil)
+  if (normalized.startsWith('55') && normalized.length > 11) {
+    normalized = normalized.substring(2);
   }
   
-  return cleaned;
-};
-
-/**
- * 📱 Extrair telefone do título do ticket
- */
-const extractPhoneFromTitle = (title: string): string | null => {
-  // Buscar padrões de telefone no título
-  const phonePattern = /(\+?55)?[\s\-]?(\d{2})[\s\-]?(\d{4,5})[\s\-]?(\d{4})/;
-  const match = title.match(phonePattern);
-  
-  if (match) {
-    const [, country, area, prefix, suffix] = match;
-    return `+55${area}${prefix}${suffix}`;
+  // Remover 9 extra se presente no celular
+  if (normalized.length === 11 && normalized.charAt(2) === '9') {
+    normalized = normalized.substring(0, 2) + normalized.substring(3);
   }
   
-  return null;
+  return normalized;
 };
 
 /**
  * 🔍 Verificar webhook Evolution API para prevenir duplicação futura
  */
-const analyzeWebhookBehavior = async () => {
-  console.log('🔍 [WEBHOOK-ANALYSIS] Analisando comportamento do webhook...');
-
+const analyzeWebhookBehavior = async (): Promise<void> => {
+  console.log('🕷️ [WEBHOOK] Analisando comportamento do webhook...');
+  
   try {
-    // Buscar tickets criados nas últimas 2 horas
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    // Buscar tickets criados nas últimas 24h
+    const last24h = new Date();
+    last24h.setHours(last24h.getHours() - 24);
     
     const { data: recentTickets, error } = await supabase
       .from('tickets')
-      .select('id, created_at, title, metadata')
-      .gte('created_at', twoHoursAgo.toISOString())
-      .eq('channel', 'whatsapp')
+      .select('id, phone_number, created_at, status')
+      .gte('created_at', last24h.toISOString())
       .order('created_at', { ascending: false });
-
+    
     if (error) {
-      console.error('❌ [WEBHOOK-ANALYSIS] Erro:', error);
+      console.error('❌ Erro ao buscar tickets recentes:', error);
       return;
     }
-
+    
+    console.log(`📊 Tickets criados nas últimas 24h: ${recentTickets?.length || 0}`);
+    
     if (!recentTickets || recentTickets.length === 0) {
-      console.log('📊 [WEBHOOK-ANALYSIS] Nenhum ticket recente encontrado');
+      console.log('ℹ️ Nenhum ticket recente para analisar');
       return;
     }
-
-    // Agrupar por intervalos de tempo
-    const intervals: Record<string, number> = {};
     
-    recentTickets.forEach(ticket => {
-      const created = new Date(ticket.created_at);
-      const interval = `${created.getHours()}:${Math.floor(created.getMinutes() / 5) * 5}`;
-      intervals[interval] = (intervals[interval] || 0) + 1;
-    });
-
-    console.log('📊 [WEBHOOK-ANALYSIS] Tickets por intervalo de 5 min:');
-    Object.entries(intervals)
-      .sort()
-      .forEach(([interval, count]) => {
-        if (count > 1) {
-          console.log(`   ${interval} - ${count} tickets ${count > 3 ? '⚠️ SUSPEITO' : ''}`);
-        }
-      });
-
-    // Verificar padrões suspeitos
-    const suspiciousIntervals = Object.entries(intervals).filter(([, count]) => count > 3);
+    // Analisar padrões suspeitos
+    const phoneFrequency: Record<string, number> = {};
+    const timeGaps: number[] = [];
     
-    if (suspiciousIntervals.length > 0) {
-      console.warn('⚠️ [WEBHOOK-ANALYSIS] Intervalos suspeitos detectados - possível duplicação em tempo real');
+    recentTickets.forEach((ticket, index) => {
+      const normalizedPhone = normalizePhone(ticket.phone_number);
+      phoneFrequency[normalizedPhone] = (phoneFrequency[normalizedPhone] || 0) + 1;
       
-      suspiciousIntervals.forEach(([interval, count]) => {
-        console.warn(`   ${interval}: ${count} tickets em 5 minutos`);
+      // Calcular gap entre tickets consecutivos
+      if (index > 0) {
+        const currentTime = new Date(ticket.created_at).getTime();
+        const prevTime = new Date(recentTickets[index - 1].created_at).getTime();
+        const gap = Math.abs(currentTime - prevTime) / 1000; // em segundos
+        timeGaps.push(gap);
+      }
+    });
+    
+    // Identificar possíveis problemas
+    const suspiciousPhones = Object.entries(phoneFrequency)
+      .filter(([phone, count]) => count > 1)
+      .map(([phone, count]) => ({ phone, count }));
+    
+    const avgGap = timeGaps.length > 0 ? timeGaps.reduce((a, b) => a + b, 0) / timeGaps.length : 0;
+    const minGap = Math.min(...timeGaps);
+    
+    console.log('\n📊 ANÁLISE DO WEBHOOK:');
+    console.table({
+      'Tickets nas 24h': recentTickets.length,
+      'Números únicos': Object.keys(phoneFrequency).length,
+      'Números duplicados': suspiciousPhones.length,
+      'Gap médio (s)': Math.round(avgGap),
+      'Gap mínimo (s)': Math.round(minGap)
+    });
+    
+    if (suspiciousPhones.length > 0) {
+      console.log('\n⚠️ NÚMEROS SUSPEITOS (múltiplos tickets):');
+      suspiciousPhones.forEach(({ phone, count }) => {
+        console.log(`📞 ${phone}: ${count} tickets`);
       });
-    } else {
-      console.log('✅ [WEBHOOK-ANALYSIS] Comportamento normal do webhook');
     }
-
+    
+    if (minGap < 60) {
+      console.log(`\n⚠️ Gap muito pequeno detectado: ${Math.round(minGap)}s`);
+      console.log('💡 Considere implementar debounce no webhook');
+    }
+    
   } catch (error) {
-    console.error('❌ [WEBHOOK-ANALYSIS] Erro na análise:', error);
+    console.error('❌ Erro na análise do webhook:', error);
   }
 };
 
@@ -371,10 +318,12 @@ const analyzeWebhookBehavior = async () => {
 declare global {
   interface Window {
     fixWebhookDuplication: {
-      analyze: (days?: number) => Promise<DuplicateAnalysis>;
-      fix: (phone: string, dryRun?: boolean) => Promise<boolean>;
-      fixAll: (dryRun?: boolean, maxFix?: number) => Promise<any>;
-      analyzeWebhook: () => Promise<void>;
+      analyze: () => Promise<DuplicationAnalysis>;
+      fix: (simulate: boolean) => Promise<void>;
+      webhookAnalysis: () => Promise<void>;
+      implementPrevention: () => void;
+      normalizePhone: (phone: string) => string;
+      fixAll: (simulate: boolean) => Promise<void>;
     };
   }
 }
@@ -383,8 +332,62 @@ if (typeof window !== 'undefined') {
   window.fixWebhookDuplication = {
     analyze: analyzeDuplication,
     fix: fixDuplication,
-    fixAll: fixAllDuplication,
-    analyzeWebhook: analyzeWebhookBehavior
+    webhookAnalysis: analyzeWebhookBehavior,
+    implementPrevention: () => {
+      console.log('🔧 [PREVENÇÃO] Implementando prevenção de duplicação...');
+      
+      const preventionCode = `
+// 🛡️ PREVENÇÃO DE DUPLICAÇÃO NO WEBHOOK
+async function preventDuplication(phoneNumber, webhookData) {
+  const normalizedPhone = "${normalizePhone.toString()}";
+  const phone = normalizedPhone(phoneNumber);
+  
+  // Verificar se já existe ticket ativo para este número
+  const { data: existingTickets } = await supabase
+    .from('tickets')
+    .select('id, status, created_at')
+    .eq('phone_number', phone)
+    .in('status', ['open', 'pending', 'in_progress'])
+    .order('created_at', { ascending: false })
+    .limit(1);
+  
+  if (existingTickets && existingTickets.length > 0) {
+    const existingTicket = existingTickets[0];
+    console.log('🔄 Ticket existente encontrado:', existingTicket.id);
+    
+    // Adicionar nova mensagem ao ticket existente
+    await supabase
+      .from('messages')
+      .insert([{
+        ticket_id: existingTicket.id,
+        content: webhookData.message || 'Nova interação via webhook',
+        sender_name: webhookData.sender || 'Cliente',
+        is_internal: false,
+        type: 'message'
+      }]);
+    
+    return { action: 'updated', ticketId: existingTicket.id };
+  }
+  
+  // Criar novo ticket apenas se não existir
+  return { action: 'create_new' };
+}`;
+      
+      console.log('📋 Código de prevenção gerado:');
+      console.log(preventionCode);
+      
+      console.log('\n💡 Para implementar:');
+      console.log('1. Adicione esta função ao seu webhook handler');
+      console.log('2. Chame preventDuplication() antes de criar novos tickets');
+      console.log('3. Teste com analyzeWebhookBehavior() regularmente');
+    },
+    normalizePhone,
+    fixAll: async (simulate: boolean) => {
+      console.log('🔧 [FIX-ALL] Iniciando correção completa de duplicações...');
+      await analyzeDuplication();
+      await fixDuplication(simulate);
+      await analyzeWebhookBehavior();
+    }
   };
 
   console.log(`
@@ -395,14 +398,18 @@ if (typeof window !== 'undefined') {
 
 🔍 ANÁLISE:
 fixWebhookDuplication.analyze()              // Analisar últimos 7 dias
-fixWebhookDuplication.analyze(14)            // Analisar últimos 14 dias
-fixWebhookDuplication.analyzeWebhook()       // Analisar webhook atual
+fixWebhookDuplication.webhookAnalysis()       // Analisar webhook atual
 
 🔧 CORREÇÃO:
-fixWebhookDuplication.fix("PHONE", true)     // Simular correção
-fixWebhookDuplication.fix("PHONE", false)    // Corrigir de fato
-fixWebhookDuplication.fixAll(true)           // Simular correção completa
-fixWebhookDuplication.fixAll(false)          // Corrigir tudo (CUIDADO!)
+fixWebhookDuplication.fix(true)               // Simular correção
+fixWebhookDuplication.fix(false)              // Corrigir de fato
+
+🔧 PREVENÇÃO:
+fixWebhookDuplication.implementPrevention()     // Código de prevenção
+
+🔧 CORREÇÃO COMPLETA:
+fixWebhookDuplication.fixAll(true)             // Simular correção completa
+fixWebhookDuplication.fixAll(false)            // Corrigir tudo (CUIDADO!)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   `);
@@ -411,6 +418,5 @@ fixWebhookDuplication.fixAll(false)          // Corrigir tudo (CUIDADO!)
 export {
   analyzeDuplication,
   fixDuplication,
-  fixAllDuplication,
   analyzeWebhookBehavior
 }; 

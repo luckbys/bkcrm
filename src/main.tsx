@@ -168,7 +168,7 @@ import { useChatStore } from './stores/chatStore'
 (globalThis as any).forceTicketReload = forceTicketReload;
 
 // Importar e registrar funções de teste de vinculação automática
-// import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js'; // Removido para produção
+// import '../backend/tests/TESTE_VINCULACAO_AUTOMATICA_TELEFONE.js'; // Removido para produção - arquivo não existe no build Docker
 
 // Helper para debug de vinculação
 (globalThis as any).debugCustomerAssignment = () => {
@@ -197,6 +197,12 @@ import './utils/test-nunmsg-integration'
 
 // 🚀 Importar teste da correção do realtime
 import './utils/test-realtime-fix'
+
+// 🔧 Importar sistema de correção de mensagens de chat
+import './utils/fix-chat-messages-debug'
+
+// 🔧 Importar sistema de correção de duplicação de webhooks
+import './utils/fix-webhook-duplication'
 
 // 🔧 Importar debug do UnifiedChatModal
 import './utils/debug-unified-chat'
