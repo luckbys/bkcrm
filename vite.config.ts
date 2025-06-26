@@ -20,7 +20,16 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'supabase-vendor': ['@supabase/supabase-js', '@supabase/gotrue-js'],
-          'ui-vendor': ['sonner', '@tanstack/react-query']
+          'ui-vendor': ['sonner', '@tanstack/react-query', 'zustand', 'next-themes'],
+          'radix-vendor': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-select',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-tooltip',
+            '@radix-ui/react-slot'
+          ],
+          'utils-vendor': ['class-variance-authority', 'clsx', 'tailwind-merge', 'lucide-react']
         }
       }
     },
@@ -38,7 +47,23 @@ export default defineConfig({
       'react-dom', 
       'react-router-dom',
       'sonner',
-      '@tanstack/react-query'
+      '@tanstack/react-query',
+      'zustand',
+      'next-themes',
+      'class-variance-authority',
+      'clsx',
+      'tailwind-merge',
+      'lucide-react',
+      'react-resizable-panels',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-select',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-tooltip',
+      '@radix-ui/react-slot',
+      '@radix-ui/react-toast',
+      '@radix-ui/react-switch',
+      '@radix-ui/react-label'
     ]
   },
   server: {
