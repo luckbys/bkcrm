@@ -2,7 +2,7 @@
 # Para uso no EasyPanel como serviço separado do webhook
 
 # Build stage
-FROM node:18-alpine as build
+FROM node:18-alpine AS build
 
 # Definir diretório de trabalho
 WORKDIR /app
@@ -29,8 +29,11 @@ FROM nginx:alpine
 # Copiar arquivos buildados
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Criar diretório para configuração do Nginx
+RUN mkdir -p /etc/nginx/conf.d
+
 # Copiar configuração customizada do Nginx
-COPY deploy-webhook/nginx.conf /etc/nginx/nginx.conf
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # O nginx:alpine já vem com usuário nginx configurado adequadamente
 

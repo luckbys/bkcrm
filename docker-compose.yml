@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: frontend.dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
     ports:
       - "80:80"
     volumes:
@@ -23,10 +26,15 @@ services:
       - PORT=4000
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
-    ports:
-      - "4000:4000"
+    expose:
+      - "4000"
     networks:
       - bkcrm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   bkcrm-network:
