@@ -640,6 +640,39 @@ async function loadTicketMessages(ticketId, limit = 50) {
           });
         }
       }
+
+      // Se ainda não encontrou, tentar mapear ticket numérico para UUID real via tabela tickets
+      if (messages.length === 0) {
+        console.log(`🔍 [WS] Tentando mapear ticket numérico ${ticketId} para UUID na tabela tickets...`);
+        const { data: ticketRows, error: ticketMapError } = await supabase
+          .from('tickets')
+          .select('id, metadata')
+          .or(`metadata->>originalId.eq.${ticketId},metadata->>legacy_id.eq.${ticketId}`)
+          .limit(1);
+
+        if (!ticketMapError && ticketRows && ticketRows.length > 0) {
+          const mappedUuid = ticketRows[0].id;
+          console.log(`🔑 [WS] Ticket numérico ${ticketId} mapeado para UUID ${mappedUuid}`);
+
+          const { data: mappedMessages, error: mappedError } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('ticket_id', mappedUuid)
+            .order('created_at', { ascending: true })
+            .limit(limit);
+
+          if (!mappedError && mappedMessages) {
+            messages = mappedMessages;
+            console.log(`✅ [WS] Carregadas ${messages.length} mensagens via ticket UUID mapeado`);
+          }
+        } else {
+          if (ticketMapError) {
+            console.error('❌ [WS] Erro ao mapear ticket numérico:', ticketMapError);
+          } else {
+            console.log('🔍 [WS] Nenhum ticket UUID correspondente encontrado para', ticketId);
+          }
+        }
+      }
     }
 
     console.log(`✅ [WS] Carregadas ${messages.length} mensagens do banco para ticket ${ticketId}`);
