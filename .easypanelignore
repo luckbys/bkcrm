@@ -1,0 +1,69 @@
+# 🚫 ARQUIVOS DO WEBHOOK (não incluir no frontend)
+webhook-evolution-websocket.js
+webhook-evolution-websocket.cjs
+deploy-webhook/
+backend/
+test-docker/
+webhook-deploy/
+
+# 🚫 ARQUIVOS DE DESENVOLVIMENTO
+.env
+.env.local
+.env.development
+.env.test
+*.log
+logs/
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# 🚫 DEPENDENCIES
+node_modules/
+.npm
+.eslintcache
+
+# 🚫 ARQUIVOS DE BUILD ANTIGOS
+build/
+.next/
+out/
+
+# 🚫 ARQUIVOS DE TESTE
+coverage/
+.nyc_output
+.coverage
+
+# 🚫 ARQUIVOS DO SISTEMA
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# 🚫 ARQUIVOS GIT
+.git/
+.gitignore
+
+# 🚫 SCRIPTS E DOCS DESNECESSÁRIOS
+scripts/
+docs/
+*.md
+!README.md
+
+# 🚫 ARQUIVOS SUPABASE LOCAL
+supabase/
+.supabase/
+
+# 🚫 DEPLOYS ANTERIORES
+deploy-*/
+
+# ✅ MANTER APENAS:
+# - src/
+# - public/
+# - package.json
+# - package-lock.json
+# - vite.config.ts
+# - tsconfig.json
+# - tailwind.config.ts
+# - postcss.config.js
+# - index.html 
