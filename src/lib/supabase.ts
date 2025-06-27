@@ -52,6 +52,15 @@ console.log('🔌 Configuração Realtime:', useRealtime ? 'Habilitado' : 'Desab
 
 // Configurações para Supabase com fallback para desabilitar Realtime
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: localStorage,
+    storageKey: 'bkcrm-supabase-auth',
+    flowType: 'pkce',
+    debug: true // Enable debug mode temporarily to help diagnose issues
+  },
   realtime: useRealtime ? {
     timeout: 20000,
     heartbeatIntervalMs: 15000,
@@ -69,16 +78,22 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       eventsPerSecond: 0
     }
   },
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: localStorage,
-    storageKey: 'bkcrm-supabase-auth',
-    flowType: 'pkce'
-  },
-  db: {
-    schema: 'public'
+  global: {
+    headers: {
+      'X-Client-Info': 'bkcrm-client'
+    }
+  }
+});
+
+// Add authentication state listener
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('🔐 Auth state changed:', event, session?.user?.email);
+  if (event === 'SIGNED_IN') {
+    console.log('✅ User signed in successfully');
+  } else if (event === 'SIGNED_OUT') {
+    console.log('👋 User signed out');
+  } else if (event === 'TOKEN_REFRESHED') {
+    console.log('🔄 Auth token refreshed');
   }
 });
 
@@ -193,11 +208,24 @@ export interface Message {
 
 // Funções auxiliares para autenticação
 export const signIn = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  return { data, error };
+  console.log('🔐 Attempting login for:', email);
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    
+    if (error) {
+      console.error('❌ Login error:', error.message);
+      throw error;
+    }
+    
+    console.log('✅ Login successful:', data.user?.email);
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Login failed:', error.message);
+    return { data: null, error };
+  }
 };
 
 export const signUp = async (email: string, password: string) => {

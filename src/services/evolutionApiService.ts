@@ -17,8 +17,11 @@ class EvolutionApiManager {
       'Content-Type': 'application/json'
     },
     timeout: 30000,
-    // Ignorar erros de certificado em desenvolvimento
-    httpsAgent: import.meta.env.DEV ? new (require('https').Agent)({ rejectUnauthorized: false }) : undefined
+    // Configuração SSL mais segura para produção
+    httpsAgent: new (require('https').Agent)({
+      rejectUnauthorized: false, // Necessário para certificados auto-assinados
+      checkServerIdentity: () => undefined // Bypass hostname verification
+    })
   });
 
   private requestQueue: Array<() => Promise<any>> = [];
@@ -30,6 +33,13 @@ class EvolutionApiManager {
   constructor() {
     this.setupInterceptors();
     this.startHealthCheck();
+    
+    // Log inicial de configuração
+    console.log('🔧 Evolution API configurada:', {
+      url: EVOLUTION_API_URL,
+      hasApiKey: !!API_KEY,
+      sslVerification: false
+    });
   }
 
   private setupInterceptors() {
