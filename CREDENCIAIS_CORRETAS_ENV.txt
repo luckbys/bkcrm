@@ -16,9 +16,9 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNTk0NDk0MywiZXhwIjoyMDUxNTIwOTQzfQ.dfIdvOZijcwmRW-6yAchp0CVPIytCKMAjezJxz5YXCU
 
 # Evolution API
-VITE_EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host/
+VITE_EVOLUTION_API_URL=https://evochat.devsible.com.br
 VITE_EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
-EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host
+EVOLUTION_API_URL=https://evochat.devsible.com.br
 EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
 
 # WebSocket
