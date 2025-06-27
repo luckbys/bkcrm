@@ -204,6 +204,9 @@ import './utils/fix-qr-code-and-css'
 // 🔍 Importar verificação da Evolution API
 import './utils/verify-evolution-config'
 
+// 🚨 Importar tratamento global de erros
+import './utils/error-handler'
+
 // 🔧 Importar sistema de correção de mensagens de chat
 import './utils/fix-chat-messages-debug'
 
@@ -235,6 +238,39 @@ import './utils/fix-chat-messages-debug'
 
 // 🔧 Importar correção de duplicação de tickets
 import './utils/fix-webhook-duplication'
+
+// 🎭 Importar e inicializar correção de modais transparentes
+import { forceModalVisibility, watchModalTransparency, enableContinuousModalFix } from './utils/fix-modal-transparency'
+
+// 🧪 Importar testes de deployment WebSocket
+import './utils/test-websocket-deployment'
+
+// 🎭 Inicializar sistema de correção contínua de modais
+console.log('🎭 [Main] Inicializando sistema avançado de correção de modais...');
+
+// Aplicar correção inicial
+forceModalVisibility();
+
+// Habilitar correção contínua
+const modalFixer = enableContinuousModalFix();
+
+// Expor controle globalmente para debug
+(globalThis as any).modalFixer = modalFixer;
+
+// Função global para diagnóstico de modais
+(globalThis as any).diagnoseModals = () => {
+  console.log('🔍 [Global] Executando diagnóstico completo de modais...');
+  const { diagnoseModalIssues } = require('./utils/fix-modal-transparency');
+  return diagnoseModalIssues();
+};
+
+// Monitorar modais quando DOM estiver pronto
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('🎭 [Main] DOM carregado - reaplicando correções de modais...');
+  forceModalVisibility();
+});
+
+console.log('✅ [Main] Sistema de correção de modais totalmente ativo e monitorando!');
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

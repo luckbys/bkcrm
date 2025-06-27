@@ -1,46 +1,19 @@
-﻿# Build stage
-FROM node:18.19-alpine as builder
+﻿FROM node:18-slim
 
 WORKDIR /app
-
-# Configurar npm e ambiente
-ENV NODE_ENV=development
-ENV NPM_CONFIG_LOGLEVEL=error
-ENV NPM_CONFIG_AUDIT=false
-ENV NPM_CONFIG_FUND=false
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-
-# Instalar dependências necessárias
-RUN apk add --no-cache python3 make g++ git
 
 # Copiar arquivos de dependências
 COPY package*.json ./
 
-# Instalar todas as dependências (incluindo devDependencies)
-RUN npm install --no-optional && \
-    npm install @rollup/rollup-linux-x64-gnu@4.9.0 @rollup/rollup-linux-x64-musl@4.9.0
+# Instalar dependências
+RUN npm ci --only=production
 
-# Copiar o resto dos arquivos
+# Copiar o código do servidor
 COPY . .
 
-# Build da aplicação
-RUN npm run build
+# Expor porta (Heroku define a porta via $PORT)
+ENV PORT=4000
+EXPOSE $PORT
 
-# Production stage
-FROM nginx:stable-alpine
-
-# Copiar os arquivos de build
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Configuração do nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expor porta 80
-EXPOSE 80
-
-# Healthcheck mais robusto
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget --quiet --tries=1 --spider http://localhost:80/health || exit 1
-
-# Iniciar nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Iniciar servidor
+CMD ["npm", "start"]

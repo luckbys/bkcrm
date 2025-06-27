@@ -17,6 +17,7 @@ class EvolutionApiManager {
       'Content-Type': 'application/json'
     },
     timeout: 30000
+    // 🔧 SSL será tratado pelo browser automaticamente
   });
 
   private requestQueue: Array<() => Promise<any>> = [];
@@ -81,11 +82,37 @@ class EvolutionApiManager {
     try {
       return await requestFn();
     } catch (error: any) {
+      // Log detalhado do erro
+      console.error(`❌ [Evolution API] Erro na requisição:`, {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        url: error.config?.url,
+        method: error.config?.method,
+        message: error.message,
+        data: error.response?.data
+      });
+      
       if (retries > 0 && this.isRetryableError(error)) {
         console.warn(`⚠️ Tentativa ${MAX_RETRIES - retries + 1}/${MAX_RETRIES} falhou, tentando novamente...`);
         await this.delay(RETRY_DELAY * (MAX_RETRIES - retries + 1));
         return this.retryRequest(requestFn, retries - 1);
       }
+      
+      // Melhorar mensagem de erro
+      if (error.response?.status === 404) {
+        const urlParts = error.config?.url?.split('/') || [];
+        const resource = urlParts[urlParts.length - 1];
+        throw new Error(`Recurso '${resource}' não encontrado na Evolution API. Verifique se a instância existe.`);
+      }
+      
+      if (error.response?.status === 401) {
+        throw new Error('API Key inválida. Verifique as credenciais da Evolution API.');
+      }
+      
+      if (error.response?.status >= 500) {
+        throw new Error('Erro interno da Evolution API. Tente novamente em alguns minutos.');
+      }
+      
       throw error;
     }
   }
@@ -194,20 +221,71 @@ class EvolutionApiManager {
       console.log(`📋 Status em cache para ${instanceName}: ${cachedStatus}`);
     }
 
-    return this.retryRequest(async () => {
-      const response = await this.apiClient.get(`/instance/connectionState/${instanceName}`);
-      const status = response.data;
-      
-      // Atualizar cache local
-      if (status.instance?.state === 'open') {
-        this.connectionStatus.set(instanceName, 'connected');
-      } else {
-        this.connectionStatus.set(instanceName, 'disconnected');
+    try {
+      return await this.retryRequest(async () => {
+        const response = await this.apiClient.get(`/instance/connectionState/${instanceName}`);
+        const status = response.data;
+        
+        // Atualizar cache local
+        if (status.instance?.state === 'open') {
+          this.connectionStatus.set(instanceName, 'connected');
+        } else {
+          this.connectionStatus.set(instanceName, 'disconnected');
+        }
+        
+        console.log(`📊 Status da instância ${instanceName}:`, status.instance?.state);
+        return status;
+      });
+    } catch (error: any) {
+      // Se instância não existe, verificar se precisa ser criada
+      if (error.message.includes('não encontrado')) {
+        console.warn(`⚠️ Instância ${instanceName} não encontrada na Evolution API`);
+        
+        // Verificar se existe no banco local
+        const instanceExistsLocally = await this.checkLocalInstance(instanceName);
+        if (instanceExistsLocally) {
+          console.log(`🔄 Tentando recriar instância ${instanceName} na Evolution API...`);
+          try {
+            await this.createInstance(instanceName);
+            // Retry o status após criação
+            return this.getInstanceStatus(instanceName, false);
+          } catch (createError) {
+            console.error('❌ Falha ao recriar instância:', createError);
+          }
+        }
       }
       
-      console.log(`📊 Status da instância ${instanceName}:`, status.instance?.state);
-      return status;
-    });
+      // Retornar status offline se não conseguir conectar
+      return {
+        instance: {
+          instanceName,
+          state: 'close' as const
+        },
+        connectionInfo: null
+      };
+    }
+  }
+
+  private async checkLocalInstance(instanceName: string): Promise<boolean> {
+    try {
+      // Verificar no Supabase se instância existe localmente
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY
+      );
+      
+      const { data } = await supabase
+        .from('evolution_instances')
+        .select('id')
+        .eq('instance_name', instanceName)
+        .eq('is_active', true)
+        .single();
+      
+      return !!data;
+    } catch {
+      return false;
+    }
   }
 
   // Otimizado: QR Code com múltiplos formatos e fallback

@@ -17,11 +17,11 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nextjs -u 1001
 
 # Copiar todos os arquivos necessários
-COPY webhook-evolution-complete-corrigido.cjs ./
+COPY webhook-evolution-websocket.js ./
 COPY webhook.env ./
 
 # Verificar se o arquivo existe
-RUN test -f webhook-evolution-complete-corrigido.cjs || (echo "❌ Arquivo webhook-evolution-complete-corrigido.cjs não encontrado" && exit 1)
+RUN test -f webhook-evolution-websocket.js || (echo "❌ Arquivo webhook-evolution-websocket.js não encontrado" && exit 1)
 
 # Mudar ownership dos arquivos
 RUN chown -R nextjs:nodejs /app
@@ -35,4 +35,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/health || exit 1
 
 # Comando para iniciar
-CMD ["node", "webhook-evolution-complete-corrigido.cjs"] 
+CMD ["node", "webhook-evolution-websocket.js"] 

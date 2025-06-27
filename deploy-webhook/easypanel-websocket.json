@@ -1,0 +1,59 @@
+{
+  "name": "bkcrm-websocket",
+  "type": "app",
+  "source": {
+    "type": "github",
+    "owner": "seu-usuario",
+    "repo": "bkcrm",
+    "branch": "main",
+    "path": "/deploy-webhook"
+  },
+  "build": {
+    "type": "dockerfile",
+    "dockerfile": "Dockerfile"
+  },
+  "deploy": {
+    "replicas": 1,
+    "command": ["node", "webhook-evolution-websocket.js"],
+    "env": {
+      "NODE_ENV": "production",
+      "PORT": "4000",
+      "SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
+      "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTU0MzE2NiwiZXhwIjoyMDY1MTE5MTY2fQ.dfIdvOZijcwmRW-6yAchp0CVPIytCKMAjezJxz5YXCU",
+      "EVOLUTION_API_URL": "https://press-evolution-api.jhkbgs.easypanel.host",
+      "EVOLUTION_API_KEY": "429683C4C977415CAAFCCE10F7D57E11",
+      "BASE_URL": "https://bkcrm.devsible.com.br"
+    },
+    "ports": [
+      {
+        "published": 4000,
+        "target": 4000,
+        "protocol": "tcp"
+      }
+    ]
+  },
+  "domains": [
+    {
+      "host": "ws.bkcrm.devsible.com.br",
+      "port": 4000,
+      "https": true
+    }
+  ],
+  "resources": {
+    "reservations": {
+      "cpus": "0.5",
+      "memory": "512M"
+    },
+    "limits": {
+      "cpus": "1.0",
+      "memory": "1024M"
+    }
+  },
+  "healthcheck": {
+    "test": ["CMD", "curl", "-f", "http://localhost:4000/health"],
+    "interval": "30s",
+    "timeout": "10s",
+    "retries": 3,
+    "start_period": "10s"
+  }
+} 

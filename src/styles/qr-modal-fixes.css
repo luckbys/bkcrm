@@ -6,6 +6,51 @@
   max-height: 95vh !important;
   overflow-y: auto !important;
   position: relative !important;
+  background: white !important;
+  border-radius: 8px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid #e5e7eb !important;
+  z-index: 50 !important;
+}
+
+/* Correção específica para modais transparentes */
+.modal-content,
+.dialog-content,
+[role="dialog"],
+[data-state="open"][role="dialog"] {
+  background: white !important;
+  border-radius: 8px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid #e5e7eb !important;
+  padding: 1.5rem !important;
+  min-height: 200px !important;
+}
+
+/* Correção específica para modal de criação de instância */
+[data-radix-dialog-content][data-state="open"],
+.dialog-container > div,
+.dialog-content[data-state="open"] {
+  background-color: white !important;
+  color: #000 !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+}
+
+/* Garantir que todos os elementos do modal tenham fundo sólido */
+.sm\:max-w-\[425px\] {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Força fundo branco para todos os modais */
+div[role="dialog"] {
+  background: white !important;
+}
+
+/* Correção para overlay transparente */
+[data-radix-dialog-overlay][data-state="open"] {
+  background: rgba(0, 0, 0, 0.8) !important;
 }
 
 /* === QR CODE CONTAINER === */

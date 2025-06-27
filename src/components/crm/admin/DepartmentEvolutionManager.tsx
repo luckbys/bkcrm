@@ -117,18 +117,18 @@ export const DepartmentEvolutionManager = ({
         console.log('📋 Instâncias do banco:', dbInstances?.length || 0);
 
                  // Mapear instâncias com status padrão
-         const instancesWithStatus = await Promise.all((dbInstances || []).map(async (instance) => {
+         const instancesWithStatus = await Promise.allSettled((dbInstances || []).map(async (instance) => {
            let evolutionStatus: 'open' | 'close' | 'connecting' | 'unknown' = 'close';
            let isConnected = false;
            
            try {
              // Tentar verificar status na Evolution API (com timeout)
              const statusPromise = evolutionApiService.getInstanceStatus(instance.instance_name);
-             const timeoutPromise = new Promise((_, reject) => 
-               setTimeout(() => reject(new Error('Timeout')), 5000)
+             const timeoutPromise = new Promise<never>((_, reject) => 
+               setTimeout(() => reject(new Error('Timeout after 5s')), 5000)
              );
              
-             const status = await Promise.race([statusPromise, timeoutPromise]) as any;
+             const status = await Promise.race([statusPromise, timeoutPromise]);
              if (status?.instance?.state) {
                evolutionStatus = status.instance.state === 'open' ? 'open' : 'close';
                isConnected = status.instance.state === 'open';
@@ -157,8 +157,22 @@ export const DepartmentEvolutionManager = ({
            return mappedInstance;
          }));
 
-        setInstances(instancesWithStatus);
-        console.log(`✅ ${instancesWithStatus.length} instâncias carregadas para ${departmentName}`);
+        // Filtrar apenas os resultados bem-sucedidos
+        const successfulInstances = instancesWithStatus
+          .filter((result): result is PromiseFulfilledResult<DepartmentInstance> => result.status === 'fulfilled')
+          .map(result => result.value);
+
+        // Log de falhas para debug
+        const failedInstances = instancesWithStatus
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+        
+        if (failedInstances.length > 0) {
+          console.warn(`⚠️ ${failedInstances.length} instâncias falharam ao carregar:`, 
+            failedInstances.map(f => f.reason));
+        }
+
+        setInstances(successfulInstances);
+        console.log(`✅ ${successfulInstances.length} instâncias carregadas para ${departmentName}`);
         
       } catch (error: any) {
         console.error('❌ Erro ao carregar instâncias:', error);
