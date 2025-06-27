@@ -24,7 +24,7 @@ const realEvolutionFormat = {
   destination: "https://bkcrm.devsible.com.br/webhook",
   date_time: new Date().toISOString(),
   sender: "5512981022013@s.whatsapp.net",
-  server_url: "https://press-evolution-api.jhkbgs.easypanel.host",
+  server_url: "https://evochat.devsible.com.br/",
   apikey: "5CFA92D7-A434-43E8-8D3F-2482FA7E1B28"
 };
 
