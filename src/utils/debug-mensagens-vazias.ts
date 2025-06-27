@@ -227,7 +227,7 @@ const verificarBackend = async () => {
   try {
     // Detectar URL do backend
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const backendUrl = isLocal ? 'http://localhost:4000' : 'https://ws.bkcrm.devsible.com.br';
+    const backendUrl = isLocal ? 'http://localhost:4000' : 'https://websocket.bkcrm.devsible.com.br';
 
     console.log(`🔗 [BACKEND] URL detectada: ${backendUrl}`);
 

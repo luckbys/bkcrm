@@ -55,7 +55,7 @@ async function testarNotificacoesTempoReal() {
       console.log('\n2. 🔗 Testando WebSocket...');
       
       const wsUrl = process.env.NODE_ENV === 'production'
-        ? 'https://ws.bkcrm.devsible.com.br'
+        ? 'https://websocket.bkcrm.devsible.com.br'
         : 'http://localhost:4000';
       
       console.log('🔌 WebSocket URL:', wsUrl);

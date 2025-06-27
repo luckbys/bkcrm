@@ -62,7 +62,7 @@ async function testUUIDCorrection(): Promise<TestResult> {
     
     // 4. Verificar health do webhook
     try {
-      const healthResponse = await fetch('https://ws.bkcrm.devsible.com.br/webhook/health');
+              const healthResponse = await fetch('https://websocket.bkcrm.devsible.com.br/webhook/health');
       const healthData = await healthResponse.json();
       console.log('🏥 [TESTE UUID] Health check webhook:', healthData);
     } catch (healthError) {
@@ -172,7 +172,7 @@ function diagnosticUUID(): void {
   console.log('🆔 [DIAGNÓSTICO] System UUID:', '00000000-0000-0000-0000-000000000001');
   
   // 4. WebSocket URL
-  console.log('🌐 [DIAGNÓSTICO] WebSocket URL:', 'https://ws.bkcrm.devsible.com.br');
+      console.log('🌐 [DIAGNÓSTICO] WebSocket URL:', 'https://websocket.bkcrm.devsible.com.br');
 }
 
 // Expor funções globalmente para uso no console

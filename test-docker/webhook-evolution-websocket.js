@@ -12,7 +12,7 @@ const server = http.createServer(app);
 // Configurar Socket.IO com CORS
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://ws.bkcrm.devsible.com.br"],
+    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://websocket.bkcrm.devsible.com.br"],
     methods: ["GET", "POST"],
     allowedHeaders: ["*"],
     credentials: true
@@ -22,13 +22,13 @@ const io = new Server(server, {
 
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://ws.bkcrm.devsible.com.br"],
+  origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "https://bkcrm.devsible.com.br", "https://websocket.bkcrm.devsible.com.br"],
   credentials: true
 }));
 
 // Configurações
 const PORT = 4000;
-const EVOLUTION_API_URL = 'https://press-evolution-api.jhkbgs.easypanel.host';
+const EVOLUTION_API_URL = 'https://evochat.devsible.com.br';
 const EVOLUTION_API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
 const BASE_URL = 'https://bkcrm.devsible.com.br';
 

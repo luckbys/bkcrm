@@ -15,7 +15,7 @@ interface TestResult {
 export async function testWebSocketDeployment(): Promise<TestResult> {
   console.log('🧪 [WS Test] Iniciando teste de deploy do WebSocket...');
   
-  const websocketUrl = 'https://ws.bkcrm.devsible.com.br';
+      const websocketUrl = 'https://websocket.bkcrm.devsible.com.br';
   
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
@@ -84,7 +84,7 @@ export async function testHealthEndpoint(): Promise<TestResult> {
   console.log('🏥 [Health Test] Testando endpoint de health...');
   
   try {
-    const response = await fetch('https://ws.bkcrm.devsible.com.br/health', {
+            const response = await fetch('https://websocket.bkcrm.devsible.com.br/health', {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
@@ -141,7 +141,7 @@ export function debugWebSocketConnection() {
   const hostname = window.location.hostname;
   const expectedUrl = hostname === 'localhost' || hostname === '127.0.0.1' 
     ? 'http://localhost:4000' 
-    : 'https://ws.bkcrm.devsible.com.br';
+    : 'https://websocket.bkcrm.devsible.com.br';
   
   console.table({
     'Hostname atual': hostname,
@@ -154,7 +154,7 @@ export function debugWebSocketConnection() {
   console.log('🌐 [WS Debug] Testando URLs disponíveis...');
   
   const urlsToTest = [
-    'https://ws.bkcrm.devsible.com.br/health',
+    'https://websocket.bkcrm.devsible.com.br/health',
     'https://bkcrm.devsible.com.br/health',
     'https://press-evolution-api.jhkbgs.easypanel.host/health'
   ];

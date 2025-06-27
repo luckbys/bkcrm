@@ -529,6 +529,10 @@ testEvolutionInstancesMigration()                 - Testa migração evolution_i
 checkEvolutionInstancesTable()                    - Verifica se tabela evolution_instances existe
 checkMigrationStatus()                            - Verifica status de todas as migrações
 
+🔍 Diagnóstico de Tickets:
+diagnosticoTickets()                              - 🆕 Diagnóstico completo de por que tickets não chegam
+corrigirDepartmentTickets()                       - 🆕 Corrige department_id dos tickets sem departamento
+
 📊 Verificação:
 devHelp()                                         - Mostra esta ajuda
 
@@ -1550,5 +1554,138 @@ export const configureLocalWebhook = () => {
   } catch (error) {
     console.error('❌ Erro ao verificar instâncias:', error);
     return [];
+  }
+};
+
+// === 🔍 DIAGNÓSTICO DE TICKETS ===
+// Diagnóstico rápido para verificar por que tickets não chegam
+(window as any).diagnosticoTickets = async () => {
+  console.log('🚀 DIAGNÓSTICO: Por que tickets não chegam no CRM?');
+  console.log('='.repeat(60));
+  
+  try {
+    // 1. VERIFICAR TICKETS NO BANCO
+    console.log('\n📊 1. VERIFICANDO TICKETS NO BANCO...');
+    
+    const { data: todosTickets, error: ticketsError } = await supabase
+      .from('tickets')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (ticketsError) {
+      console.log('❌ Erro ao buscar tickets:', ticketsError.message);
+      return;
+    }
+
+    console.log(`✅ Total de tickets no banco: ${todosTickets.length}`);
+    
+    // Verificar tickets WhatsApp
+    const whatsappTickets = todosTickets.filter(ticket => 
+      ticket.channel === 'whatsapp' || 
+      ticket.metadata?.created_from_whatsapp ||
+      ticket.metadata?.evolution_instance_name
+    );
+    
+    console.log(`📱 Tickets WhatsApp: ${whatsappTickets.length}`);
+    
+    if (whatsappTickets.length > 0) {
+      console.log('\n📝 Últimos tickets WhatsApp:');
+      whatsappTickets.slice(0, 5).forEach((ticket, index) => {
+        console.log(`  ${index + 1}. "${ticket.title}" (${ticket.created_at})`);
+        console.log(`     Departamento: ${ticket.department_id || 'NULL'}`);
+      });
+    } else {
+      console.log('⚠️ NENHUM TICKET WHATSAPP encontrado!');
+      console.log('💡 Webhook pode não estar funcionando');
+    }
+    
+    // 2. VERIFICAR USUÁRIO E FILTROS
+    console.log('\n👤 2. VERIFICANDO FILTROS DO USUÁRIO...');
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.log('❌ Usuário não autenticado');
+      return;
+    }
+    
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, role, department')
+      .eq('id', user.id)
+      .single();
+    
+    if (profile) {
+      const hasGlobalAccess = ['diretor', 'ceo', 'administrador'].includes(
+        profile.department?.toLowerCase() || ''
+      );
+      
+      console.log('✅ Usuário:', {
+        role: profile.role,
+        department: profile.department,
+        accessType: hasGlobalAccess ? 'GLOBAL' : 'FILTRADO'
+      });
+      
+      if (!hasGlobalAccess && profile.role !== 'customer') {
+        const ticketsSemDepartamento = todosTickets.filter(t => !t.department_id);
+        console.log(`⚠️ ${ticketsSemDepartamento.length} tickets SEM department_id`);
+        
+        if (ticketsSemDepartamento.length > 0) {
+          console.log('🔧 Execute: corrigirDepartmentTickets() para correção');
+        }
+      }
+    }
+    
+    // 3. TESTAR WEBHOOK
+    console.log('\n📡 3. TESTANDO WEBHOOK...');
+    try {
+      const response = await fetch('https://websocket.bkcrm.devsible.com.br/webhook/health');
+      if (response.ok) {
+        console.log('✅ Webhook funcionando');
+      } else {
+        console.log('❌ Webhook com problema');
+      }
+    } catch (error) {
+      console.log('❌ Webhook inacessível');
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro no diagnóstico:', error);
+  }
+};
+
+// Corrigir department_id dos tickets
+(window as any).corrigirDepartmentTickets = async () => {
+  console.log('🔧 Corrigindo department_id dos tickets...');
+  
+  try {
+    const { data: departments } = await supabase
+      .from('departments')
+      .select('id, name')
+      .limit(1);
+    
+    if (!departments || departments.length === 0) {
+      console.log('❌ Nenhum departamento encontrado');
+      return;
+    }
+    
+    const departmentId = departments[0].id;
+    console.log(`🎯 Usando departamento: ${departments[0].name}`);
+    
+    const { data, error } = await supabase
+      .from('tickets')
+      .update({ department_id: departmentId })
+      .is('department_id', null)
+      .select('id');
+    
+    if (error) {
+      console.log('❌ Erro:', error.message);
+    } else {
+      console.log(`✅ ${data.length} tickets atualizados`);
+      console.log('💡 Recarregue a página para ver os tickets');
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro:', error);
   }
 }; 
