@@ -27,7 +27,7 @@ const getEnvVar = (key: string) => {
   // Valores padrão para desenvolvimento local
   const defaults: Record<string, string> = {
     VITE_SUPABASE_URL: 'https://ajlgjjjvuglwgfnyqqvb.supabase.co',
-    VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.KKnJRh4rqWKV3WlHWNLcfccULlK2GGGQFtGHqOC_4zI'
+    VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU5NDQ5NDMsImV4cCI6MjA1MTUyMDk0M30.xbNH2mNzAYJzNOdwjLDBgF_-P8qMa3Fq2YEyHiV_j4U'
   };
   
   return defaults[key];
@@ -52,16 +52,20 @@ console.log('🔌 Configuração Realtime:', useRealtime ? 'Habilitado' : 'Desab
 
 // Configurações para Supabase com fallback para desabilitar Realtime
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  realtime: {
+  realtime: useRealtime ? {
     timeout: 20000,
-    heartbeatIntervalMs: 15000
-  },
+    heartbeatIntervalMs: 15000,
+    params: {
+      eventsPerSecond: 10
+    }
+  } : false,
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: localStorage,
-    storageKey: 'bkcrm-supabase-auth'
+    storageKey: 'bkcrm-supabase-auth',
+    flowType: 'pkce'
   },
   db: {
     schema: 'public'
