@@ -1195,6 +1195,52 @@ app.get('/webhook/health', (req, res) => {
   });
 });
 
+// ADDED_COMPAT_MESSAGES_UPSERT_ENDPOINTS_START
+// === ENDPOINTS DE COMPATIBILIDADE: MESSAGES_UPSERT ===
+// Alguns ambientes ainda enviam eventos diretamente para /webhook/messages-upsert ou
+// /webhook/evolution/messages-upsert.  Estes endpoints foram migrados do antigo servidor de
+// mensagens para cá, garantindo que o WebSocket assuma toda a responsabilidade de
+// processamento e persistência.
+
+/**
+ * Handler utilitário para processar payload MESSAGES_UPSERT vindos da Evolution API
+ * e responder de forma padronizada.
+ */
+async function handleMessagesUpsert(req, res) {
+  try {
+    const payload = req.body;
+
+    // Log para debug
+    console.log(`📥 [COMPAT] /messages-upsert recebido – keys: ${Object.keys(payload)}`);
+
+    // Reaproveita a função processMessage já existente
+    const result = await processMessage(payload);
+
+    return res.status(result.success ? 200 : 400).json({
+      received: true,
+      processed: result.success,
+      message: result.message,
+      ticketId: result.ticketId,
+      messageId: result.messageId,
+      broadcast: result.broadcast || false
+    });
+  } catch (error) {
+    console.error('❌ [COMPAT] Erro ao processar /messages-upsert:', error);
+    return res.status(500).json({
+      received: true,
+      processed: false,
+      error: error.message
+    });
+  }
+}
+
+// Compatibilidade com versões antigas que usam o prefixo /webhook/evolution/messages-upsert
+app.post('/webhook/evolution/messages-upsert', handleMessagesUpsert);
+
+// Compatibilidade com configurações que utilizam /webhook/messages-upsert diretamente
+app.post('/webhook/messages-upsert', handleMessagesUpsert);
+// ADDED_COMPAT_MESSAGES_UPSERT_ENDPOINTS_END
+
 // Iniciar servidor
 server.listen(PORT, () => {
   console.log(`🚀 Servidor Webhook Evolution + WebSocket rodando na porta ${PORT}`);
