@@ -44,7 +44,7 @@
     },
     "VITE_EVOLUTION_API_URL": {
       "description": "URL da Evolution API",
-      "value": "https://evochat.devsible.com.br/"
+      "value": "https://evochat.devsible.com.br"
     },
     "VITE_EVOLUTION_API_KEY": {
       "description": "API Key da Evolution API",

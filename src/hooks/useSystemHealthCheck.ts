@@ -32,7 +32,7 @@ export const useSystemHealthCheck = (interval = 30000) => {
       // Detectar URL base automaticamente
       const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:4000'
-        : 'https://ws.bkcrm.devsible.com.br';
+        : 'https://websocket.bkcrm.devsible.com.br';
 
       // Implementar timeout manual para fetch
       const controller = new AbortController();

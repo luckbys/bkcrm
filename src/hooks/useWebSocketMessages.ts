@@ -101,8 +101,8 @@ export const useWebSocketMessages = ({
 
   // 🔧 Configurações para Easypanel
   const WEBSOCKET_URL = process.env.VITE_WEBSOCKET_URL || (process.env.NODE_ENV === 'production' 
-    ? 'wss://ws.bkcrm.devsible.com.br'  // Usar wss:// em produção
-    : 'ws://localhost:4000');  // Usar ws:// em desenvolvimento
+    ? 'https://websocket.bkcrm.devsible.com.br'  // URL WebSocket dedicada
+    : 'http://localhost:4000');  // Desenvolvimento
     
   console.log(`🔗 [WS] Ambiente: ${process.env.NODE_ENV}, URL: ${WEBSOCKET_URL}`);
 

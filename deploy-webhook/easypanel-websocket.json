@@ -34,7 +34,7 @@
   },
   "domains": [
     {
-      "host": "ws.bkcrm.devsible.com.br",
+      "host": "websocket.bkcrm.devsible.com.br",
       "port": 4000,
       "https": true
     }

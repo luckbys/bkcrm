@@ -34,8 +34,8 @@ export function useRealtimeNotifications() {
   const { toast } = useToast();
 
   // Configuração do WebSocket
-  const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
-    ? 'https://ws.bkcrm.devsible.com.br'
+    const WEBSOCKET_URL = process.env.NODE_ENV === 'production'
+    ? 'https://websocket.bkcrm.devsible.com.br'
     : 'http://localhost:4000';
 
   // Conectar ao WebSocket

@@ -6,7 +6,7 @@ import { io } from 'socket.io-client';
 export const testProductionWebSocket = () => {
   console.log('\n🧪 ===== TESTE CONEXÃO WEBSOCKET PRODUÇÃO =====\n');
   
-  const productionURL = 'https://ws.bkcrm.devsible.com.br';
+  const productionURL = 'https://websocket.bkcrm.devsible.com.br';
   console.log(`🔗 Testando conexão com: ${productionURL}`);
   
   const socket = io(productionURL, {
@@ -103,12 +103,12 @@ export const debugWebSocketConfig = () => {
   console.log('🌐 Frontend URL:', window.location.origin);
   console.log('🌐 Frontend hostname:', window.location.hostname);
   console.log('🌐 Frontend port:', window.location.port);
-  console.log('🔗 WebSocket URL configurada: https://ws.bkcrm.devsible.com.br');
+  console.log('🔗 WebSocket URL configurada: https://websocket.bkcrm.devsible.com.br');
   console.log('🚀 Socket.IO client version:', 'v4');
   
   // Teste de CORS
   console.log('\n🧪 Testando CORS...');
-  fetch('https://ws.bkcrm.devsible.com.br/webhook/health', {
+  fetch('https://websocket.bkcrm.devsible.com.br/webhook/health', {
     method: 'GET',
     headers: {
       'Origin': window.location.origin
