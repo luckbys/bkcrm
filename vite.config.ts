@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-            'supabase-vendor': ['@supabase/supabase-js', '@supabase/gotrue-js'],
+            'supabase-vendor': ['@supabase/supabase-js'],
             'ui-vendor': ['sonner', '@tanstack/react-query', 'zustand', 'next-themes'],
             'radix-vendor': [
               '@radix-ui/react-dialog',

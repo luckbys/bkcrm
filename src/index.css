@@ -1,13 +1,11 @@
+/* === IMPORTS CSS - DEVEM VIR PRIMEIRO === */
+@import './styles/chat-animations.css';
+@import './styles/qr-modal-fixes.css';
+
 /* === CONFIGURAÇÕES TAILWIND CSS === */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* 🎨 Importar estilos do chat - DEVE vir APÓS Tailwind */
-@import './styles/chat-animations.css';
-
-/* 🔧 Importar correções do modal QR Code */
-@import './styles/qr-modal-fixes.css';
 
 /* === CORREÇÕES CRÍTICAS PARA MODAIS TRANSPARENTES === */
 
