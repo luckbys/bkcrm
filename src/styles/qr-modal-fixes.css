@@ -1,0 +1,242 @@
+/* Correções específicas para Modal QR Code WhatsApp */
+
+/* === MODAL CONTAINER === */
+[data-radix-dialog-content] {
+  max-width: min(95vw, 580px) !important;
+  max-height: 95vh !important;
+  overflow-y: auto !important;
+  position: relative !important;
+}
+
+/* === QR CODE CONTAINER === */
+.qr-code-container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1.5rem !important;
+  min-height: 320px !important;
+  position: relative !important;
+}
+
+/* === LOADING STATE === */
+.qr-loading-container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 280px !important;
+  gap: 12px !important;
+}
+
+.qr-loading-container .animate-spin {
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* === QR CODE IMAGE === */
+.qr-image-container {
+  background: white !important;
+  padding: 16px !important;
+  border-radius: 12px !important;
+  border: 2px solid #e5e7eb !important;
+  display: inline-block !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+img[alt="QR Code WhatsApp"] {
+  width: 256px !important;
+  height: 256px !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  border-radius: 6px !important;
+  background: white !important;
+  display: block !important;
+  margin: 0 auto !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
+/* === ERROR STATE === */
+.qr-error-container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 280px !important;
+  color: #ef4444 !important;
+  text-align: center !important;
+  padding: 2rem !important;
+}
+
+.qr-error-container svg {
+  color: #ef4444 !important;
+  margin-bottom: 1rem !important;
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 640px) {
+  [data-radix-dialog-content] {
+    max-width: 95vw !important;
+    margin: 1rem !important;
+  }
+  
+  .qr-code-container {
+    padding: 1rem !important;
+    min-height: 280px !important;
+  }
+  
+  .qr-image-container {
+    padding: 12px !important;
+  }
+  
+  img[alt="QR Code WhatsApp"] {
+    width: 220px !important;
+    height: 220px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  img[alt="QR Code WhatsApp"] {
+    width: 180px !important;
+    height: 180px !important;
+  }
+  
+  .qr-code-container {
+    min-height: 240px !important;
+  }
+}
+
+/* === OVERLAY IMPROVEMENTS === */
+[data-radix-dialog-overlay] {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* === MODAL ANIMATIONS === */
+[data-radix-dialog-content] {
+  animation: modal-enter 0.3s ease-out !important;
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* === BUTTON IMPROVEMENTS === */
+[data-radix-dialog-content] button {
+  transition: all 0.2s ease !important;
+}
+
+[data-radix-dialog-content] button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* === SCROLL IMPROVEMENTS === */
+[data-radix-dialog-content]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-radix-dialog-content]::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+[data-radix-dialog-content]::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+[data-radix-dialog-content]::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* === FOCUS IMPROVEMENTS === */
+[data-radix-dialog-content] {
+  outline: none !important;
+  border: none !important;
+}
+
+[data-radix-dialog-content]:focus-visible {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
+}
+
+/* === LOADING DOTS ANIMATION === */
+.loading-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.loading-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #3b82f6;
+  animation: loading-dot 1.4s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+.loading-dots span:nth-child(3) { animation-delay: 0s; }
+
+@keyframes loading-dot {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* === HIGH CONTRAST MODE === */
+@media (prefers-contrast: high) {
+  .qr-image-container {
+    border: 3px solid #000 !important;
+  }
+  
+  img[alt="QR Code WhatsApp"] {
+    border: 1px solid #000 !important;
+  }
+}
+
+/* === REDUCED MOTION === */
+@media (prefers-reduced-motion: reduce) {
+  .qr-loading-container .animate-spin {
+    animation: none !important;
+  }
+  
+  [data-radix-dialog-content] {
+    animation: none !important;
+  }
+  
+  [data-radix-dialog-content] button:hover {
+    transform: none !important;
+  }
+}
+
+/* === DARK MODE SUPPORT === */
+@media (prefers-color-scheme: dark) {
+  .qr-image-container {
+    background: #1f2937 !important;
+    border-color: #374151 !important;
+  }
+  
+  img[alt="QR Code WhatsApp"] {
+    background: white !important; /* QR Code sempre branco */
+  }
+} 

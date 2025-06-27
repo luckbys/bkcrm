@@ -412,21 +412,47 @@ export const DepartmentEvolutionManager = ({
       
       let errorMessage = error.message;
       let showRetryOption = false;
+      let diagnosticInfo = '';
       
+      // Diagnóstico detalhado do erro
       if (error.message.includes('não existe') || error.message.includes('404')) {
-        errorMessage = `Instância "${instanceName}" não encontrada. Verifique se foi criada corretamente.`;
+        errorMessage = `Instância "${instanceName}" não encontrada`;
+        diagnosticInfo = 'A instância pode não ter sido criada na Evolution API ou foi removida.';
         showRetryOption = true;
       } else if (error.message.includes('já está conectada')) {
-        errorMessage = 'Instância já está conectada. Desconecte primeiro se precisar gerar novo QR Code.';
+        errorMessage = 'Instância já conectada';
+        diagnosticInfo = 'Desconecte primeiro ou verifique se o WhatsApp já está vinculado.';
       } else if (error.message.includes('estado inválido')) {
-        errorMessage = 'Instância em estado inválido. Tente reiniciar a conexão.';
+        errorMessage = 'Estado da instância inválido';
+        diagnosticInfo = 'A instância pode estar em estado inconsistente. Tente reiniciar.';
+        showRetryOption = true;
+      } else if (error.message.includes('timeout') || error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Falha na conexão com Evolution API';
+        diagnosticInfo = 'Verifique se a Evolution API está online e acessível.';
+        showRetryOption = true;
+      } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        errorMessage = 'Credenciais inválidas';
+        diagnosticInfo = 'Verifique se a API Key está correta nas configurações.';
+      } else if (error.message.includes('429')) {
+        errorMessage = 'Muitas tentativas';
+        diagnosticInfo = 'Aguarde alguns momentos antes de tentar novamente.';
         showRetryOption = true;
       }
       
+      console.group('🔍 DIAGNÓSTICO DO ERRO QR CODE');
+      console.log('📊 Instância:', instanceName);
+      console.log('❌ Erro original:', error.message);
+      console.log('📝 Diagnóstico:', diagnosticInfo);
+      console.log('🔧 Retry disponível:', showRetryOption);
+      console.log('🌐 Evolution API URL:', import.meta.env.VITE_EVOLUTION_API_URL);
+      console.log('🔑 API Key configurada:', !!import.meta.env.VITE_EVOLUTION_API_KEY);
+      console.groupEnd();
+      
       toast({
         title: "❌ Erro ao gerar QR Code",
-        description: errorMessage,
+        description: `${errorMessage}. ${diagnosticInfo}`,
         variant: "destructive",
+        duration: showRetryOption ? 8000 : 5000,
         action: showRetryOption ? (
           <Button 
             size="sm" 
@@ -1196,43 +1222,70 @@ export const DepartmentEvolutionManager = ({
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-6">
+          <div className="py-6 qr-code-container">
             {isQRLoading ? (
-              <div className="flex flex-col items-center justify-center space-y-4 h-64">
+              <div className="flex flex-col items-center justify-center space-y-4 h-64 qr-loading-container">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                 <p className="text-gray-600">Gerando QR Code...</p>
+                <div className="text-xs text-gray-500">
+                  Conectando com a Evolution API...
+                </div>
               </div>
             ) : currentQRCode ? (
               <div className="text-center space-y-4">
-                <div className="bg-white p-4 rounded-lg border-2 border-gray-200 inline-block">
+                <div className="bg-white p-4 rounded-lg border-2 border-gray-200 inline-block qr-image-container shadow-lg">
                   <img 
                     src={currentQRCode} 
                     alt="QR Code WhatsApp" 
-                    className="w-64 h-64 mx-auto"
+                    className="w-64 h-64 mx-auto object-contain rounded border"
+                    style={{
+                      maxWidth: '256px',
+                      maxHeight: '256px',
+                      background: 'white'
+                    }}
+                    onError={(e) => {
+                      console.error('❌ Erro ao carregar imagem do QR Code');
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    onLoad={() => {
+                      console.log('✅ QR Code carregado com sucesso');
+                    }}
                   />
                 </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600">
-                    1. Abra o WhatsApp no seu celular
+                <div className="space-y-2 max-w-sm mx-auto">
+                  <p className="text-sm text-gray-600 font-medium">
+                    📱 Como conectar:
                   </p>
-                  <p className="text-sm text-gray-600">
-                    2. Vá em <strong>Configurações → Aparelhos conectados</strong>
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    3. Toque em <strong>"Conectar um aparelho"</strong> e escaneie o código
-                  </p>
+                  <div className="text-xs text-gray-600 space-y-1 text-left bg-gray-50 p-3 rounded">
+                    <p><strong>1.</strong> Abra o WhatsApp no seu celular</p>
+                    <p><strong>2.</strong> Vá em <strong>Configurações → Aparelhos conectados</strong></p>
+                    <p><strong>3.</strong> Toque em <strong>"Conectar um aparelho"</strong></p>
+                    <p><strong>4.</strong> Escaneie este código QR</p>
+                  </div>
                 </div>
                 
                 {qrRefreshCount > 0 && (
-                  <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                    QR Code atualizado {qrRefreshCount} vez(es)
+                  <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                    🔄 QR Code atualizado {qrRefreshCount} vez(es)
                   </div>
                 )}
+                
+                <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded border border-blue-200">
+                  ⏰ O QR Code expira em alguns minutos. Clique em "Atualizar" se necessário.
+                </div>
               </div>
             ) : (
-              <div className="text-center text-gray-600">
-                <XCircle className="w-12 h-12 mx-auto mb-2 text-red-500" />
-                <p>Erro ao gerar QR Code</p>
+              <div className="text-center text-gray-600 qr-error-container">
+                <XCircle className="w-12 h-12 mx-auto mb-3 text-red-500" />
+                <p className="font-medium text-red-600 mb-2">Erro ao gerar QR Code</p>
+                <div className="text-xs text-gray-500 max-w-xs mx-auto bg-red-50 p-3 rounded border border-red-200">
+                  <p>Possíveis causas:</p>
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>Evolution API offline</li>
+                    <li>Instância não encontrada</li>
+                    <li>Problemas de rede</li>
+                  </ul>
+                </div>
               </div>
             )}
           </div>

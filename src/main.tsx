@@ -198,6 +198,12 @@ import './utils/test-nunmsg-integration'
 // 🚀 Importar teste da correção do realtime
 import './utils/test-realtime-fix'
 
+// 🔧 Importar correções de QR Code e CSS
+import './utils/fix-qr-code-and-css'
+
+// 🔍 Importar verificação da Evolution API
+import './utils/verify-evolution-config'
+
 // 🔧 Importar sistema de correção de mensagens de chat
 import './utils/fix-chat-messages-debug'
 

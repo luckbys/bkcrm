@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  webhook:
+    build:
+      context: .
+      dockerfile: Dockerfile.webhook
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host
+      - EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
+      - SUPABASE_URL=https://ajlgjjjvuglwgfnyqqvb.supabase.co
+      - SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTU0MzE2NiwiZXhwIjoyMDY1MTE5MTY2fQ.dfIdvOZijcwmRW-6yAchp0CVPIytCKMAjezJxz5YXCU
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/webhook/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s 
