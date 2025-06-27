@@ -275,6 +275,7 @@ console.log('✅ [Main] Sistema de correção de modais totalmente ativo e monit
 // 🔧 Importar diagnóstico WebSocket para debug em produção
 import './utils/websocket-production-debug.ts'
 import './utils/test-websocket-final.ts'
+import './utils/supabase-debug-keys.ts'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
