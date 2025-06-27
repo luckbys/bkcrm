@@ -22,7 +22,7 @@ interface SendMessageResponse {
 // Detectar ambiente automaticamente
 const WEBHOOK_BASE_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:4000'  // Local
-  : 'https://bkcrm.devsible.com.br'; // Produção
+  : 'https://websocketbkcrm.devsible.com.br'; // Produção
 
 export const evolutionService = {
   /**
