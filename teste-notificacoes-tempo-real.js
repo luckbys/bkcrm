@@ -103,7 +103,7 @@ function testWebSocketConnection() {
   
   const WEBSOCKET_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:4000' 
-    : 'https://ws.bkcrm.devsible.com.br';
+    : 'https://websocket.bkcrm.devsible.com.br';
   
   const socket = io(WEBSOCKET_URL, {
     transports: ['websocket', 'polling']

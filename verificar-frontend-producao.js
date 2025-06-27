@@ -19,8 +19,8 @@ const chatStoreContent = fs.readFileSync(chatStorePath, 'utf8');
 const useRealtimeContent = fs.existsSync(useRealtimePath) ? fs.readFileSync(useRealtimePath, 'utf8') : '';
 
 // Verificar URLs de produção
-const hasProductionURLs = chatStoreContent.includes('ws.bkcrm.devsible.com.br') || 
-                         chatStoreContent.includes('https://ws.bkcrm.devsible.com.br');
+const hasProductionURLs = chatStoreContent.includes('websocket.bkcrm.devsible.com.br') || 
+                         chatStoreContent.includes('https://websocket.bkcrm.devsible.com.br');
 
 const hasLocalURLs = chatStoreContent.includes('localhost:4000') || 
                     chatStoreContent.includes('ws://localhost:4000');

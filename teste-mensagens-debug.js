@@ -258,7 +258,7 @@ window.debugChat = {
     const urls = [
       'http://localhost:4000/webhook/health',
       'https://bkcrm.devsible.com.br/webhook/health',
-      'https://ws.bkcrm.devsible.com.br/webhook/health'
+      'https://websocket.bkcrm.devsible.com.br/webhook/health'
     ];
     
     for (const url of urls) {
