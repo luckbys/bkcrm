@@ -20,7 +20,7 @@ const io = new Server(server, {
 });
 
 // Configurações das APIs
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evochat.devsible.com.br';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_WS_URL = EVOLUTION_API_URL.replace('https://', 'wss://').replace('http://', 'ws://');
 const INSTANCE_NAME = 'atendimento-ao-cliente-suporte';
@@ -33,7 +33,7 @@ console.log(`📱 Instância: ${INSTANCE_NAME}`);
 // Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL || 'https://ixqcgkqzlxjhfwuzsuvv.supabase.co',
-  process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml4cWNna3F6bHhqaGZ3dXpzdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ0NjgzMjQsImV4cCI6MjA1MDA0NDMyNH0.5z6Qm8DJOuVPkGHqJJHn4dTFCqMqr_5PxmJNaJLHGzY'
+  process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU'
 );
 
 // Middlewares

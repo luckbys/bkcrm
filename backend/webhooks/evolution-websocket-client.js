@@ -5,7 +5,7 @@ const { io } = require('socket.io-client');
 const fetch = require('node-fetch');
 
 // Configurações da Evolution API
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evochat.devsible.com.br';
 const EVOLUTION_WS_URL = EVOLUTION_API_URL.replace('https://', 'wss://').replace('http://', 'ws://');
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const INSTANCE_NAME = 'atendimento-ao-cliente-suporte';
