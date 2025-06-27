@@ -32,7 +32,7 @@ interface ChatState {
 // 🔧 URL DINÂMICA: Detectar ambiente automaticamente
 const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
   ? 'http://localhost:4000' 
-  : 'https://ws.bkcrm.devsible.com.br';
+  : 'https://websocket.bkcrm.devsible.com.br'; // ⭐ Novo domínio WebSocket
 
 // 🔧 UUID FIXO PARA SISTEMA - Resolve erro "current-user" invalid UUID
 const SYSTEM_USER_UUID = '00000000-0000-0000-0000-000000000001';
@@ -415,7 +415,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           senderName: 'Atendente',
           sender: 'agent',
           isInternal: false,
-          timestamp: new Date(Date.now() - 60000)
+          timestamp: new Date(Date.now() - 60000),
+          type: 'text',
+          metadata: {}
         },
         {
           id: `mock-2-${ticketId}`,
@@ -424,7 +426,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           senderName: 'Cliente',
           sender: 'client',
           isInternal: false,
-          timestamp: new Date(Date.now() - 30000)
+          timestamp: new Date(Date.now() - 30000),
+          type: 'text',
+          metadata: {}
         },
         {
           id: `mock-3-${ticketId}`,
@@ -433,7 +437,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           senderName: 'Supervisor',
           sender: 'agent',
           isInternal: true,
-          timestamp: new Date(Date.now() - 15000)
+          timestamp: new Date(Date.now() - 15000),
+          type: 'text',
+          metadata: {}
         }
       ];
 
