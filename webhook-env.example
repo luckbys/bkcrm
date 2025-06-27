@@ -9,7 +9,7 @@ PORT=4000
 
 # Supabase Database
 SUPABASE_URL=https://sua-instancia.supabase.co
-SUPABASE_SERVICE_KEY=sua_service_key_aqui
+SUPABASE_ANON_KEY=sua_service_key_aqui
 
 # Evolution API
 EVOLUTION_API_URL=https://sua-evolution-api.com

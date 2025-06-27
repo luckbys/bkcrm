@@ -8,7 +8,7 @@
     "NODE_ENV": "production",
     "WEBHOOK_PORT": "4000",
     "BASE_URL": "https://bkcrm.devsible.com.br",
-    "EVOLUTION_API_URL": "https://press-evolution-api.jhkbgs.easypanel.host",
+    "EVOLUTION_API_URL": "https://evochat.devsible.com.br/",
     "EVOLUTION_API_KEY": "429683C4C977415CAAFCCE10F7D57E11",
     "SUPABASE_URL": "https://ajlgjjjvuglwgfnyqqvb.supabase.co",
     "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU"
