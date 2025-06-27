@@ -64,7 +64,8 @@ location /supabase/ {
 O arquivo `env.production` configura:
 ```env
 VITE_SUPABASE_URL=https://bkcrm.devsible.com.br/supabase
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU5NDQ5NDMsImV4cCI6MjA1MTUyMDk0M30.xbNH2mNzAYJzNOdwjLDBgF_-P8qMa3Fq2YEyHiV_j4U
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU
+
 ```
 
 ## 🧪 Testes
@@ -90,7 +91,8 @@ curl -H "Origin: https://bkcrm.devsible.com.br" \
 curl -X POST https://bkcrm.devsible.com.br/supabase/auth/v1/token \
   -H "Origin: https://bkcrm.devsible.com.br" \
   -H "Content-Type: application/json" \
-  -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU5NDQ5NDMsImV4cCI6MjA1MTUyMDk0M30.xbNH2mNzAYJzNOdwjLDBgF_-P8qMa3Fq2YEyHiV_j4U" \
+  -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU
+" \
   -d '{
     "email": "seu-email@exemplo.com",
     "password": "sua-senha",
