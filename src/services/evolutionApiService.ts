@@ -16,8 +16,9 @@ class EvolutionApiManager {
       'apikey': API_KEY,
       'Content-Type': 'application/json'
     },
-    timeout: 30000
-    // 🔧 SSL será tratado pelo browser automaticamente
+    timeout: 30000,
+    // Ignorar erros de certificado em desenvolvimento
+    httpsAgent: import.meta.env.DEV ? new (require('https').Agent)({ rejectUnauthorized: false }) : undefined
   });
 
   private requestQueue: Array<() => Promise<any>> = [];

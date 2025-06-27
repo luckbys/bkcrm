@@ -57,6 +57,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     heartbeatIntervalMs: 15000,
     params: {
       eventsPerSecond: 10
+    },
+    headers: {
+      'X-Client-Info': 'bkcrm-client',
+      'User-Agent': 'BKCRM/1.0.0'
     }
   } : false,
   auth: {
@@ -69,12 +73,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   db: {
     schema: 'public'
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'bkcrm-client',
-      'User-Agent': 'BKCRM/1.0.0'
-    }
   }
 });
 
