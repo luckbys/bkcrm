@@ -32,7 +32,7 @@ interface ChatState {
 // 🔧 URL DINÂMICA: Detectar ambiente automaticamente
 const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
   ? 'http://localhost:4000' 
-  : 'https://websocket.bkcrm.devsible.com.br'; // ⭐ Novo domínio WebSocket
+  : 'https://bkcrm.devsible.com.br'; // ⭐ URL principal com proxy nginx
 
 // 🔧 UUID FIXO PARA SISTEMA - Resolve erro "current-user" invalid UUID
 const SYSTEM_USER_UUID = '00000000-0000-0000-0000-000000000001';

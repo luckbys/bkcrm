@@ -16,12 +16,9 @@ class EvolutionApiManager {
       'apikey': API_KEY,
       'Content-Type': 'application/json'
     },
-    timeout: 30000,
-    // Configuração SSL mais segura para produção
-    httpsAgent: new (require('https').Agent)({
-      rejectUnauthorized: false, // Necessário para certificados auto-assinados
-      checkServerIdentity: () => undefined // Bypass hostname verification
-    })
+    timeout: 30000
+    // Nota: httpsAgent não é suportado no navegador
+    // SSL é tratado automaticamente pelo navegador
   });
 
   private requestQueue: Array<() => Promise<any>> = [];
@@ -38,7 +35,7 @@ class EvolutionApiManager {
     console.log('🔧 Evolution API configurada:', {
       url: EVOLUTION_API_URL,
       hasApiKey: !!API_KEY,
-      sslVerification: false
+      environment: 'browser'
     });
   }
 

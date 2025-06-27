@@ -272,6 +272,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 console.log('✅ [Main] Sistema de correção de modais totalmente ativo e monitorando!');
 
+// 🔧 Importar diagnóstico WebSocket para debug em produção
+import './utils/websocket-production-debug.ts'
+import './utils/test-websocket-final.ts'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
