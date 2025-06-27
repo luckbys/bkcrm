@@ -27,7 +27,7 @@ const getEnvVar = (key: string) => {
   // Valores padrão para desenvolvimento local
   const defaults: Record<string, string> = {
     VITE_SUPABASE_URL: 'https://ajlgjjjvuglwgfnyqqvb.supabase.co',
-    VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.KKnJRh4rqWKV3WlHWNLcfccULlK2GGGQFtGHqOC_4zI'
+    VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ5MjMzOTIsImV4cCI6MjA1MDQ5OTM5Mn0.D_kQOCkdeGFmam-htVNa2C0M5l1uKxlX9eCcmf5fE-8'
   };
   
   return defaults[key];
@@ -35,22 +35,25 @@ const getEnvVar = (key: string) => {
 
 const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+const enableRealtime = getEnvVar('VITE_ENABLE_REALTIME') !== 'false';
+const debugMode = getEnvVar('VITE_DEBUG_MODE') === 'true';
 
-console.log('Variáveis de ambiente do Supabase:', {
+console.log('🔧 Configuração Supabase:', {
   url: supabaseUrl,
-  hasAnonKey: !!supabaseAnonKey
+  hasAnonKey: !!supabaseAnonKey,
+  anonKeyLength: supabaseAnonKey?.length || 0,
+  realtimeEnabled: enableRealtime,
+  debugMode: debugMode,
+  source: window.env ? 'window.env' : import.meta.env.VITE_SUPABASE_URL ? 'import.meta.env' : 'defaults'
 });
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and Anon Key são necessários.');
+  const error = 'Supabase URL e Anon Key são necessários.';
+  console.error('❌', error);
+  throw new Error(error);
 }
 
-// Verificar se deve usar Realtime (pode ser desabilitado via variável de ambiente)
-const useRealtime = import.meta.env.VITE_ENABLE_REALTIME !== 'false';
-
-console.log('🔌 Configuração Realtime:', useRealtime ? 'Habilitado' : 'Desabilitado (Fallback)');
-
-// Configurações para Supabase com fallback para desabilitar Realtime
+// Configurações para Supabase
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -59,9 +62,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: localStorage,
     storageKey: 'bkcrm-supabase-auth',
     flowType: 'pkce',
-    debug: true // Enable debug mode temporarily to help diagnose issues
+    debug: debugMode
   },
-  realtime: useRealtime ? {
+  realtime: enableRealtime ? {
     timeout: 20000,
     heartbeatIntervalMs: 15000,
     params: {
@@ -71,34 +74,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       'X-Client-Info': 'bkcrm-client',
       'User-Agent': 'BKCRM/1.0.0'
     }
-  } : {
-    timeout: 0,
-    heartbeatIntervalMs: 0,
-    params: {
-      eventsPerSecond: 0
-    }
-  },
+  } : undefined,
   global: {
     headers: {
-      'X-Client-Info': 'bkcrm-client'
+      'X-Client-Info': 'bkcrm-client',
+      'apikey': supabaseAnonKey
     }
-  }
-});
-
-// Add authentication state listener
-supabase.auth.onAuthStateChange((event, session) => {
-  console.log('🔐 Auth state changed:', event, session?.user?.email);
-  if (event === 'SIGNED_IN') {
-    console.log('✅ User signed in successfully');
-  } else if (event === 'SIGNED_OUT') {
-    console.log('👋 User signed out');
-  } else if (event === 'TOKEN_REFRESHED') {
-    console.log('🔄 Auth token refreshed');
   }
 });
 
 // Conectar ao Realtime apenas se habilitado
-if (useRealtime) {
+if (enableRealtime) {
   let connectionAttempts = 0;
   const maxAttempts = 3;
 
@@ -122,7 +108,6 @@ if (useRealtime) {
             setTimeout(connectRealtime, 5000);
           } else {
             console.log('📴 Máximo de tentativas atingido - Sistema funcionará sem tempo real');
-            // Desabilitar tentativas futuras
             (window as any).realtimeDisabled = true;
           }
         }
@@ -140,83 +125,59 @@ if (useRealtime) {
   console.log('📴 Realtime desabilitado - Sistema funcionará com polling manual');
 }
 
-// Função de diagnóstico global para debug
-(window as any).diagnoseSupabaseConnection = async () => {
-  const status = {
-    url: supabaseUrl,
-    realtimeEnabled: useRealtime,
-    isConnected: useRealtime ? (supabase.realtime.isConnected?.() || false) : false,
-    user: await supabase.auth.getUser(),
-    timestamp: new Date().toISOString()
-  };
+// Add authentication state listener com logs detalhados
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('🔐 Auth state changed:', event, {
+    hasSession: !!session,
+    userEmail: session?.user?.email,
+    accessToken: session?.access_token ? 'presente' : 'ausente',
+    refreshToken: session?.refresh_token ? 'presente' : 'ausente'
+  });
   
-  console.log('🔍 Diagnóstico Supabase:', status);
-  return status;
-};
-
-// Função para alternar Realtime dinamicamente
-(window as any).toggleRealtime = (enable: boolean) => {
-  if (enable && !useRealtime) {
-    console.log('🔄 Tentando reabilitar Realtime...');
-    supabase.realtime.connect();
-  } else if (!enable && useRealtime) {
-    console.log('📴 Desabilitando Realtime...');
-    supabase.realtime.disconnect();
+  if (event === 'SIGNED_IN') {
+    console.log('✅ User signed in successfully:', session?.user?.email);
+  } else if (event === 'SIGNED_OUT') {
+    console.log('👋 User signed out');
+  } else if (event === 'TOKEN_REFRESHED') {
+    console.log('🔄 Auth token refreshed');
+  } else if (event === 'INITIAL_SESSION') {
+    console.log('🔑 Initial session:', session ? 'encontrada' : 'não encontrada');
   }
-  
-  (window as any).realtimeManuallyDisabled = !enable;
-  console.log(`🔌 Realtime ${enable ? 'habilitado' : 'desabilitado'} manualmente`);
-};
+});
 
-// Tipos para as tabelas do Supabase
-export interface Profile {
-  id: string;
-  created_at: string;
-  email: string;
-  name: string;
-  avatar_url?: string;
-  role: 'admin' | 'agent' | 'customer';
-}
-
-export interface Ticket {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  title: string;
-  description: string;
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  customer_id: string;
-  agent_id?: string;
-  department: string;
-  // Campos para tipos de canal
-  client_phone?: string;
-  channel: 'email' | 'phone' | 'chat' | 'web';
-  metadata?: Record<string, any>;
-}
-
-export interface Message {
-  id: string;
-  created_at: string;
-  ticket_id: string;
-  sender_id: string;
-  content: string;
-  type: 'text' | 'image' | 'file';
-  file_url?: string;
-  is_internal: boolean;
-}
-
-// Funções auxiliares para autenticação
+// Funções auxiliares para autenticação com melhor tratamento de erros
 export const signIn = async (email: string, password: string) => {
-  console.log('🔐 Attempting login for:', email);
+  console.log('🔐 Tentando fazer login com:', { email });
+  
   try {
+    // Verificar se o cliente Supabase está configurado corretamente
+    console.log('📋 Configuração do cliente:', {
+      url: supabaseUrl,
+      hasKey: !!supabaseAnonKey,
+      keyStart: supabaseAnonKey?.substring(0, 20) + '...',
+    });
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     
+    console.log('📋 Resposta do login:', { data: !!data, error: error?.message });
+    
     if (error) {
-      console.error('❌ Login error:', error.message);
+      console.error('❌ Erro no login:', error.message);
+      
+      // Tratar diferentes tipos de erro
+      if (error.message.includes('Invalid API key')) {
+        throw new Error('Chave da API do Supabase inválida. Verifique a configuração no dashboard do Supabase.');
+      }
+      if (error.message.includes('Invalid login credentials')) {
+        throw new Error('Email ou senha incorretos.');
+      }
+      if (error.message.includes('Email not confirmed')) {
+        throw new Error('Email não confirmado. Verifique seu email e clique no link de confirmação.');
+      }
+      
       throw error;
     }
     
@@ -241,7 +202,6 @@ export const signOut = async () => {
   return { error };
 };
 
-// Funções para gerenciamento de perfis
 export const getProfile = async (userId: string) => {
   const { data, error } = await supabase
     .from('profiles')
@@ -259,13 +219,11 @@ export const updateProfile = async (userId: string, updates: Partial<Profile>) =
   return { data, error };
 };
 
-// Funções para gerenciamento de tickets
 export const createTicket = async (ticket: Omit<Ticket, 'id' | 'created_at' | 'updated_at'>) => {
   const { data, error } = await supabase
     .from('tickets')
     .insert([ticket])
-    .select()
-    .single();
+    .select();
   return { data, error };
 };
 
@@ -274,8 +232,7 @@ export const updateTicket = async (ticketId: string, updates: Partial<Ticket>) =
     .from('tickets')
     .update(updates)
     .eq('id', ticketId)
-    .select()
-    .single();
+    .select();
   return { data, error };
 };
 
@@ -284,7 +241,7 @@ export const getTickets = async (filters?: Partial<Ticket>) => {
   
   if (filters) {
     Object.entries(filters).forEach(([key, value]) => {
-      if (value) {
+      if (value !== undefined) {
         query = query.eq(key, value);
       }
     });
@@ -294,13 +251,11 @@ export const getTickets = async (filters?: Partial<Ticket>) => {
   return { data, error };
 };
 
-// Funções para gerenciamento de mensagens
 export const createMessage = async (message: Omit<Message, 'id' | 'created_at'>) => {
   const { data, error } = await supabase
     .from('messages')
     .insert([message])
-    .select()
-    .single();
+    .select();
   return { data, error };
 };
 
@@ -313,7 +268,6 @@ export const getMessages = async (ticketId: string) => {
   return { data, error };
 };
 
-// Função para upload de arquivos
 export const uploadFile = async (bucket: string, path: string, file: File) => {
   const { data, error } = await supabase.storage
     .from(bucket)
@@ -321,10 +275,93 @@ export const uploadFile = async (bucket: string, path: string, file: File) => {
   return { data, error };
 };
 
-// Função para download de arquivos
 export const getFileUrl = (bucket: string, path: string) => {
-  const { data } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(path);
-  return data.publicUrl;
-}; 
+  return supabase.storage.from(bucket).getPublicUrl(path);
+};
+
+// Função de diagnóstico melhorada
+(window as any).diagnoseSupabaseConnection = async () => {
+  const status = {
+    config: {
+      url: supabaseUrl,
+      hasAnonKey: !!supabaseAnonKey,
+      anonKeyLength: supabaseAnonKey?.length || 0,
+      realtimeEnabled: enableRealtime,
+      debugMode: debugMode
+    },
+    realtime: {
+      isConnected: enableRealtime ? (supabase.realtime.isConnected?.() || false) : 'disabled'
+    },
+    auth: await supabase.auth.getUser(),
+    session: await supabase.auth.getSession(),
+    timestamp: new Date().toISOString()
+  };
+  
+  console.log('🔍 Diagnóstico Supabase completo:', status);
+  return status;
+};
+
+// Função para testar conexão básica
+(window as any).testSupabaseConnection = async () => {
+  try {
+    console.log('🧪 Testando conexão com Supabase...');
+    
+    // Teste 1: Verificar se consegue acessar o endpoint de health
+    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`
+      }
+    });
+    
+    console.log('📡 Status da resposta:', response.status, response.statusText);
+    
+    if (response.ok) {
+      console.log('✅ Conexão com Supabase funcionando');
+      return { success: true, status: response.status };
+    } else {
+      console.error('❌ Falha na conexão:', response.status, response.statusText);
+      return { success: false, status: response.status, error: response.statusText };
+    }
+  } catch (error: any) {
+    console.error('❌ Erro no teste de conexão:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// Tipos para as tabelas do Supabase
+export interface Profile {
+  id: string;
+  created_at: string;
+  email: string;
+  name: string;
+  avatar_url?: string;
+  role: 'admin' | 'agent' | 'customer';
+}
+
+export interface Ticket {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  title: string;
+  description: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  customer_id: string;
+  agent_id?: string;
+  department: string;
+  client_phone?: string;
+  channel: 'email' | 'phone' | 'chat' | 'web';
+  metadata?: Record<string, any>;
+}
+
+export interface Message {
+  id: string;
+  created_at: string;
+  ticket_id: string;
+  sender_id: string;
+  content: string;
+  type: 'text' | 'image' | 'file';
+  file_url?: string;
+  is_internal: boolean;
+} 
