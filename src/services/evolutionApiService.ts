@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
 // Configurações da Evolution API
-const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
+const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://evochat.devsible.com.br';
 const API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
 // Rate limiting e retry configuration
