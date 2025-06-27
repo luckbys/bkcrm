@@ -15,7 +15,7 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'default_secret';
 // Configuração de CORS para produção
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['https://bkcrm.devsible.com.br', 'https://press-evolution-api.jhkbgs.easypanel.host'];
+  : ['https://bkcrm.devsible.com.br', 'https://evochat.devsible.com.br'];
 
 const corsOptions = {
   origin: function (origin, callback) {

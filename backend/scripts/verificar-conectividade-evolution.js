@@ -1,7 +1,7 @@
 // 🔍 Verificar Conectividade Evolution API -> Webhook Local
 // Este script verifica se a Evolution API consegue acessar nosso webhook
 
-const EVOLUTION_API_URL = 'https://press-evolution-api.jhkbgs.easypanel.host';
+const EVOLUTION_API_URL = 'https://evochat.devsible.com.br/';
 const API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
 const INSTANCE_NAME = 'atendimento-ao-cliente-suporte';
 const WEBHOOK_LOCAL = 'http://localhost:4000/webhook/evolution';

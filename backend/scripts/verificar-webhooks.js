@@ -1,7 +1,7 @@
 // 🔍 Verificador de Webhooks Evolution API
 // Este script verifica as configurações atuais dos webhooks
 
-const EVOLUTION_API_URL = 'https://press-evolution-api.jhkbgs.easypanel.host';
+const EVOLUTION_API_URL = 'https://evochat.devsible.com.br/';
 const API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
 
 // Função para fazer requisições à Evolution API
