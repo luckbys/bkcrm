@@ -1164,6 +1164,52 @@ app.post('/messages-upsert', async (req, res) => {
   }
 });
 
+// === ROTA COMPATIBILIDADE: /connection-update ===
+// Evolution API envia connection.update diretamente para /connection-update
+app.post('/connection-update', async (req, res) => {
+  try {
+    const { instance, data } = req.body;
+    console.log(`📱 [CONNECTION] Status update: ${instance} - ${data?.state || 'unknown'}`);
+    
+    // Log do evento de conexao
+    console.log('📊 [CONNECTION] Dados:', {
+      instance: instance,
+      state: data?.state,
+      statusReason: data?.statusReason,
+      profileName: data?.profileName,
+      timestamp: new Date().toISOString()
+    });
+
+    // Broadcast via WebSocket para clientes conectados
+    if (io) {
+      io.emit('connection-update', {
+        instance,
+        state: data?.state,
+        statusReason: data?.statusReason,
+        profileName: data?.profileName,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.status(200).json({
+      received: true,
+      processed: true,
+      instance: instance,
+      state: data?.state,
+      endpoint: '/connection-update (compatibilidade)'
+    });
+    
+  } catch (error) {
+    console.error('❌ [CONNECTION] Erro ao processar:', error);
+    res.status(500).json({
+      received: true,
+      processed: false,
+      error: error.message,
+      endpoint: '/connection-update (compatibilidade)'
+    });
+  }
+});
+
 // Endpoint de health check
 app.get('/webhook/health', (req, res) => {
   const stats = wsManager.getStats();
@@ -1181,6 +1227,8 @@ app.get('/webhook/health', (req, res) => {
       '/webhook/evolution/connection-update',
       '/webhook/evolution/messages-upsert',
       '/webhook/evolution/:event',
+      '/messages-upsert',
+      '/connection-update',
       '/webhook/health',
       '/webhook/ws-stats'
     ]
