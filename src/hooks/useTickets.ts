@@ -22,8 +22,41 @@ export function useTickets(userId: string | null, userRole: 'admin' | 'agent' | 
   useEffect(() => {
     if (userId) {
       loadTickets();
+      
+      // Subscribe to new tickets
+      const newTicketsSubscription = supabase
+        .channel('new-tickets')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'tickets'
+        }, (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => {
+          const newTicket = payload.new as Ticket;
+          
+          // Only add tickets that match the user's role
+          let shouldAdd = false;
+          if (userRole === 'admin') {
+            shouldAdd = true;
+          } else if (userRole === 'customer' && newTicket.customer_id === userId) {
+            shouldAdd = true;
+          } else if (userRole === 'agent' && newTicket.agent_id === userId) {
+            shouldAdd = true;
+          }
+          
+          if (shouldAdd && newTicket && newTicket.id) {
+            setState(prev => ({
+              ...prev,
+              tickets: [...prev.tickets, newTicket]
+            }));
+          }
+        })
+        .subscribe();
+
+      return () => {
+        newTicketsSubscription.unsubscribe();
+      };
     }
-  }, [userId]);
+  }, [userId, userRole]);
 
   const loadTickets = async () => {
     try {
