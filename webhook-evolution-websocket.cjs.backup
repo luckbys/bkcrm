@@ -1117,53 +1117,6 @@ app.post('/webhook/evolution/:event', (req, res) => {
   });
 });
 
-
-// === ROTA COMPATIBILIDADE - /messages-upsert ===
-// Rota para capturar mensagens enviadas diretamente para /messages-upsert
-app.post('/messages-upsert', async (req, res) => {
-  try {
-    console.log('📥 [COMPAT] /messages-upsert recebido - processando como MESSAGES_UPSERT');
-    
-    const payload = {
-      event: 'MESSAGES_UPSERT',
-      instance: req.body.instance || 'atendimento-ao-cliente-suporte',
-      data: req.body.data || req.body
-    };
-
-    console.log('🔄 [COMPAT] Payload estruturado:', {
-      event: payload.event,
-      instance: payload.instance,
-      hasData: !!payload.data
-    });
-
-    const result = await processMessage(payload);
-    
-    console.log('✅ [COMPAT] Resultado processamento:', {
-      success: result.success,
-      ticketId: result.ticketId,
-      messageId: result.messageId
-    });
-
-    res.status(200).json({ 
-      received: true, 
-      timestamp: new Date().toISOString(),
-      processed: result.success,
-      message: result.message || 'Mensagem processada',
-      ticketId: result.ticketId,
-      endpoint: '/messages-upsert (compatibilidade)'
-    });
-    
-  } catch (error) {
-    console.error('❌ [COMPAT] Erro ao processar /messages-upsert:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor',
-      timestamp: new Date().toISOString(),
-      details: error.message,
-      endpoint: '/messages-upsert'
-    });
-  }
-});
-
 // Endpoint de health check
 app.get('/webhook/health', (req, res) => {
   const stats = wsManager.getStats();
