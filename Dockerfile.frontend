@@ -1,39 +1,55 @@
 # Build stage
 FROM node:18-alpine AS build
 
+# Instalar dependências necessárias para build
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
-# Copiar package files
+# Copiar apenas package files primeiro (otimização cache)
 COPY package*.json ./
 
 # Instalar dependências
-RUN npm ci
+RUN npm ci --only=production && npm cache clean --force
 
 # Copiar código fonte
 COPY . .
 
-# Criar diretórios necessários
+# Criar diretórios se não existirem (forma segura)
 RUN mkdir -p src/config src/services/database src/services/whatsapp
-RUN echo "export default {};" > src/config/index.ts
-RUN echo "export default {};" > src/services/database/index.ts
-RUN echo "export default {};" > src/services/whatsapp/index.ts
 
-# Build
+# Criar arquivos placeholder apenas se não existirem
+RUN [ ! -f src/config/index.ts ] && echo "export default {};" > src/config/index.ts || true
+RUN [ ! -f src/services/database/index.ts ] && echo "export default {};" > src/services/database/index.ts || true  
+RUN [ ! -f src/services/whatsapp/index.ts ] && echo "export default {};" > src/services/whatsapp/index.ts || true
+
+# Build da aplicação
 RUN npm run build
 
 # Production stage
 FROM nginx:alpine
 
-# Copiar build
+# Instalar curl para health check
+RUN apk add --no-cache curl
+
+# Remover configuração nginx padrão
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copiar build da aplicação
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Configuração nginx
-COPY nginx.frontend.conf /etc/nginx/conf.d/default.conf
+# Copiar configuração nginx corrigida
+COPY nginx.deploy.conf /etc/nginx/conf.d/default.conf
 
-# Health check
+# Criar diretório de logs se não existir
+RUN mkdir -p /var/log/nginx
+
+# Health check usando curl
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost/ || exit 1
+  CMD curl -f http://localhost/health || exit 1
 
+# Expor porta
 EXPOSE 80
 
+# Comando para iniciar nginx
 CMD ["nginx", "-g", "daemon off;"] 

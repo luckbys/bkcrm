@@ -62,9 +62,9 @@ NODE_ENV=production
 PORT=80
 VITE_SUPABASE_URL=https://ajlgjjjvuglwgfnyqqvb.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NDMxNjYsImV4cCI6MjA2NTExOTE2Nn0.HPsxr84nkr3Ys7XafPDoU_Z94QFgbT1o1aNfAeaXpRU
-VITE_EVOLUTION_API_URL=https://press-evolution-api.jhkbgs.easypanel.host
+VITE_EVOLUTION_API_URL=https://evochat.devsible.com.br/
 VITE_EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
-VITE_WEBSOCKET_URL=wss://bkcrm.devsible.com.br
+VITE_WEBSOCKET_URL=wss://websocket.bkcrm.devsible.com.br
 '@
 $env | Out-File -FilePath ".env.frontend" -Encoding UTF8
 
@@ -300,8 +300,8 @@ Write-Host "   ✅ VITE_SUPABASE_URL"
 Write-Host ""
 Write-Host "4️⃣ Após deploy, acessar:"
 Write-Host "   🌍 Frontend: https://bkcrm.devsible.com.br"
-Write-Host "   🔗 WebSocket: https://bkcrm.devsible.com.br/webhook/health"
-Write-Host "   🏥 Health: https://bkcrm.devsible.com.br/health"
+Write-Host "   🔗 WebSocket: https://websocket.bkcrm.devsible.com.br/webhook/health"
+Write-Host "   🏥 Health: https://websocket.bkcrm.devsible.com.br/health"
 Write-Host ""
 Write-Host "🎉 Deploy COMPLETO pronto!" -ForegroundColor Green
 Write-Host ""
