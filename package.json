@@ -17,7 +17,7 @@
     "supabase:db:reset": "supabase db reset",
     "supabase:db:push": "supabase db push",
     "supabase:types": "supabase gen types typescript --local > src/types/supabase.ts",
-    "webhook": "node webhook-evolution-complete-corrigido.cjs"
+    "webhook": "node webhook-evolution-websocket.cjs"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.21.0",

@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 function corrigirWebhook() {
-  const webhookFile = 'webhook-evolution-websocket.js';
+  const webhookFile = 'webhook-evolution-websocket.cjs';
   
   if (!fs.existsSync(webhookFile)) {
     console.log('❌ Arquivo webhook-evolution-websocket.js não encontrado');
