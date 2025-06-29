@@ -310,90 +310,222 @@ app.use((req, res, next) => {
   next();
 });
 
-// 💾 FUNÇÕES DE BANCO DE DADOS
+// === FUNÇÕES DE PROCESSAMENTO DE WEBHOOK EVOLUTION API ===
 
-// Buscar ou criar cliente
-async function findOrCreateCustomer(phone, instanceName, pushName = null) {
+// Extrair telefone do JID do WhatsApp
+function extractPhoneFromJid(jid) {
   try {
-    console.log(`🔍 Buscando cliente para telefone: ${phone}`);
+    if (!jid) return null;
     
-    // Buscar cliente existente
-    const { data: existingCustomer } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'customer')
-      .or(`metadata->>phone.eq.${phone},email.eq.whatsapp-${phone}@auto-generated.com`)
-      .single();
-
-    if (existingCustomer) {
-      console.log(`✅ Cliente encontrado: ${existingCustomer.name} (${existingCustomer.id})`);
-      return existingCustomer.id;
-    }
-
-    // Criar novo cliente
-    console.log(`➕ Criando novo cliente para ${phone}`);
-    const customerData = {
-      id: crypto.randomUUID(),
-      name: pushName || `Cliente WhatsApp ${phone.slice(-4)}`,
-      email: `whatsapp-${phone}@auto-generated.com`,
-      role: 'customer',
-      metadata: {
-        phone: phone,
-        whatsapp_instance: instanceName,
-        created_via: 'webhook_evolution',
-        created_at: new Date().toISOString()
-      }
-    };
-
-    const { data: newCustomer, error } = await supabase
-      .from('profiles')
-      .insert([customerData])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('❌ Erro ao criar cliente:', error);
-      return null;
-    }
-
-    console.log(`✅ Cliente criado: ${newCustomer.name} (${newCustomer.id})`);
-    return newCustomer.id;
-
+    // Remover sufixos do WhatsApp
+    let phone = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+    
+    // Remover caracteres não numéricos
+    phone = phone.replace(/[^0-9]/g, '');
+    
+    // Validar se tem pelo menos 10 dígitos
+    if (phone.length < 10) return null;
+    
+    return phone;
   } catch (error) {
-    console.error('❌ Erro em findOrCreateCustomer:', error);
+    console.error('❌ Erro ao extrair telefone do JID:', error);
     return null;
   }
 }
 
-// Buscar ou criar ticket
-async function findOrCreateTicket(customerId, phone, instanceName) {
+// Extrair conteúdo da mensagem
+function extractMessageContent(messageObj) {
   try {
-    console.log(`🎫 Buscando ticket existente para cliente: ${customerId}`);
+    if (!messageObj) return null;
     
-    // Buscar ticket aberto existente
+    // Priorizar diferentes tipos de mensagem
+    if (messageObj.conversation) {
+      return messageObj.conversation;
+    }
+    
+    if (messageObj.extendedTextMessage?.text) {
+      return messageObj.extendedTextMessage.text;
+    }
+    
+    if (messageObj.imageMessage?.caption) {
+      return `[Imagem] ${messageObj.imageMessage.caption}`;
+    }
+    
+    if (messageObj.videoMessage?.caption) {
+      return `[Vídeo] ${messageObj.videoMessage.caption}`;
+    }
+    
+    if (messageObj.documentMessage?.caption) {
+      return `[Documento] ${messageObj.documentMessage.caption}`;
+    }
+    
+    if (messageObj.audioMessage) {
+      return '[Áudio]';
+    }
+    
+    if (messageObj.stickerMessage) {
+      return '[Sticker]';
+    }
+    
+    if (messageObj.locationMessage) {
+      return '[Localização]';
+    }
+    
+    if (messageObj.contactMessage) {
+      return '[Contato]';
+    }
+    
+    // Se nenhum tipo conhecido, tentar extrair qualquer texto
+    const textContent = JSON.stringify(messageObj).match(/\"text\":\\s*\"([^\"]+)\"/)?.[1];
+    if (textContent) {
+      return textContent;
+    }
+    
+    return '[Mensagem não suportada]';
+  } catch (error) {
+    console.error('❌ Erro ao extrair conteúdo da mensagem:', error);
+    return null;
+  }
+}
+
+// Função aprimorada para buscar ou criar cliente
+async function findOrCreateCustomerEnhanced(phone, instanceName, pushName = null) {
+  try {
+    const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
+    const phoneClean = phone.replace(/[^0-9]/g, '');
+    
+    console.log(`👤 Processando cliente:`, {
+      phone: phoneClean,
+      phoneFormatted: phoneFormatted,
+      name: pushName,
+      instance: instanceName
+    });
+    
+    // Tentar encontrar cliente existente por telefone ou metadados
+    let { data: existingCustomer, error: searchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'customer')
+      .or(`phone.eq.${phoneClean},phone.eq.${phoneFormatted},metadata->>phone.eq.${phoneClean},metadata->>whatsapp_phone.eq.${phoneClean},email.eq.whatsapp-${phoneClean}@auto-generated.com`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (searchError && searchError.code !== 'PGRST116') {
+      console.warn('⚠️ Erro ao buscar cliente:', searchError);
+    }
+    
+    if (existingCustomer) {
+      console.log(`✅ Cliente existente encontrado: ${existingCustomer.id} (${existingCustomer.full_name || existingCustomer.email})`);
+      
+      // Atualizar informações se necessário
+      const updates = {};
+      if (pushName && !existingCustomer.full_name) {
+        updates.full_name = pushName;
+      }
+      if (!existingCustomer.phone) {
+        updates.phone = phoneClean;
+      }
+      
+      // Atualizar metadados
+      const currentMetadata = existingCustomer.metadata || {};
+      updates.metadata = {
+        ...currentMetadata,
+        whatsapp_phone: phoneClean,
+        phone_formatted: phoneFormatted,
+        last_instance: instanceName,
+        last_contact_name: pushName,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (Object.keys(updates).length > 0) {
+        await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', existingCustomer.id);
+        
+        console.log(`📝 Cliente atualizado com:`, Object.keys(updates));
+      }
+      
+      return existingCustomer.id;
+    }
+    
+    // Criar novo cliente
+    console.log(`➕ Criando novo cliente para ${phoneFormatted}`);
+    
+    const clientData = {
+      id: crypto.randomUUID(),
+      email: `whatsapp-${phoneClean}@auto-generated.com`,
+      full_name: pushName || `Cliente ${phoneClean.slice(-4)}`,
+      phone: phoneClean,
+      role: 'customer',
+      metadata: {
+        source: 'whatsapp_webhook',
+        whatsapp_phone: phoneClean,
+        phone_formatted: phoneFormatted,
+        instance_name: instanceName,
+        contact_name: pushName,
+        auto_created: true,
+        created_via: 'evolution_api',
+        first_contact_at: new Date().toISOString()
+      },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    const { data: newCustomer, error: createError } = await supabase
+      .from('profiles')
+      .insert([clientData])
+      .select()
+      .single();
+    
+    if (createError) {
+      console.error('❌ Erro ao criar cliente:', createError);
+      return null;
+    }
+    
+    console.log(`✅ Cliente criado: ${newCustomer.id} (${newCustomer.full_name})`);
+    return newCustomer.id;
+    
+  } catch (error) {
+    console.error('❌ Erro em findOrCreateCustomerEnhanced:', error);
+    return null;
+  }
+}
+
+// Função aprimorada para buscar ou criar ticket
+async function findOrCreateTicketEnhanced(customerId, phone, instanceName, firstMessage = null) {
+  try {
+    const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
+    
+    console.log(`🎫 Gerenciando ticket para cliente: ${customerId}`);
+    
+    // Buscar tickets abertos existentes que NÃO estão finalizados
     const { data: existingTickets } = await supabase
       .from('tickets')
       .select('*')
       .eq('customer_id', customerId)
-      .in('status', ['open', 'in_progress'])
+      .in('status', ['open', 'in_progress', 'pending'])
       .order('created_at', { ascending: false })
       .limit(1);
-
+    
     if (existingTickets && existingTickets.length > 0) {
       const ticket = existingTickets[0];
       console.log(`✅ Ticket existente encontrado: ${ticket.id}`);
       
-      // Atualizar telefone no ticket existente
-      const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
+      // Atualizar última atividade e telefone
       const updateData = {
         nunmsg: phoneFormatted,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         metadata: {
           ...ticket.metadata,
           whatsapp_phone: phoneFormatted,
           client_phone: phoneFormatted,
           instance_name: instanceName,
           is_whatsapp: true,
-          phone_updated_at: new Date().toISOString()
+          phone_updated_at: new Date().toISOString(),
+          last_activity: new Date().toISOString()
         },
         channel: 'whatsapp'
       };
@@ -405,15 +537,23 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
       
       return ticket.id;
     }
-
+    
     // Criar novo ticket
     console.log(`➕ Criando novo ticket para cliente ${customerId}`);
-    const phoneFormatted = phone.startsWith('+') ? phone : `+${phone}`;
+    
+    // Buscar dados do cliente para o título
+    const { data: customerData } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', customerId)
+      .single();
+    
+    const customerName = customerData?.full_name || `Cliente ${phone.slice(-4)}`;
     
     const ticketData = {
       id: crypto.randomUUID(),
-      title: `Atendimento WhatsApp - ${phoneFormatted}`,
-      description: `Conversa iniciada via WhatsApp na instância ${instanceName}`,
+      title: `WhatsApp: ${customerName}`,
+      description: firstMessage || `Conversa iniciada via WhatsApp (${instanceName})`,
       status: 'open',
       priority: 'medium',
       customer_id: customerId,
@@ -423,320 +563,109 @@ async function findOrCreateTicket(customerId, phone, instanceName) {
         whatsapp_phone: phoneFormatted,
         client_phone: phoneFormatted,
         instance_name: instanceName,
-        created_via: 'webhook_evolution',
+        created_via: 'webhook_evolution_enhanced',
         is_whatsapp: true,
-        phone_captured_at: new Date().toISOString()
-      }
+        can_reply: true,
+        first_message: firstMessage,
+        phone_captured_at: new Date().toISOString(),
+        enhanced_processing: true
+      },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_message_at: new Date().toISOString()
     };
-
+    
     const { data: newTicket, error } = await supabase
       .from('tickets')
       .insert([ticketData])
       .select()
       .single();
-
+    
     if (error) {
       console.error('❌ Erro ao criar ticket:', error);
       return null;
     }
-
-    console.log(`✅ Ticket criado: ${newTicket.id} com telefone salvo no campo nunmsg: ${phoneFormatted}`);
+    
+    console.log(`✅ Ticket criado: ${newTicket.id} com telefone ${phoneFormatted}`);
     return newTicket.id;
-
+    
   } catch (error) {
-    console.error('❌ Erro em findOrCreateTicket:', error);
+    console.error('❌ Erro em findOrCreateTicketEnhanced:', error);
     return null;
   }
 }
 
-// Salvar mensagem no banco
-async function saveMessage(ticketId, messageData, instanceName) {
+// Função aprimorada para salvar mensagem
+async function saveMessageEnhanced(ticketId, messageData, senderName, senderPhone, instanceName) {
   try {
-    const messageId = crypto.randomUUID();
-    const messageRecord = {
-      id: messageId,
+    const messagePayload = {
+      id: crypto.randomUUID(),
       ticket_id: ticketId,
       content: messageData.content,
-      sender_name: messageData.senderName,
-      type: messageData.type || 'text',
+      sender_id: null, // Cliente não tem sender_id
+      sender_name: senderName,
+      sender_email: null,
+      sender_type: 'client',
+      type: 'text',
+      message_type: 'text',
+      is_internal: false,
       metadata: {
-        evolution_instance: instanceName,
         whatsapp_message_id: messageData.whatsappMessageId,
-        sender_phone: messageData.senderPhone,
-        is_from_whatsapp: true,
+        whatsapp_phone: senderPhone,
+        instance_name: instanceName,
         timestamp: messageData.timestamp,
-        message_type: messageData.type || 'text'
+        jid: messageData.jid,
+        is_from_whatsapp: true,
+        sender_phone: senderPhone,
+        enhanced_processing: true,
+        processed_at: new Date().toISOString()
       },
       created_at: new Date().toISOString()
     };
-
-    const { error } = await supabase
+    
+    const { data: savedMessage, error } = await supabase
       .from('messages')
-      .insert([messageRecord]);
-
+      .insert([messagePayload])
+      .select()
+      .single();
+    
     if (error) {
       console.error('❌ Erro ao salvar mensagem:', error);
       return null;
     }
-
-    console.log(`✅ Mensagem salva: ${messageId}`);
     
-    // 🚀 BROADCAST VIA WEBSOCKET
+    console.log(`💬 Mensagem salva: ${savedMessage.id} no ticket ${ticketId}`);
+    
+    // Broadcast via WebSocket para todos conectados ao ticket
     const broadcastMessage = {
-      id: messageId,
+      id: savedMessage.id,
       ticket_id: ticketId,
       content: messageData.content,
-      sender_name: messageData.senderName,
-      sender_id: null, // Mensagem de cliente
+      sender: 'client',
+      senderName: senderName,
+      senderPhone: senderPhone,
+      created_at: savedMessage.created_at,
       is_internal: false,
-      created_at: messageRecord.created_at,
-      type: messageData.type || 'text',
-      metadata: messageRecord.metadata
+      type: 'text',
+      metadata: savedMessage.metadata
     };
-
-    // Enviar para todos conectados ao ticket via WebSocket
-    const sent = wsManager.broadcastToTicket(ticketId, 'new-message', broadcastMessage);
     
-    if (sent) {
-      console.log(`📡 [WS] Mensagem transmitida via WebSocket para ticket ${ticketId}`);
-    } else {
-      console.log(`📭 [WS] Nenhuma conexão ativa para ticket ${ticketId}`);
-    }
-
-    return messageId;
-
+    const broadcastSent = wsManager.broadcastToTicket(ticketId, 'new-message', broadcastMessage);
+    console.log(`📡 Broadcast enviado: ${broadcastSent}`);
+    
+    return savedMessage.id;
+    
   } catch (error) {
     console.error('❌ Erro ao salvar mensagem:', error);
     return null;
   }
 }
 
-// Salvar mensagem enviada via WebSocket
-async function saveMessageFromWebSocket({ ticketId, content, isInternal, userId, senderName }) {
+// FUNÇÃO PRINCIPAL DE PROCESSAMENTO COMPLETO
+async function processCompleteMessage(payload) {
   try {
-    // Verificar se é um UUID válido
-    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId);
+    console.log(`🔄 [WEBHOOK] Processamento completo iniciado - Evento: ${payload.event}`);
     
-    if (!isValidUUID) {
-      console.log(`⚠️ [WS] ID do ticket ${ticketId} não é um UUID válido, simulando salvamento`);
-      const mockMessageId = `msg-${ticketId}-${Date.now()}`;
-      console.log(`✅ Mensagem WebSocket simulada: ${mockMessageId}`);
-      return mockMessageId;
-    }
-
-    const messageId = crypto.randomUUID();
-    const messageRecord = {
-      id: messageId,
-      ticket_id: ticketId,
-      content,
-      sender_id: userId,
-      sender_name: senderName,
-      is_internal: isInternal,
-      type: 'text',
-      metadata: {
-        sent_via_websocket: true,
-        is_internal: isInternal
-      },
-      created_at: new Date().toISOString()
-    };
-
-    const { error } = await supabase
-      .from('messages')
-      .insert([messageRecord]);
-
-    if (error) {
-      console.error('❌ Erro ao salvar mensagem WebSocket:', error);
-      return null;
-    }
-
-    console.log(`✅ Mensagem WebSocket salva: ${messageId}`);
-    return messageId;
-
-  } catch (error) {
-    console.error('❌ Erro ao salvar mensagem WebSocket:', error);
-    return null;
-  }
-}
-
-// Carregar mensagens de um ticket
-async function loadTicketMessages(ticketId, limit = 50) {
-  try {
-    console.log(`📥 [WS] Carregando mensagens para ticket: ${ticketId}`);
-    
-    // Verificar se é um UUID válido
-    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId);
-    
-    let messages = [];
-    
-    if (isValidUUID) {
-      console.log(`🔑 [WS] Ticket UUID válido: ${ticketId}`);
-      // Buscar diretamente por ticket_id UUID
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('ticket_id', ticketId)
-        .order('created_at', { ascending: true })
-        .limit(limit);
-        
-      if (error) {
-        console.error('❌ [WS] Erro ao carregar mensagens UUID:', error);
-        return [];
-      }
-      messages = data || [];
-      
-    } else {
-      console.log(`🔑 [WS] Ticket ID numérico: ${ticketId}, tentando múltiplas estratégias de busca`);
-      
-      // ESTRATÉGIA 1: Buscar nas últimas mensagens (caso sejam recentes)
-      console.log(`🔍 [WS] Buscando nas últimas 100 mensagens...`);
-      const { data: recentMessages, error: recentError } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-        
-      if (!recentError && recentMessages && recentMessages.length > 0) {
-        console.log(`📊 [WS] Encontradas ${recentMessages.length} mensagens recentes`);
-        // Filtrar mensagens que contenham o ticketId ou sejam relacionadas
-        messages = recentMessages.filter(msg => {
-          return (
-            msg.content?.includes(ticketId) ||
-            msg.metadata?.originalTicketId === ticketId ||
-            msg.metadata?.ticketId === ticketId ||
-            msg.metadata?.ticketId === String(ticketId)
-          );
-        });
-        
-        if (messages.length > 0) {
-          console.log(`✅ [WS] Filtradas ${messages.length} mensagens para ticket ${ticketId}`);
-        } else {
-          // ESTRATÉGIA 2: Buscar por conteúdo
-          console.log(`🔍 [WS] Tentando busca por conteúdo que contenha '${ticketId}'`);
-          const { data: contentMessages, error: contentError } = await supabase
-            .from('messages')
-            .select('*')
-            .ilike('content', `%${ticketId}%`)
-            .order('created_at', { ascending: true })
-            .limit(limit);
-            
-          if (!contentError && contentMessages) {
-            messages = contentMessages;
-            console.log(`🔍 [WS] Busca por conteúdo encontrou ${messages.length} mensagens`);
-          }
-        }
-      }
-      
-      // Se ainda não encontrou, mostrar algumas mensagens de exemplo
-      if (messages.length === 0) {
-        console.log(`🔍 [WS] Para debug, mostrando estrutura de mensagens recentes:`);
-        if (recentMessages && recentMessages.length > 0) {
-          recentMessages.slice(0, 3).forEach((msg, index) => {
-            console.log(`📝 [WS] Mensagem ${index + 1}:`, {
-              id: msg.id,
-              ticket_id: msg.ticket_id,
-              content: msg.content?.substring(0, 50) + '...',
-              metadata: msg.metadata
-            });
-          });
-        }
-      }
-
-      // Se ainda não encontrou, tentar mapear ticket numérico para UUID real via tabela tickets
-      if (messages.length === 0) {
-        console.log(`🔍 [WS] Tentando mapear ticket numérico ${ticketId} para UUID na tabela tickets...`);
-        const { data: ticketRows, error: ticketMapError } = await supabase
-          .from('tickets')
-          .select('id, metadata')
-          .or(`metadata->>originalId.eq.${ticketId},metadata->>legacy_id.eq.${ticketId}`)
-          .limit(1);
-
-        if (!ticketMapError && ticketRows && ticketRows.length > 0) {
-          const mappedUuid = ticketRows[0].id;
-          console.log(`🔑 [WS] Ticket numérico ${ticketId} mapeado para UUID ${mappedUuid}`);
-
-          const { data: mappedMessages, error: mappedError } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('ticket_id', mappedUuid)
-            .order('created_at', { ascending: true })
-            .limit(limit);
-
-          if (!mappedError && mappedMessages) {
-            messages = mappedMessages;
-            console.log(`✅ [WS] Carregadas ${messages.length} mensagens via ticket UUID mapeado`);
-          }
-        } else {
-          if (ticketMapError) {
-            console.error('❌ [WS] Erro ao mapear ticket numérico:', ticketMapError);
-          } else {
-            console.log('🔍 [WS] Nenhum ticket UUID correspondente encontrado para', ticketId);
-          }
-        }
-      }
-    }
-
-    console.log(`✅ [WS] Carregadas ${messages.length} mensagens do banco para ticket ${ticketId}`);
-    
-    // 🔧 Se não há mensagens no banco, retornar array vazio para permitir que o usuário inicie a conversa
-    if (messages.length === 0) {
-      console.log(`📭 [WS] Nenhuma mensagem encontrada para ticket ${ticketId} - conversa nova`);
-      return [];
-    }
-    
-    return messages;
-
-  } catch (error) {
-    console.error('❌ [WS] Erro crítico ao carregar mensagens:', error);
-    return [];
-  }
-}
-
-// 📨 PROCESSAMENTO DE MENSAGENS DO WEBHOOK
-
-// Extrair telefone do JID
-function extractPhoneFromJid(jid) {
-  if (!jid) return null;
-  const match = jid.match(/^(\d+)/);
-  return match ? match[1] : null;
-}
-
-// Extrair conteúdo da mensagem
-function extractMessageContent(messageObj) {
-  if (!messageObj) return null;
-  
-  // Mensagem de texto simples
-  if (messageObj.conversation) {
-    return messageObj.conversation;
-  }
-  
-  // Mensagem de texto estendida
-  if (messageObj.extendedTextMessage && messageObj.extendedTextMessage.text) {
-    return messageObj.extendedTextMessage.text;
-  }
-  
-  // Mensagem de mídia com caption
-  if (messageObj.imageMessage && messageObj.imageMessage.caption) {
-    return `[Imagem] ${messageObj.imageMessage.caption}`;
-  }
-  
-  if (messageObj.videoMessage && messageObj.videoMessage.caption) {
-    return `[Vídeo] ${messageObj.videoMessage.caption}`;
-  }
-  
-  if (messageObj.documentMessage) {
-    return `[Documento] ${messageObj.documentMessage.fileName || 'Arquivo'}`;
-  }
-  
-  if (messageObj.audioMessage) {
-    return '[Áudio]';
-  }
-  
-  return '[Mensagem não suportada]';
-}
-
-// Processar mensagem recebida
-async function processMessage(payload) {
-  try {
     const messageData = payload.data;
     const instanceName = payload.instance;
     
@@ -744,643 +673,193 @@ async function processMessage(payload) {
       console.warn('⚠️ Dados de mensagem inválidos');
       return { success: false, message: 'Dados inválidos' };
     }
-
-    // Processar apenas mensagens de clientes
+    
+    // Ignorar mensagens enviadas por nós
     if (messageData.key.fromMe) {
       console.log('📤 Mensagem enviada por nós, ignorando');
       return { success: true, message: 'Mensagem própria ignorada' };
     }
-
-    // Extrair informações
+    
+    // Extrair informações da mensagem
     const clientPhone = extractPhoneFromJid(messageData.key.remoteJid);
     const messageContent = extractMessageContent(messageData.message);
-    const senderName = messageData.pushName || `Cliente ${clientPhone?.slice(-4) || 'Unknown'}`;
+    const senderName = messageData.pushName || `Cliente ${clientPhone?.slice(-4) || 'Desconhecido'}`;
     
     if (!clientPhone || !messageContent) {
       console.warn('⚠️ Telefone ou conteúdo da mensagem inválido');
       return { success: false, message: 'Dados da mensagem inválidos' };
     }
-
-    console.log('📨 Processando mensagem:', {
+    
+    console.log('📨 Processando mensagem completa:', {
       from: senderName,
       phone: clientPhone,
       content: messageContent.substring(0, 50) + '...',
       instance: instanceName
     });
-
-    // Buscar ou criar cliente
-    const customerId = await findOrCreateCustomer(clientPhone, instanceName, senderName);
+    
+    // 1. Buscar ou criar cliente
+    const customerId = await findOrCreateCustomerEnhanced(clientPhone, instanceName, senderName);
     if (!customerId) {
       return { success: false, message: 'Erro ao processar cliente' };
     }
-
-    // Buscar ou criar ticket
-    const ticketId = await findOrCreateTicket(customerId, clientPhone, instanceName);
+    
+    // 2. Buscar ou criar ticket
+    const ticketId = await findOrCreateTicketEnhanced(customerId, clientPhone, instanceName, messageContent);
     if (!ticketId) {
       return { success: false, message: 'Erro ao processar ticket' };
     }
-
-    // Salvar mensagem (e enviar via WebSocket automaticamente)
-    const messageId = await saveMessage(ticketId, {
+    
+    // 3. Salvar mensagem (com broadcast automático)
+    const messageId = await saveMessageEnhanced(ticketId, {
       content: messageContent,
-      senderName: senderName,
-      senderPhone: clientPhone,
       whatsappMessageId: messageData.key.id,
       timestamp: messageData.messageTimestamp,
-      type: 'text'
-    }, instanceName);
-
-    if (messageId) {
-      console.log('✅ [PRODUÇÃO] Mensagem processada com sucesso:', {
-        ticketId,
-        messageId,
-        broadcast: true
-      });
-      
-      // 🚀 BROADCAST VIA WEBSOCKET PARA TODOS OS CLIENTES
-      const newMessage = {
-        id: messageId,
-        ticket_id: ticketId,
-        content: messageContent,
-        sender_id: null, // Cliente não tem sender_id
-        sender_name: senderName,
-        is_internal: false,
-        created_at: new Date().toISOString(),
-        type: 'text'
-      };
-
-      // Enviar para todos conectados ao ticket
-      const broadcastResult = wsManager.broadcastToTicket(ticketId, 'new-message', newMessage);
-      
-      if (broadcastResult) {
-        console.log('📡 [PRODUÇÃO] Mensagem enviada via WebSocket para clientes');
-      } else {
-        console.log('📭 [PRODUÇÃO] Nenhum cliente conectado ao ticket');
-      }
-      
-      return { 
-        success: true, 
-        message: 'Mensagem processada com sucesso',
-        ticketId,
-        messageId,
-        broadcast: true
-      };
-    } else {
-      console.log('❌ [PRODUÇÃO] Erro ao salvar mensagem');
+      jid: messageData.key.remoteJid
+    }, senderName, clientPhone, instanceName);
+    
+    if (!messageId) {
       return { success: false, message: 'Erro ao salvar mensagem' };
     }
-
+    
+    console.log('✅ [WEBHOOK] Processamento completo finalizado com sucesso');
+    
+    return {
+      success: true,
+      message: 'Mensagem processada com sucesso',
+      data: {
+        customerId,
+        ticketId,
+        messageId,
+        clientPhone,
+        senderName,
+        instanceName,
+        processed: true,
+        enhanced: true
+      }
+    };
+    
   } catch (error) {
-    console.error('❌ Erro ao processar mensagem:', error);
+    console.error('❌ Erro no processamento completo:', error);
     return { success: false, message: error.message };
   }
 }
 
-// 🔗 ROTAS DO WEBHOOK
+// === ENDPOINTS APRIMORADOS ===
 
-// === ENDPOINT DE ENVIO DE MENSAGENS ===
-// Endpoint para enviar mensagens do TK para WhatsApp
-app.post('/webhook/send-message', async (req, res) => {
-  try {
-    const { phone, text, instance = 'atendimento-ao-cliente-suporte', options = {} } = req.body;
-
-    console.log('📤 [ENVIO] Recebida solicitação de envio:', {
-      phone: phone,
-      text: text?.substring(0, 50) + '...',
-      instance: instance
-    });
-
-    // Validar dados obrigatórios
-    if (!phone || !text) {
-      return res.status(400).json({
-        success: false,
-        error: 'Telefone e texto são obrigatórios',
-        received: true
-      });
-    }
-
-    // Formatação do telefone
-    let formattedPhone = phone.replace(/\D/g, ''); // Remove caracteres não numéricos
-    
-    // Se não começar com código do país, adicionar +55 (Brasil)
-    if (!formattedPhone.startsWith('55') && formattedPhone.length >= 10) {
-      formattedPhone = '55' + formattedPhone;
-    }
-
-    console.log(`📱 [ENVIO] Enviando para ${formattedPhone} via instância ${instance}`);
-
-    // Payload correto conforme documentação Evolution API
-    const payload = {
-      number: formattedPhone,
-      text: text,
-      options: {
-        delay: options.delay || 1000,
-        presence: options.presence || 'composing',
-        linkPreview: options.linkPreview !== false,
-        ...options
-      }
-    };
-
-    console.log('🚀 [ENVIO] Payload:', {
-      number: payload.number,
-      text: payload.text.substring(0, 50) + '...',
-      options: payload.options
-    });
-
-    // Fazer requisição para Evolution API
-    const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const responseData = await evolutionResponse.json();
-
-    if (evolutionResponse.ok) {
-      console.log('✅ [ENVIO] Mensagem enviada com sucesso:', {
-        messageId: responseData.key?.id,
-        status: responseData.status
-      });
-
-      return res.status(200).json({
-        success: true,
-        messageId: responseData.key?.id,
-        status: responseData.status,
-        timestamp: responseData.messageTimestamp,
-        data: responseData
-      });
-    } else {
-      console.error('❌ [ENVIO] Erro da Evolution API:', {
-        status: evolutionResponse.status,
-        error: responseData
-      });
-
-      return res.status(evolutionResponse.status).json({
-        success: false,
-        error: responseData.message || 'Erro na Evolution API',
-        details: responseData,
-        evolutionStatus: evolutionResponse.status
-      });
-    }
-
-  } catch (error) {
-    console.error('❌ [ENVIO] Erro interno:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Erro interno do servidor',
-      details: error.message
-    });
-  }
-});
-
-// === ENDPOINT DE VERIFICAÇÃO DE INSTÂNCIA ===
-app.get('/webhook/check-instance/:instanceName', async (req, res) => {
-  try {
-    const { instanceName } = req.params;
-    
-    console.log(`🔍 [INSTÂNCIA] Verificando instância: ${instanceName}`);
-
-    const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
-      method: 'GET',
-      headers: {
-        'apikey': EVOLUTION_API_KEY
-      }
-    });
-
-    const data = await response.json();
-
-    if (response.ok) {
-      console.log(`✅ [INSTÂNCIA] Status: ${data.state}`);
-      
-      return res.status(200).json({
-        success: true,
-        instance: instanceName,
-        state: data.state,
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      console.error(`❌ [INSTÂNCIA] Erro ao verificar: ${response.status}`);
-      
-      return res.status(response.status).json({
-        success: false,
-        error: 'Erro ao verificar instância',
-        details: data
-      });
-    }
-
-  } catch (error) {
-    console.error('❌ [INSTÂNCIA] Erro interno:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Erro interno do servidor',
-      details: error.message
-    });
-  }
-});
-
-// === ENDPOINT DE TESTE DE ENVIO ===
-app.post('/webhook/test-send', async (req, res) => {
-  try {
-    const { phone = '5511999999999' } = req.body;
-    
-    const testMessage = `🧪 Teste de envio - ${new Date().toLocaleString()}`;
-    
-    console.log(`🧪 [TESTE] Enviando mensagem de teste para ${phone}`);
-
-    const testPayload = {
-      phone,
-      text: testMessage,
-      instance: 'atendimento-ao-cliente-suporte',
-      options: {
-        delay: 1000,
-        presence: 'composing',
-        linkPreview: false
-      }
-    };
-
-    // Reutilizar endpoint de envio
-    const sendResponse = await fetch('http://localhost:4000/webhook/send-message', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(testPayload)
-    });
-
-    const result = await sendResponse.json();
-
-    return res.status(sendResponse.status).json({
-      test: true,
-      payload: testPayload,
-      result
-    });
-
-  } catch (error) {
-    console.error('❌ [TESTE] Erro:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Erro no teste de envio',
-      details: error.message
-    });
-  }
-});
-
-// Endpoint principal do webhook Evolution
+// Endpoint principal Evolution API com processamento completo
 app.post('/webhook/evolution', async (req, res) => {
   try {
-    const payload = req.body;
-    const timestamp = new Date().toISOString();
-    
-    // Log completo para debug
-    console.log(`🔔 [${timestamp}] Webhook Evolution API - DADOS COMPLETOS:`, JSON.stringify(payload, null, 2));
-    
-    console.log(`🔔 [${timestamp}] Webhook Evolution API:`, {
-      event: payload.event,
-      instance: payload.instance,
-      hasData: !!payload.data,
-      keys: Object.keys(payload)
+    console.log('📥 [WEBHOOK] Recebido:', {
+      event: req.body.event,
+      instance: req.body.instance,
+      timestamp: new Date().toISOString()
     });
-
-    let result = { success: false, message: 'Evento não processado' };
-
-    // 🔧 CORREÇÃO: Processar MESSAGES_UPSERT corretamente
-    if (payload.event === 'MESSAGES_UPSERT' && payload.data) {
-      console.log('📨 [PRODUÇÃO] Processando MESSAGES_UPSERT...');
+    
+    const payload = req.body;
+    
+    // Processar diferentes tipos de eventos
+    if (payload.event === 'messages.upsert' || payload.event === 'MESSAGES_UPSERT') {
+      const result = await processCompleteMessage(payload);
       
-      try {
-        // Verificar se é mensagem de cliente (não nossa)
-        if (payload.data.key && !payload.data.key.fromMe) {
-          console.log('✅ [PRODUÇÃO] Mensagem de cliente detectada');
-          
-          // Extrair dados básicos
-          const clientPhone = extractPhoneFromJid(payload.data.key.remoteJid);
-          const messageContent = extractMessageContent(payload.data.message);
-          const senderName = payload.data.pushName || `Cliente ${clientPhone?.slice(-4) || 'Unknown'}`;
-          const instanceName = payload.instance || 'atendimento-ao-cliente-suporte';
-          
-          console.log('📱 [PRODUÇÃO] Dados extraídos:', {
-            phone: clientPhone,
-            content: messageContent?.substring(0, 50) + '...',
-            sender: senderName,
-            instance: instanceName
-          });
-          
-          if (clientPhone && messageContent) {
-            // Buscar ou criar cliente
-            const customerId = await findOrCreateCustomer(clientPhone, instanceName, senderName);
-            
-            if (customerId) {
-              // Buscar ou criar ticket
-              const ticketId = await findOrCreateTicket(customerId, clientPhone, instanceName);
-              
-              if (ticketId) {
-                // Salvar mensagem
-                const messageId = await saveMessage(ticketId, {
-                  content: messageContent,
-                  senderName: senderName,
-                  senderPhone: clientPhone,
-                  whatsappMessageId: payload.data.key.id,
-                  timestamp: payload.data.messageTimestamp,
-                  type: 'text'
-                }, instanceName);
-                
-                if (messageId) {
-                  console.log('✅ [PRODUÇÃO] Mensagem processada com sucesso:', {
-                    ticketId,
-                    messageId,
-                    broadcast: true
-                  });
-                  
-                  // 🚀 BROADCAST VIA WEBSOCKET PARA TODOS OS CLIENTES
-                  const newMessage = {
-                    id: messageId,
-                    ticket_id: ticketId,
-                    content: messageContent,
-                    sender_id: null, // Cliente não tem sender_id
-                    sender_name: senderName,
-                    is_internal: false,
-                    created_at: new Date().toISOString(),
-                    type: 'text'
-                  };
-
-                  // Enviar para todos conectados ao ticket
-                  const broadcastResult = wsManager.broadcastToTicket(ticketId, 'new-message', newMessage);
-                  
-                  if (broadcastResult) {
-                    console.log('📡 [PRODUÇÃO] Mensagem enviada via WebSocket para clientes');
-                  } else {
-                    console.log('📭 [PRODUÇÃO] Nenhum cliente conectado ao ticket');
-                  }
-                  
-                  result = { 
-                    success: true, 
-                    message: 'Mensagem processada com sucesso',
-                    ticketId,
-                    messageId,
-                    broadcast: true
-                  };
-                } else {
-                  console.log('❌ [PRODUÇÃO] Erro ao salvar mensagem');
-                  result = { success: false, message: 'Erro ao salvar mensagem' };
-                }
-              } else {
-                console.log('❌ [PRODUÇÃO] Erro ao criar/buscar ticket');
-                result = { success: false, message: 'Erro ao processar ticket' };
-              }
-            } else {
-              console.log('❌ [PRODUÇÃO] Erro ao criar/buscar cliente');
-              result = { success: false, message: 'Erro ao processar cliente' };
-            }
-          } else {
-            console.log('❌ [PRODUÇÃO] Dados da mensagem inválidos');
-            result = { success: false, message: 'Dados da mensagem inválidos' };
-          }
-        } else {
-          console.log('📤 [PRODUÇÃO] Mensagem própria, ignorando');
-          result = { success: true, message: 'Mensagem própria ignorada' };
-        }
-      } catch (error) {
-        console.error('❌ [PRODUÇÃO] Erro ao processar mensagem:', error);
-        result = { success: false, message: error.message };
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: 'Webhook processado com sucesso',
+          ...result.data
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.message
+        });
       }
-    } else if (payload.event === 'CONNECTION_UPDATE') {
-      console.log('🔗 [PRODUÇÃO] Atualização de conexão:', payload.data);
-      result = { success: true, message: 'Conexão atualizada' };
+    } else if (payload.event === 'connection.update') {
+      console.log('🔗 [WEBHOOK] Status de conexão:', payload.data);
+      res.status(200).json({ success: true, message: 'Status de conexão recebido' });
     } else {
-      console.log('⚠️ [PRODUÇÃO] Evento não reconhecido:', payload.event);
-      result = { success: false, message: `Evento ${payload.event} não requer processamento` };
+      console.log('ℹ️ [WEBHOOK] Evento não processado:', payload.event);
+      res.status(200).json({ success: true, message: 'Evento recebido mas não processado' });
     }
-
-    res.status(200).json({ 
-      received: true, 
-      timestamp,
-      event: payload.event || 'unknown',
-      instance: payload.instance,
-      processed: result.success,
-      message: result.message,
-      ticketId: result.ticketId,
-      websocket: result.broadcast || false
-    });
-
+    
   } catch (error) {
-    console.error('❌ [PRODUÇÃO] Erro ao processar webhook:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor',
-      timestamp: new Date().toISOString(),
-      details: error.message
-    });
-  }
-});
-
-// Endpoint para atualizações de conexão da Evolution API
-app.post('/webhook/evolution/connection-update', async (req, res) => {
-  try {
-    const payload = req.body;
-    const timestamp = new Date().toISOString();
-
-    console.log('🔗 [CONNECTION] Atualização de conexão recebida:', {
-      instance: payload.instance,
-      state: payload.data?.state,
-      statusReason: payload.data?.statusReason,
-      timestamp
-    });
-
-    // Processar diferentes estados de conexão
-    let connectionStatus = 'unknown';
-    let statusMessage = 'Status desconhecido';
-
-    if (payload.data?.state === 'open') {
-      connectionStatus = 'connected';
-      statusMessage = 'WhatsApp conectado e pronto';
-      console.log('✅ [CONNECTION] WhatsApp conectado:', payload.instance);
-    } else if (payload.data?.state === 'connecting') {
-      connectionStatus = 'connecting';
-      statusMessage = 'Conectando ao WhatsApp...';
-      console.log('🔄 [CONNECTION] Conectando ao WhatsApp:', payload.instance);
-    } else if (payload.data?.state === 'close') {
-      connectionStatus = 'disconnected';
-      statusMessage = 'WhatsApp desconectado';
-      console.log('❌ [CONNECTION] WhatsApp desconectado:', payload.instance);
-    } else if (payload.data?.state === 'qr') {
-      connectionStatus = 'qr_required';
-      statusMessage = 'QR Code necessário';
-      console.log('📱 [CONNECTION] QR Code necessário:', payload.instance);
-    }
-
-    // Broadcast do status de conexão para todos os clientes WebSocket
-    const connectionUpdate = {
-      instance: payload.instance,
-      status: connectionStatus,
-      state: payload.data?.state,
-      statusReason: payload.data?.statusReason,
-      timestamp,
-      message: statusMessage
-    };
-
-    // Enviar para todos os clientes conectados (broadcast global)
-    io.emit('connection-update', connectionUpdate);
-
-    res.status(200).json({
-      received: true,
-      timestamp,
-      event: 'connection.update',
-      instance: payload.instance,
-      status: connectionStatus,
-      message: statusMessage,
-      broadcast: true
-    });
-
-  } catch (error) {
-    console.error('❌ [CONNECTION] Erro ao processar atualização de conexão:', error);
+    console.error('❌ [WEBHOOK] Erro no endpoint principal:', error);
     res.status(500).json({
-      error: 'Erro interno do servidor',
-      timestamp: new Date().toISOString(),
-      details: error.message
-    });
-  }
-});
-
-// Endpoint de health check
-app.get('/webhook/health', (req, res) => {
-  const stats = wsManager.getStats();
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    server: 'Webhook Evolution API com WebSocket',
-    websocket: {
-      enabled: true,
-      connections: stats.totalConnections,
-      activeTickets: stats.activeTickets
-    },
-    endpoints: [
-      '/webhook/evolution',
-      '/webhook/health',
-      '/webhook/ws-stats',
-      '/connection-update'
-    ]
-  });
-});
-
-// === ENDPOINT PRINCIPAL PARA EVOLUTION API ===
-// Endpoint direto /connection-update que a Evolution API está tentando usar
-app.post('/connection-update', async (req, res) => {
-  try {
-    const payload = req.body;
-    const timestamp = new Date().toISOString();
-
-    console.log('🔗 [CONNECTION-UPDATE] Evolution API:', {
-      instance: payload.instance,
-      state: payload.data?.state,
-      statusReason: payload.data?.statusReason,
-      timestamp
-    });
-
-    // Processar diferentes estados de conexão
-    let connectionStatus = 'unknown';
-    let statusMessage = 'Status desconhecido';
-
-    if (payload.data?.state === 'open') {
-      connectionStatus = 'connected';
-      statusMessage = 'WhatsApp conectado e pronto';
-      console.log('✅ [CONNECTION-UPDATE] WhatsApp conectado:', payload.instance);
-    } else if (payload.data?.state === 'connecting') {
-      connectionStatus = 'connecting';
-      statusMessage = 'Conectando ao WhatsApp...';
-      console.log('🔄 [CONNECTION-UPDATE] Conectando ao WhatsApp:', payload.instance);
-    } else if (payload.data?.state === 'close') {
-      connectionStatus = 'disconnected';
-      statusMessage = 'WhatsApp desconectado';
-      console.log('❌ [CONNECTION-UPDATE] WhatsApp desconectado:', payload.instance);
-    } else if (payload.data?.state === 'qr') {
-      connectionStatus = 'qr_required';
-      statusMessage = 'QR Code necessário';
-      console.log('📱 [CONNECTION-UPDATE] QR Code necessário:', payload.instance);
-    }
-
-    // Broadcast do status de conexão para todos os clientes WebSocket
-    const connectionUpdate = {
-      instance: payload.instance,
-      status: connectionStatus,
-      state: payload.data?.state,
-      statusReason: payload.data?.statusReason,
-      timestamp,
-      message: statusMessage,
-      endpoint: '/connection-update'
-    };
-
-    // Enviar para todos os clientes conectados (broadcast global)
-    io.emit('connection-update', connectionUpdate);
-
-    res.status(200).json({
-      received: true,
-      timestamp,
-      event: 'connection.update',
-      instance: payload.instance,
-      status: connectionStatus,
-      message: statusMessage,
-      broadcast: true,
-      endpoint: '/connection-update (PRINCIPAL)'
-    });
-
-  } catch (error) {
-    console.error('❌ [CONNECTION-UPDATE] Erro ao processar atualização de conexão:', error);
-    res.status(500).json({
-      error: 'Erro interno do servidor',
-      timestamp: new Date().toISOString(),
-      details: error.message,
-      endpoint: '/connection-update'
-    });
-  }
-});
-
-// ADDED_COMPAT_MESSAGES_UPSERT_ENDPOINTS_START
-// === ENDPOINTS DE COMPATIBILIDADE: MESSAGES_UPSERT ===
-// Alguns ambientes ainda enviam eventos diretamente para /webhook/messages-upsert ou
-// /webhook/evolution/messages-upsert.  Estes endpoints foram migrados do antigo servidor de
-// mensagens para cá, garantindo que o WebSocket assuma toda a responsabilidade de
-// processamento e persistência.
-
-/**
- * Handler utilitário para processar payload MESSAGES_UPSERT vindos da Evolution API
- * e responder de forma padronizada.
- */
-async function handleMessagesUpsert(req, res) {
-  try {
-    const payload = req.body;
-
-    // Log para debug
-    console.log(`📥 [COMPAT] /messages-upsert recebido – keys: ${Object.keys(payload)}`);
-
-    // Reaproveita a função processMessage já existente
-    const result = await processMessage(payload);
-
-    return res.status(result.success ? 200 : 400).json({
-      received: true,
-      processed: result.success,
-      message: result.message,
-      ticketId: result.ticketId,
-      messageId: result.messageId,
-      broadcast: result.broadcast || false
-    });
-  } catch (error) {
-    console.error('❌ [COMPAT] Erro ao processar /messages-upsert:', error);
-    return res.status(500).json({
-      received: true,
-      processed: false,
+      success: false,
+      message: 'Erro interno do servidor',
       error: error.message
     });
   }
-}
+});
 
-// Compatibilidade com versões antigas que usam o prefixo /webhook/evolution/messages-upsert
-app.post('/webhook/evolution/messages-upsert', handleMessagesUpsert);
+// Endpoint específico para connection updates (que estava dando 404)
+app.post('/webhook/evolution/connection-update', async (req, res) => {
+  try {
+    console.log('🔗 [CONNECTION] Update recebido:', req.body);
+    res.status(200).json({ 
+      success: true, 
+      message: 'Connection update processado',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [CONNECTION] Erro:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
-// Compatibilidade com configurações que utilizam /webhook/messages-upsert diretamente
-app.post('/webhook/messages-upsert', handleMessagesUpsert);
-// ADDED_COMPAT_MESSAGES_UPSERT_ENDPOINTS_END
+// Endpoint para compatibilidade (Evolution pode usar /connection-update direto)
+app.post('/connection-update', async (req, res) => {
+  try {
+    console.log('🔗 [CONNECTION-DIRECT] Update recebido:', req.body);
+    res.status(200).json({ 
+      success: true, 
+      message: 'Connection update processado (endpoint direto)',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [CONNECTION-DIRECT] Erro:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Health check endpoint
+app.get('/webhook/health', (req, res) => {
+  const stats = wsManager.getStats();
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    websocket: {
+      connected: stats.totalConnections,
+      active_tickets: stats.activeTickets,
+      connections_by_ticket: stats.connectionsByTicket
+    },
+    server: {
+      port: PORT,
+      node_version: process.version,
+      memory: process.memoryUsage()
+    }
+  });
+});
+
+// Estatísticas WebSocket
+app.get('/webhook/ws-stats', (req, res) => {
+  res.status(200).json(wsManager.getStats());
+});
+
+// Endpoint de teste simples
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: 'Servidor Webhook Evolution + WebSocket ativo',
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      'POST /webhook/evolution - Webhook principal',
+      'POST /webhook/evolution/connection-update - Updates de conexão',
+      'POST /connection-update - Updates diretos',
+      'GET /webhook/health - Health check',
+      'GET /webhook/ws-stats - Estatísticas WebSocket'
+    ]
+  });
+});
 
 // Iniciar servidor
 server.listen(PORT, () => {
