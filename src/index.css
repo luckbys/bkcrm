@@ -197,76 +197,50 @@ div[data-radix-alert-dialog-content] {
 }
 
 /* === VARIÁVEIS CSS DO DESIGN SYSTEM === */
-:root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222.2 84% 4.9%;
-
-  --muted: 210 40% 96%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-
-  --accent: 210 40% 96%;
-  --accent-foreground: 222.2 84% 4.9%;
-
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
-
-  --radius: 0.5rem;
-}
-
-.dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
-}
-
-/* === CAMADAS PERSONALIZADAS DO TAILWIND === */
 @layer base {
-  * {
-    @apply border-0;
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
   }
-  
-  body {
-    @apply bg-background text-foreground;
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
   }
 }
 
@@ -338,6 +312,111 @@ div[data-radix-alert-dialog-content] {
   .ring-ring {
     --tw-ring-color: hsl(var(--ring));
   }
+
+  /* Glassmorphism */
+  .glass-effect {
+    @apply bg-slate-900/95 backdrop-blur-lg border border-slate-800/50;
+  }
+
+  /* Animações */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-in-out;
+  }
+
+  .animate-scale {
+    @apply transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98];
+  }
+
+  /* Scrollbar personalizada */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-500/50 rounded-full;
+  }
+
+  /* Loading states */
+  .loading-skeleton {
+    @apply animate-pulse bg-slate-800/50 rounded-lg;
+  }
+
+  /* Tooltips */
+  .tooltip {
+    @apply px-2 py-1 text-xs bg-slate-800 text-slate-200 rounded shadow-lg;
+  }
+
+  /* Badges */
+  .badge {
+    @apply px-2 py-0.5 text-xs font-medium rounded-full;
+  }
+
+  .badge-primary {
+    @apply bg-blue-500/20 text-blue-500;
+  }
+
+  .badge-secondary {
+    @apply bg-slate-500/20 text-slate-400;
+  }
+
+  .badge-success {
+    @apply bg-green-500/20 text-green-500;
+  }
+
+  .badge-warning {
+    @apply bg-yellow-500/20 text-yellow-500;
+  }
+
+  .badge-error {
+    @apply bg-red-500/20 text-red-500;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Melhorias de acessibilidade */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500;
 }
 
 /* === MENSAGENS CSS === */
@@ -383,16 +462,6 @@ div[data-radix-alert-dialog-content] {
   background: white !important;
   position: relative !important;
   z-index: 10 !important;
-}
-
-.chat-textarea {
-  min-height: 48px !important;
-  max-height: 120px !important;
-  resize: none !important;
-  border-radius: 0.5rem !important;
-  border: 1px solid #d1d5db !important;
-  padding: 0.75rem !important;
-  width: 100% !important;
 }
 
 .chat-sidebar {
@@ -446,4 +515,110 @@ div[data-radix-alert-dialog-content] {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* === ESTILOS DO SIDEBAR DE DEPARTAMENTOS === */
+.departments-sidebar {
+  @apply bg-slate-900 text-white border-r border-slate-800;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.department-item {
+  @apply flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200;
+  @apply hover:bg-slate-800 hover:shadow-lg;
+  @apply border-l-4 border-transparent;
+}
+
+.department-item.active {
+  @apply bg-slate-800 border-l-4 border-blue-500;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.2);
+}
+
+.department-item-icon {
+  @apply p-2 rounded-lg;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.department-item-text {
+  @apply font-medium text-slate-100;
+}
+
+.department-item-count {
+  @apply ml-auto text-sm font-semibold bg-slate-700 px-2 py-1 rounded-full;
+}
+
+.department-item-count.has-unread {
+  @apply bg-blue-500 text-white;
+}
+
+.departments-search {
+  @apply bg-slate-800 border-slate-700 text-white placeholder-slate-400;
+  @apply focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+}
+
+.departments-header {
+  @apply bg-slate-900 border-b border-slate-800 p-4;
+  @apply flex items-center justify-between;
+}
+
+.departments-title {
+  @apply text-lg font-semibold text-white;
+}
+
+/* Estilos do Sidebar */
+.sidebar-glassmorphism {
+  @apply bg-slate-900/95 backdrop-blur-xl;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-item {
+  @apply transition-all duration-300;
+}
+
+.sidebar-item:hover {
+  @apply transform scale-[1.02];
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-item.active {
+  @apply bg-slate-800/80 border-slate-600;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Animações suaves */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Gradientes e efeitos de texto */
+.text-gradient {
+  @apply bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent;
+}
+
+/* Scrollbar personalizada para o Sidebar */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  @apply bg-slate-900/50;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  @apply bg-slate-700/50 rounded-full;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-600/50;
 }

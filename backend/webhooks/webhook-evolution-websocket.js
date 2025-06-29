@@ -1258,9 +1258,82 @@ app.get('/webhook/health', (req, res) => {
     endpoints: [
       '/webhook/evolution',
       '/webhook/health',
-      '/webhook/ws-stats'
+      '/webhook/ws-stats',
+      '/connection-update'
     ]
   });
+});
+
+// === ENDPOINT PRINCIPAL PARA EVOLUTION API ===
+// Endpoint direto /connection-update que a Evolution API está tentando usar
+app.post('/connection-update', async (req, res) => {
+  try {
+    const payload = req.body;
+    const timestamp = new Date().toISOString();
+
+    console.log('🔗 [CONNECTION-UPDATE] Evolution API:', {
+      instance: payload.instance,
+      state: payload.data?.state,
+      statusReason: payload.data?.statusReason,
+      timestamp
+    });
+
+    // Processar diferentes estados de conexão
+    let connectionStatus = 'unknown';
+    let statusMessage = 'Status desconhecido';
+
+    if (payload.data?.state === 'open') {
+      connectionStatus = 'connected';
+      statusMessage = 'WhatsApp conectado e pronto';
+      console.log('✅ [CONNECTION-UPDATE] WhatsApp conectado:', payload.instance);
+    } else if (payload.data?.state === 'connecting') {
+      connectionStatus = 'connecting';
+      statusMessage = 'Conectando ao WhatsApp...';
+      console.log('🔄 [CONNECTION-UPDATE] Conectando ao WhatsApp:', payload.instance);
+    } else if (payload.data?.state === 'close') {
+      connectionStatus = 'disconnected';
+      statusMessage = 'WhatsApp desconectado';
+      console.log('❌ [CONNECTION-UPDATE] WhatsApp desconectado:', payload.instance);
+    } else if (payload.data?.state === 'qr') {
+      connectionStatus = 'qr_required';
+      statusMessage = 'QR Code necessário';
+      console.log('📱 [CONNECTION-UPDATE] QR Code necessário:', payload.instance);
+    }
+
+    // Broadcast do status de conexão para todos os clientes WebSocket
+    const connectionUpdate = {
+      instance: payload.instance,
+      status: connectionStatus,
+      state: payload.data?.state,
+      statusReason: payload.data?.statusReason,
+      timestamp,
+      message: statusMessage,
+      endpoint: '/connection-update'
+    };
+
+    // Enviar para todos os clientes conectados (broadcast global)
+    io.emit('connection-update', connectionUpdate);
+
+    res.status(200).json({
+      received: true,
+      timestamp,
+      event: 'connection.update',
+      instance: payload.instance,
+      status: connectionStatus,
+      message: statusMessage,
+      broadcast: true,
+      endpoint: '/connection-update (PRINCIPAL)'
+    });
+
+  } catch (error) {
+    console.error('❌ [CONNECTION-UPDATE] Erro ao processar atualização de conexão:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      timestamp: new Date().toISOString(),
+      details: error.message,
+      endpoint: '/connection-update'
+    });
+  }
 });
 
 // ADDED_COMPAT_MESSAGES_UPSERT_ENDPOINTS_START

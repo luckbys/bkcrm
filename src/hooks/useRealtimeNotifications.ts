@@ -24,19 +24,37 @@ interface NotificationData {
   isInternal: boolean;
 }
 
+// Configurações padrão do Socket.IO
+const defaultSocketOptions = {
+  timeout: 10000,
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  reconnectionAttempts: 10
+};
+
 export function useRealtimeNotifications() {
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<RealtimeMessage | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const reconnectAttempts = useRef(0);
   const { user } = useAuth();
   const { toast } = useToast();
 
   // Configuração do WebSocket
-    const WEBSOCKET_URL = process.env.NODE_ENV === 'production'
+  const WEBSOCKET_URL = process.env.NODE_ENV === 'production'
     ? 'https://websocket.bkcrm.devsible.com.br'
     : 'http://localhost:4000';
+
+  // Criar nova conexão Socket.IO
+  const createSocket = useCallback((transportOptions: string[]) => {
+    return io(WEBSOCKET_URL, {
+      ...defaultSocketOptions,
+      transports: transportOptions
+    });
+  }, [WEBSOCKET_URL]);
 
   // Conectar ao WebSocket
   const connectWebSocket = useCallback(() => {
@@ -44,28 +62,42 @@ export function useRealtimeNotifications() {
 
     console.log('🔗 [NOTIFICATIONS] Conectando ao WebSocket:', WEBSOCKET_URL);
     
-    socketRef.current = io(WEBSOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      timeout: 20000,
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
-    });
+    // Desconectar socket existente se houver
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
+
+    // Criar nova conexão
+    socketRef.current = createSocket(['websocket', 'polling']);
 
     // Eventos de conexão
     socketRef.current.on('connect', () => {
       console.log('✅ [NOTIFICATIONS] Conectado ao WebSocket');
       setIsConnected(true);
+      reconnectAttempts.current = 0;
     });
 
-    socketRef.current.on('disconnect', () => {
-      console.log('❌ [NOTIFICATIONS] Desconectado do WebSocket');
+    socketRef.current.on('disconnect', (reason) => {
+      console.log('❌ [NOTIFICATIONS] Desconectado do WebSocket:', reason);
       setIsConnected(false);
     });
 
     socketRef.current.on('connect_error', (error) => {
       console.error('❌ [NOTIFICATIONS] Erro de conexão:', error);
       setIsConnected(false);
+      
+      // Se falhar com websocket, tentar reconectar com nova instância usando apenas websocket
+      if (error.message.includes('websocket')) {
+        console.log('🔄 [NOTIFICATIONS] Tentando reconectar usando apenas websocket');
+        
+        // Desconectar socket atual
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
+        
+        // Criar nova conexão usando apenas websocket
+        socketRef.current = createSocket(['websocket']);
+      }
     });
 
     // Escutar mensagens em tempo real
@@ -123,18 +155,7 @@ export function useRealtimeNotifications() {
       });
     });
 
-    // Escutar conexões de outros usuários
-    socketRef.current.on('user-typing', (data: { ticketId: string, userName: string }) => {
-      console.log('⌨️ [NOTIFICATIONS] Usuário digitando:', data);
-      
-      toast({
-        title: '⌨️ Digitando...',
-        description: `${data.userName} está digitando`,
-        duration: 2000
-      });
-    });
-
-  }, [WEBSOCKET_URL, toast]);
+  }, [WEBSOCKET_URL, toast, createSocket]);
 
   // Desconectar WebSocket
   const disconnectWebSocket = useCallback(() => {
@@ -190,13 +211,24 @@ export function useRealtimeNotifications() {
   useEffect(() => {
     if (!isConnected && user) {
       const timeout = setTimeout(() => {
-        console.log('🔄 [NOTIFICATIONS] Tentando reconectar...');
-        connectWebSocket();
-      }, 3000);
+        if (reconnectAttempts.current < 10) {
+          console.log(`🔄 [NOTIFICATIONS] Tentativa de reconexão ${reconnectAttempts.current + 1}/10`);
+          reconnectAttempts.current++;
+          connectWebSocket();
+        } else {
+          console.log('❌ [NOTIFICATIONS] Máximo de tentativas de reconexão atingido');
+          toast({
+            title: '❌ Erro de Conexão',
+            description: 'Não foi possível reconectar ao servidor. Tente recarregar a página.',
+            variant: 'destructive',
+            duration: 5000
+          });
+        }
+      }, Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000));
 
       return () => clearTimeout(timeout);
     }
-  }, [isConnected, user, connectWebSocket]);
+  }, [isConnected, user, connectWebSocket, toast]);
 
   return {
     notifications,

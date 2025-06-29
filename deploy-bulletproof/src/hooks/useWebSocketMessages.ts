@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useToast } from './use-toast';
-import { ChatMessage } from '../types/chat';
 
 // 📨 INTERFACES WEBSOCKET
 interface WebSocketMessage {
@@ -14,6 +13,9 @@ interface WebSocketMessage {
   created_at: string;
   type: string;
   metadata?: any;
+  payload?: any;
+  status?: 'sent' | 'delivered' | 'read' | 'failed';
+  timestamp?: Date;
 }
 
 interface ConnectionStats {
@@ -38,7 +40,7 @@ interface UseWebSocketMessagesReturn {
   connectionStats: ConnectionStats | null;
   
   // Ações
-  sendMessage: (content: string, isInternal?: boolean) => Promise<boolean>;
+  sendMessage: (message: Omit<WebSocketMessage, 'id' | 'created_at'>) => Promise<boolean>;
   refreshMessages: () => Promise<void>;
   clearMessages: () => void;
   
@@ -60,18 +62,21 @@ interface UseWebSocketMessagesOptions {
   maxReconnectAttempts?: number;
 }
 
-interface UseWebSocketMessagesReturn {
-  messages: ChatMessage[];
-  isConnected: boolean;
-  isConnecting: boolean;
-  typingUsers: TypingUser[];
-  sendMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
-  updateMessageStatus: (messageId: string, status: 'sent' | 'delivered' | 'read' | 'failed') => void;
-  startTyping: () => void;
-  stopTyping: () => void;
-  connectionError: string | null;
-  reconnect: () => void;
-}
+// 🔧 Configurações
+const WEBSOCKET_CONFIG = {
+  MAX_RECONNECT_ATTEMPTS: 5,
+  RECONNECT_DELAY: 3000,
+  PING_INTERVAL: 30000
+} as const;
+
+// Ordenar mensagens por timestamp
+const sortMessages = (messages: WebSocketMessage[]): WebSocketMessage[] => {
+  return [...messages].sort((a, b) => {
+    const aTime = a.timestamp?.getTime() || new Date(a.created_at).getTime();
+    const bTime = b.timestamp?.getTime() || new Date(b.created_at).getTime();
+    return aTime - bTime;
+  });
+};
 
 /**
  * Hook para gerenciar mensagens via WebSocket
@@ -105,10 +110,6 @@ export const useWebSocketMessages = ({
     : 'ws://localhost:4000');  // Usar ws:// em desenvolvimento
     
   console.log(`🔗 [WS] Ambiente: ${process.env.NODE_ENV}, URL: ${WEBSOCKET_URL}`);
-
-  const MAX_RECONNECT_ATTEMPTS = 5;
-  const RECONNECT_DELAY = 3000;
-  const PING_INTERVAL = 30000; // 30 segundos
 
   // 🔌 Conectar WebSocket
   const connect = useCallback(() => {
@@ -168,12 +169,12 @@ export const useWebSocketMessages = ({
         scheduleReconnect();
       });
 
-      socket.on('joined-ticket', (data) => {
+      socket.on('joined-ticket', (data: { ticketId: string }) => {
         console.log(`✅ [WS] Conectado ao ticket ${data.ticketId}`);
         setIsLoading(false);
       });
 
-      socket.on('messages-loaded', (data) => {
+      socket.on('messages-loaded', (data: { ticketId: string; messages: WebSocketMessage[] }) => {
         if (!mountedRef.current || data.ticketId !== ticketId) {
           console.log(`⚠️ [WS] messages-loaded ignorado:`, {
             mounted: mountedRef.current,
@@ -207,174 +208,140 @@ export const useWebSocketMessages = ({
           content: message.content.substring(0, 50) + '...',
           sender_id: message.sender_id,
           sender_name: message.sender_name,
-          ticket_id: message.ticket_id
+          is_internal: message.is_internal
         });
-        
+
         setMessages(prev => {
           // Evitar duplicatas
-          if (prev.some(m => m.id === message.id)) {
-            console.log(`⚠️ [WS] Mensagem duplicada ignorada: ${message.id}`);
-            return prev;
-          }
-          console.log(`✅ [WS] Adicionando nova mensagem ao state. Total: ${prev.length + 1}`);
-          return [...prev, message];
+          const exists = prev.some(msg => msg.id === message.id);
+          if (exists) return prev;
+          
+          // Inserir mensagem na ordem cronológica
+          return sortMessages([...prev, message]);
         });
-        
         setLastUpdateTime(new Date());
-        
-        // Toast apenas para mensagens de outros usuários
-        if (message.sender_id !== userId) {
+
+        // Notificar apenas se não for mensagem interna
+        if (!message.is_internal) {
           toast({
-            title: `📱 ${message.sender_name}`,
-            description: message.content.length > 60 
-              ? message.content.substring(0, 60) + '...' 
-              : message.content,
-            duration: 4000,
+            title: `💬 ${message.sender_name}`,
+            description: message.content.substring(0, 80) + (message.content.length > 80 ? '...' : ''),
+            duration: 5000
           });
         }
+      });
+
+      socket.on('error', (error: Error) => {
+        console.error(`❌ [WS] Erro no WebSocket:`, error);
+        setConnectionStatus('error');
+        toast({
+          title: "❌ Erro de Conexão",
+          description: error.message,
+          variant: "destructive",
+          duration: 5000
+        });
       });
 
       socket.on('connection-stats', (stats: ConnectionStats) => {
         setConnectionStats(stats);
       });
 
-      socket.on('error', (error) => {
-        console.error('❌ [WS] Erro WebSocket:', error);
-        setConnectionStatus('error');
-        
-        toast({
-          title: "❌ Erro de Conexão",
-          description: error.message || "Erro na conexão WebSocket",
-          variant: "destructive",
-          duration: 3000,
-        });
-      });
-
-      socket.on('pong', (data) => {
-        console.log(`🏓 [WS] Pong recebido (latência: ${Date.now() - data.timestamp}ms)`);
-      });
-
-      // Configurar ping
-      setupPing(socket);
-
     } catch (error) {
-      console.error('❌ [WS] Erro ao conectar:', error);
+      console.error(`❌ [WS] Erro ao conectar:`, error);
       setConnectionStatus('error');
-      setIsLoading(false);
       scheduleReconnect();
     }
   }, [enabled, ticketId, userId, WEBSOCKET_URL, toast]);
 
-  // 🔄 Reconectar
-  const scheduleReconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    
-    reconnectTimeoutRef.current = setTimeout(() => {
-      if (mountedRef.current && enabled && ticketId) {
-        console.log('🔄 [WS] Tentando reconectar...');
-        connect();
-      }
-    }, RECONNECT_DELAY);
-  }, [connect, enabled, ticketId]);
-
-  // 🏓 Configurar ping para manter conexão viva
-  const setupPing = useCallback((socket: Socket) => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-    }
-    
-    pingIntervalRef.current = setInterval(() => {
-      if (socket.connected) {
-        socket.emit('ping');
-      }
-    }, PING_INTERVAL);
-  }, []);
-
   // 📨 Enviar mensagem
-  const sendMessage = useCallback(async (content: string, isInternal = false): Promise<boolean> => {
+  const sendMessage = useCallback(async (message: Omit<WebSocketMessage, 'id' | 'created_at'>): Promise<boolean> => {
     if (!socketRef.current?.connected || !ticketId) {
       console.error('❌ [WS] Não conectado para enviar mensagem');
       toast({
-        title: "❌ Erro",
-        description: "Não conectado ao sistema de mensagens",
+        title: "❌ Erro ao Enviar",
+        description: "Conexão indisponível. Tentando reconectar...",
         variant: "destructive",
-        duration: 3000,
+        duration: 3000
       });
+      connect();
       return false;
     }
 
     try {
-      console.log(`📤 [WS] Enviando mensagem... (${content.length} chars)`);
+      console.log(`📤 [WS] Enviando mensagem... (${message.content.length} chars)`);
       
       // Emitir mensagem via WebSocket
       socketRef.current.emit('send-message', {
         ticketId,
-        content,
-        isInternal,
+        content: message.content,
+        isInternal: message.is_internal,
         userId,
-        senderName: 'Agente' // TODO: Pegar do contexto do usuário
+        senderName: message.sender_name,
+        type: message.type || 'text',
+        metadata: message.metadata
       });
 
       return true;
-
     } catch (error) {
       console.error('❌ [WS] Erro ao enviar mensagem:', error);
       toast({
-        title: "❌ Erro",
-        description: "Erro ao enviar mensagem",
+        title: "❌ Erro ao Enviar",
+        description: "Não foi possível enviar a mensagem. Tente novamente.",
         variant: "destructive",
-        duration: 3000,
+        duration: 3000
       });
       return false;
     }
-  }, [ticketId, userId, toast]);
+  }, [ticketId, userId, connect, toast]);
 
   // 🔄 Atualizar mensagens
   const refreshMessages = useCallback(async () => {
-    if (!socketRef.current?.connected || !ticketId) return;
-    
-    console.log('🔄 [WS] Solicitando atualização de mensagens...');
+    if (!socketRef.current?.connected || !ticketId) {
+      console.error('❌ [WS] Não conectado para atualizar mensagens');
+      return;
+    }
+
     setIsLoading(true);
-    
     socketRef.current.emit('request-messages', { ticketId, limit: 50 });
   }, [ticketId]);
 
-  // 🧹 Limpar mensagens
+  // 🗑️ Limpar mensagens
   const clearMessages = useCallback(() => {
     setMessages([]);
     setLastUpdateTime(null);
   }, []);
 
+  // 🔄 Tentar reconectar
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+
+    reconnectTimeoutRef.current = setTimeout(() => {
+      console.log('🔄 [WS] Tentando reconectar...');
+      connect();
+    }, WEBSOCKET_CONFIG.RECONNECT_DELAY);
+  }, [connect]);
+
   // 🔄 Retry manual
   const retry = useCallback(() => {
+    console.log('🔄 [WS] Retry manual...');
     if (socketRef.current) {
       socketRef.current.disconnect();
     }
-    
-    setTimeout(() => {
-      connect();
-    }, 1000);
+    connect();
   }, [connect]);
 
-  // 🔗 Efeito principal de conexão
+  // 🏗️ Setup inicial
   useEffect(() => {
-    if (!enabled || !ticketId) {
-      setIsLoading(false);
-      setConnectionStatus('disconnected');
-      return;
+    mountedRef.current = true;
+    
+    if (enabled && ticketId) {
+      connect();
     }
 
-    connect();
-
     return () => {
-      // Cleanup ao desmontar ou mudar ticket
-      if (socketRef.current) {
-        console.log('🔌 [WS] Desconectando WebSocket...');
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+      mountedRef.current = false;
       
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -384,36 +351,29 @@ export const useWebSocketMessages = ({
         clearInterval(pingIntervalRef.current);
       }
       
-      setIsConnected(false);
-      setConnectionStatus('disconnected');
-      setMessages([]);
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
   }, [enabled, ticketId, connect]);
 
-  // 🧹 Cleanup geral
+  // 🔄 Reconexão automática
   useEffect(() => {
-    mountedRef.current = true;
-    
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+    if (!isConnected && enabled && ticketId) {
+      scheduleReconnect();
+    }
+  }, [isConnected, enabled, ticketId, scheduleReconnect]);
 
   return {
-    // Estados
     messages,
     isConnected,
     isLoading,
     connectionStatus,
     lastUpdateTime,
     connectionStats,
-    
-    // Ações
     sendMessage,
     refreshMessages,
     clearMessages,
-    
-    // Utilitários
     retry
   };
 };
@@ -426,11 +386,15 @@ export const useWebSocketMessagesRealTime = ({
   reconnectInterval = 3000,
   maxReconnectAttempts = 5
 }: UseWebSocketMessagesOptions): UseWebSocketMessagesReturn => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<WebSocketMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
+  const [connectionStats, setConnectionStats] = useState<ConnectionStats | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
@@ -464,9 +428,9 @@ export const useWebSocketMessagesRealTime = ({
           
           switch (data.type) {
             case 'new-message':
-              const newMessage: ChatMessage = {
+              const newMessage: WebSocketMessage = {
                 ...data.payload,
-                timestamp: new Date(data.payload.timestamp)
+                timestamp: new Date(data.payload.timestamp || data.payload.created_at)
               };
               
               setMessages(prev => {
@@ -475,8 +439,7 @@ export const useWebSocketMessagesRealTime = ({
                 if (exists) return prev;
                 
                 // Inserir mensagem na ordem cronológica
-                const updated = [...prev, newMessage];
-                return updated.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                return sortMessages([...prev, newMessage]);
               });
               break;
 
@@ -548,13 +511,14 @@ export const useWebSocketMessagesRealTime = ({
   }, [ticketId, wsUrl, autoReconnect, reconnectInterval, maxReconnectAttempts]);
 
   // Enviar mensagem
-  const sendMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+  const sendMessage = useCallback(async (message: Omit<WebSocketMessage, 'id' | 'created_at'>): Promise<boolean> => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const messageWithId: ChatMessage = {
+      const messageWithId: WebSocketMessage = {
         ...message,
         id: `temp-${Date.now()}`,
-        timestamp: new Date(),
-        status: 'sending'
+        created_at: new Date().toISOString(),
+        ticket_id: ticketId,
+        status: 'sent'
       };
 
       // Adicionar mensagem otimisticamente
@@ -565,10 +529,13 @@ export const useWebSocketMessagesRealTime = ({
         type: 'send-message',
         payload: messageWithId
       }));
+
+      return true;
     } else {
       console.error('❌ WebSocket não conectado');
+      return false;
     }
-  }, []);
+  }, [ticketId]);
 
   // Atualizar status da mensagem
   const updateMessageStatus = useCallback((messageId: string, status: 'sent' | 'delivered' | 'read' | 'failed') => {
@@ -655,16 +622,37 @@ export const useWebSocketMessagesRealTime = ({
     };
   }, [connect]);
 
+  // Atualizar mensagens
+  const refreshMessages = useCallback(async () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'request-messages',
+        payload: { ticketId }
+      }));
+    }
+  }, [ticketId]);
+
+  // Limpar mensagens
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setLastUpdateTime(null);
+  }, []);
+
+  // Retry manual
+  const retry = useCallback(() => {
+    reconnect();
+  }, [reconnect]);
+
   return {
     messages,
     isConnected,
-    isConnecting,
-    typingUsers,
+    isLoading,
+    connectionStatus,
+    lastUpdateTime,
+    connectionStats,
     sendMessage,
-    updateMessageStatus,
-    startTyping,
-    stopTyping,
-    connectionError,
-    reconnect
+    refreshMessages,
+    clearMessages,
+    retry
   };
 }; 

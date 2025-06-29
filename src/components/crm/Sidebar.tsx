@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect } from 'react';
 import { 
   ChevronLeft, 
@@ -41,8 +42,16 @@ import {
   Bookmark,
   Tag,
   Calendar,
-  Clock
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  User,
+  Megaphone,
+  Settings,
+  Cog
 } from 'lucide-react';
+
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,28 +63,89 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { useDepartments, Department } from '@/hooks/useDepartments';
+import { useDepartments } from '@/hooks/useDepartments';
+import { supabase } from '@/lib/supabase';
+import type { SectorFormData, PriorityType } from '@/types/sector';
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from '@/hooks/useAuth';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { sidebarStyles as styles } from './Sidebar.styles';
+import { 
+  PRIORITY_LABELS, 
+  PRIORITY_ICONS, 
+  DEPARTMENT_ICONS, 
+  DEPARTMENT_COLORS,
+  USER_STATUS,
+  ERROR_MESSAGES 
+} from './Sidebar.constants';
+import type { 
+  SidebarProps,
+  DepartmentType,
+  DepartmentColor,
+  UserStatusType,
+  Department
+} from './Sidebar.types';
+import { useSectorForm } from '@/hooks/useSectorForm';
+import { Textarea } from '@/components/ui/textarea';
 
-interface SidebarProps {
-  sectors: Department[];
-  selectedSector: Department | null;
-  onSectorChange: (sector: Department) => void;
-  collapsed: boolean;
-  onToggle: () => void;
-  onSectorUpdate?: () => void;
-}
+const departmentTypeToIcon: Record<string, React.ElementType> = {
+  default: Briefcase,
+  support: Headphones,
+  sales: ShoppingCart,
+  marketing: Megaphone || Tag,
+  development: Code,
+  finance: CreditCard,
+  hr: Users,
+  legal: Shield,
+  operations: Settings || Cog,
+  logistics: Truck
+};
 
-interface SectorFormData {
-  name: string;
-  icon: string;
-  color: string;
-  description: string;
-  priority: 'alta' | 'normal' | 'baixa';
-}
+const getDepartmentIcon = (department: Department) => {
+  const Icon = departmentTypeToIcon[department.type] || Briefcase;
+  return <Icon className="w-5 h-5" />;
+};
 
-export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, onToggle, onSectorUpdate }: SidebarProps) => {
+const getDepartmentColor = (department: Department): string => {
+  return DEPARTMENT_COLORS[department.type as DepartmentColor];
+};
+
+const initialSectorForm = {
+  name: '',
+  type: 'support' as DepartmentType,
+  icon: 'Headphones',
+  color: 'blue',
+  description: '',
+  priority: 'normal' as PriorityType,
+  is_active: true
+} satisfies SectorFormData;
+
+const isPriorityType = (value: string): value is PriorityType => {
+  return ['high', 'normal', 'low'].includes(value);
+};
+
+export function Sidebar({
+  departments = [],
+  isLoading,
+  error,
+  activeDepartment,
+  onSelectDepartment
+}: SidebarProps) {
   const { toast } = useToast();
   const { addDepartment, updateDepartment, deleteDepartment } = useDepartments();
+  const { user } = useAuth();
+  const userStatus: UserStatusType = 'online'; // TODO: Implementar lógica de status
+  const { 
+    form: sectorForm, 
+    updateForm: setSectorForm, 
+    setName,
+    setDescription,
+    setIcon,
+    setColor,
+    setPriority, 
+    resetForm 
+  } = useSectorForm();
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -83,44 +153,69 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
   const [editingSector, setEditingSector] = useState<Department | null>(null);
   const [deletingSector, setDeletingSector] = useState<Department | null>(null);
   const [adminPassword, setAdminPassword] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [ticketCounts, setTicketCounts] = useState<Record<string, { nonVisualized: number; total: number }>>({});
-  
-  const [sectorForm, setSectorForm] = useState<SectorFormData>({
-    name: '',
-    icon: 'Headphones',
-    color: 'blue',
-    description: '',
-    priority: 'normal'
-  });
 
-  // Simulate real-time ticket count updates
-  useEffect(() => {
-    if (showAddModal || showEditModal || showDeleteDialog) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) {
       return;
     }
 
-    const interval = setInterval(() => {
-      if (showAddModal || showEditModal || showDeleteDialog) {
-        return;
-      }
+    const reorderedSectors = Array.from(departments);
+    const [removed] = reorderedSectors.splice(result.source.index, 1);
+    reorderedSectors.splice(result.destination.index, 0, removed);
 
-      setTicketCounts(prev => {
-        const updated = { ...prev };
-        sectors.forEach(sector => {
-          if (Math.random() > 0.8) {
-            updated[sector.id] = {
-              nonVisualized: Math.max(0, (prev[sector.id]?.nonVisualized || 0) + (Math.random() > 0.5 ? 1 : -1)),
-              total: Math.max(1, (prev[sector.id]?.total || 1) + (Math.random() > 0.7 ? 1 : 0))
-            };
+    onSelectDepartment(reorderedSectors[result.destination.index]);
+  };
+
+  const filteredSectors = departments?.filter(sector => 
+    sector?.name?.toLowerCase().includes(searchTerm?.toLowerCase() || '')
+  ) || [];
+
+  // Fetch real-time ticket counts
+  useEffect(() => {
+    const fetchTicketCounts = async () => {
+      try {
+        const { data: tickets, error } = await supabase
+          .from('tickets')
+          .select('department_id, status, is_visualized');
+
+        if (error) throw error;
+
+        const counts: Record<string, { nonVisualized: number; total: number }> = {};
+        
+        tickets?.forEach(ticket => {
+          if (!counts[ticket.department_id]) {
+            counts[ticket.department_id] = { nonVisualized: 0, total: 0 };
+          }
+          
+          counts[ticket.department_id].total++;
+          
+          if (!ticket.is_visualized) {
+            counts[ticket.department_id].nonVisualized++;
           }
         });
-        return updated;
-      });
-    }, 5000);
+
+        setTicketCounts(counts);
+      } catch (error) {
+        console.error("Erro ao buscar contagem de tickets:", error);
+        toast({
+          title: "Erro ao carregar tickets",
+          description: "Não foi possível carregar a contagem de tickets.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    // Fetch immediately and then every 5 seconds
+    fetchTicketCounts();
+    const interval = setInterval(fetchTicketCounts, 5000);
 
     return () => clearInterval(interval);
-  }, [sectors, showAddModal, showEditModal, showDeleteDialog]);
+  }, [toast]);
 
   const availableIcons = {
     'clipboard-check': ClipboardCheck,
@@ -171,58 +266,109 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
     return availableIcons[iconName as keyof typeof availableIcons] || ClipboardCheck;
   };
 
-  const getSectorCounts = (sector: Department) => {
+  const getSectorCounts = (department: Department) => {
     return {
-      nonVisualized: ticketCounts[sector.id]?.nonVisualized || 0,
-      total: ticketCounts[sector.id]?.total || 0
+      nonVisualized: ticketCounts[department.id]?.nonVisualized || 0,
+      total: ticketCounts[department.id]?.total || 0
     };
   };
 
-  const handleAddSector = () => {
-    setSectorForm({
-      name: '',
-      icon: 'Headphones',
-      color: 'blue',
-      description: '',
-      priority: 'normal'
-    });
-    setShowAddModal(true);
+  const handleAddSector = async () => {
+    if (!sectorForm.name.trim()) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Por favor, insira um nome para o setor.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const newDepartment: Omit<Department, 'id' | 'created_at' | 'updated_at'> = {
+        name: sectorForm.name,
+        type: sectorForm.type,
+        icon: sectorForm.icon,
+        color: sectorForm.color,
+        description: sectorForm.description,
+        priority: sectorForm.priority,
+        is_active: true
+      };
+
+      await addDepartment(newDepartment);
+      
+      toast({
+        title: "Setor criado",
+        description: "O setor foi criado com sucesso.",
+      });
+      
+      setShowAddModal(false);
+      resetForm();
+    } catch (error) {
+      console.error("Erro ao criar setor:", error);
+      toast({
+        title: "Erro ao criar",
+        description: "Não foi possível criar o setor.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleEditSector = (sector: Department) => {
-    setEditingSector(sector);
+  const handleEditSector = (department: Department) => {
+    setEditingSector(department);
     setSectorForm({
-      name: sector.name,
-      icon: sector.icon,
-      color: sector.color,
-      description: sector.description || '',
-      priority: 'normal'
+      id: department.id,
+      name: department.name,
+      type: department.type,
+      icon: department.icon || 'Headphones',
+      color: department.color || 'blue',
+      description: department.description || '',
+      priority: department.priority as PriorityType,
+      is_active: department.is_active
     });
     setShowEditModal(true);
   };
 
-  const handleDeleteSector = (sector: Department) => {
-    setDeletingSector(sector);
-    setAdminPassword('');
+  const handleDeleteSector = (department: Department) => {
+    setDeletingSector(department);
     setShowDeleteDialog(true);
   };
 
-  const validateAdminPassword = () => {
-    const correctPassword = "admin123";
-    if (adminPassword === correctPassword) {
-      return true;
-    } else {
+  const validateAdminPassword = async (): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/admin/validate-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password: adminPassword }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.valid) {
+        return true;
+      } else {
+        toast({
+          title: "Senha incorreta",
+          description: data.message || "A senha de administrador está incorreta.",
+          variant: "destructive"
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error("Erro ao validar senha do administrador:", error);
       toast({
-        title: "Senha incorreta",
-        description: "A senha de administrador está incorreta.",
-        variant: "destructive"
+        title: "Erro de conexão",
+        description: "Não foi possível validar a senha do administrador. Tente novamente.",
+        variant: "destructive",
       });
       return false;
     }
   };
 
   const confirmDeleteSector = async () => {
-    if (!validateAdminPassword() || !deletingSector) return;
+    const isValidPassword = await validateAdminPassword();
+    if (!isValidPassword || !deletingSector) return;
 
     try {
       await deleteDepartment(deletingSector.id);
@@ -232,15 +378,7 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
         description: `O setor "${deletingSector.name}" foi removido com sucesso.`,
       });
 
-      onSectorUpdate?.();
-      
-      // Se o setor deletado era o selecionado, selecionar outro
-      if (selectedSector?.id === deletingSector.id && sectors.length > 1) {
-        const remainingSectors = sectors.filter(s => s.id !== deletingSector.id && s.isActive);
-        if (remainingSectors.length > 0) {
-          onSectorChange(remainingSectors[0]);
-        }
-      }
+      onSelectDepartment(departments[departments.length - 2]);
     } catch (error) {
       toast({
         title: "Erro ao remover setor",
@@ -254,64 +392,37 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
     }
   };
 
-  const saveSector = async () => {
-    if (!sectorForm.name.trim()) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Por favor, insira um nome para o setor.",
-        variant: "destructive"
-      });
-      return;
-    }
-
+  const handleUpdateSector = async (sector: Department) => {
     try {
-      if (editingSector) {
-        await updateDepartment(editingSector.id, {
+      if (!editingSector) return;
+
+      const updates: Partial<Department> = {
           name: sectorForm.name,
+        type: sectorForm.type,
+        icon: sectorForm.icon,
+        color: sectorForm.color,
           description: sectorForm.description,
-          color: sectorForm.color,
-          icon: sectorForm.icon,
-          isActive: true
-        });
+        priority: sectorForm.priority,
+        is_active: sector.is_active
+      };
+
+      await updateDepartment(editingSector.id, updates);
         
         toast({
-          title: "Setor atualizado",
-          description: `O setor "${sectorForm.name}" foi atualizado com sucesso.`,
+        title: "Departamento atualizado",
+        description: "As alterações foram salvas com sucesso.",
         });
         
         setShowEditModal(false);
-      } else {
-        await addDepartment({
-          name: sectorForm.name,
-          description: sectorForm.description,
-          color: sectorForm.color,
-          icon: sectorForm.icon,
-          isActive: true
-        });
-        
-        toast({
-          title: "Setor adicionado",
-          description: `O setor "${sectorForm.name}" foi adicionado com sucesso.`,
-        });
-        
-        setShowAddModal(false);
-      }
-
-      onSectorUpdate?.();
-    } catch (error) {
-      toast({
-        title: editingSector ? "Erro ao atualizar setor" : "Erro ao adicionar setor",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      });
-    } finally {
       setEditingSector(null);
-      setSectorForm({
-        name: '',
-        icon: 'Headphones',
-        color: 'blue',
-        description: '',
-        priority: 'normal'
+      resetForm();
+      
+    } catch (error) {
+      console.error('Erro ao atualizar departamento:', error);
+      toast({
+        title: "Erro ao atualizar",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao atualizar o departamento.",
+        variant: "destructive",
       });
     }
   };
@@ -320,76 +431,66 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
   const SectorFormFieldsComponent = () => (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="name">Nome do Setor</Label>
+        <Label>Nome</Label>
         <Input
-          id="name"
           value={sectorForm.name}
-          onChange={(e) => setSectorForm(prev => ({ ...prev, name: e.target.value }))}
-          placeholder="Ex: Atendimento ao Cliente"
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Nome do setor"
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="description">Descrição</Label>
-        <Input
-          id="description"
+        <Label>Descrição</Label>
+        <Textarea
           value={sectorForm.description}
-          onChange={(e) => setSectorForm(prev => ({ ...prev, description: e.target.value }))}
-          placeholder="Descrição opcional do setor"
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Descrição do setor"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Ícone</Label>
-          <Select value={sectorForm.icon} onValueChange={(value) => setSectorForm(prev => ({ ...prev, icon: value }))}>
-            <SelectTrigger>
-              <SelectValue />
+        <Select value={sectorForm.icon} onValueChange={setIcon}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecione um ícone" />
             </SelectTrigger>
-            <SelectContent className="max-h-60">
-              {Object.entries(availableIcons).map(([key, IconComponent]) => {
-                const Icon = IconComponent as React.ComponentType<{ className?: string }>;
-                return (
-                  <SelectItem key={key} value={key}>
-                    <div className="flex items-center space-x-2">
-                      <Icon className="w-4 h-4" />
-                      <span className="capitalize">{key.replace('-', ' ')}</span>
-                    </div>
+          <SelectContent>
+            {Object.keys(availableIcons).map((icon) => (
+              <SelectItem key={icon} value={icon}>
+                {icon}
                   </SelectItem>
-                );
-              })}
+            ))}
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-2">
           <Label>Prioridade</Label>
-          <Select value={sectorForm.priority} onValueChange={(value) => setSectorForm(prev => ({ ...prev, priority: value as any }))}>
-            <SelectTrigger>
-              <SelectValue />
+        <Select value={sectorForm.priority} onValueChange={setPriority}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecione a prioridade" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="baixa">Baixa</SelectItem>
+            <SelectItem value="high">Alta</SelectItem>
               <SelectItem value="normal">Normal</SelectItem>
-              <SelectItem value="alta">Alta</SelectItem>
+            <SelectItem value="low">Baixa</SelectItem>
             </SelectContent>
           </Select>
-        </div>
       </div>
 
       <div className="space-y-2">
-        <Label>Cor do Setor</Label>
+        <Label>Cor</Label>
         <div className="grid grid-cols-5 gap-2">
           {availableColors.map((color) => (
             <button
               key={color}
               type="button"
               className={cn(
-                "w-8 h-8 rounded-lg border-2 transition-all",
+                "h-8 w-8 rounded-full",
                 color,
-                sectorForm.color === color ? "border-foreground scale-110" : "border-border"
+                sectorForm.color === color && "ring-2 ring-offset-2 ring-black"
               )}
-              onClick={() => setSectorForm(prev => ({ ...prev, color }))}
+              onClick={() => setColor(color)}
             />
           ))}
         </div>
@@ -413,161 +514,173 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
     </div>
   );
 
-  if (collapsed) {
+  if (error) {
     return (
-      <div className="h-full bg-gray-900 text-white p-2 flex flex-col">
-        {/* Header minimizado */}
-        <div className="flex items-center justify-center mb-4">
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={onToggle}
-            className="text-white hover:bg-gray-800 p-2"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Button>
+      <div className={styles.errorContainer}>
+        <div className={styles.errorMessage}>
+          <AlertCircle className={styles.errorIcon} />
+          <p className={styles.errorText}>{ERROR_MESSAGES.loading}</p>
         </div>
-
-        {/* Setores minimizados */}
-        <div className="flex-1 space-y-2">
-          {sectors.map((sector) => {
-            const IconComponent = getIconComponent(sector.icon);
-            const counts = getSectorCounts(sector);
-            
-            return (
-              <div key={sector.id} className="relative">
                 <Button
-                  variant={selectedSector?.id === sector.id ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => onSectorChange(sector)}
-                  className={cn(
-                    "w-full h-10 p-2 justify-center relative",
-                    selectedSector?.id === sector.id
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                  )}
-                  title={sector.name}
-                >
-                  <IconComponent className="w-4 h-4" />
+          variant="outline" 
+          className="w-full"
+          onClick={() => window.location.reload()}
+        >
+          {ERROR_MESSAGES.retry}
                 </Button>
-                
-                {/* Badge com contadores */}
-                {counts.nonVisualized > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] text-xs bg-red-500 hover:bg-red-600 px-1">
-                    {counts.nonVisualized > 99 ? '99+' : counts.nonVisualized}
-                  </Badge>
-                )}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className={styles.loadingContainer}>
+        <div className={styles.loadingHeader}>
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+        </div>
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className={styles.loadingSkeleton} />
+        ))}
               </div>
             );
-          })}
+  }
+
+  if (!departments.length) {
+    return (
+      <div className={styles.emptyContainer}>
+        <div className={styles.emptyMessage}>
+          <p className={styles.emptyTitle}>{ERROR_MESSAGES.empty}</p>
+          <p className={styles.emptySubtitle}>{ERROR_MESSAGES.emptySubtitle}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full bg-gray-900 text-white flex flex-col">
-      {/* Header da Sidebar */}
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Setores CRM</h2>
-          <div className="flex items-center space-x-2">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={handleAddSector}
-              className="text-gray-300 hover:bg-gray-800 hover:text-white"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={onToggle}
-              className="text-gray-300 hover:bg-gray-800 hover:text-white"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
+    <aside
+      className={
+        styles.root +
+        ' fixed md:static top-0 left-0 z-30 bg-slate-900 glass-effect shadow-xl border border-white/20 rounded-none md:rounded-2xl overflow-hidden flex flex-col transition-all duration-300 ' +
+        (isCollapsed ? 'w-16 min-w-[64px] max-w-[64px]' : 'w-72 min-w-[240px] max-w-[320px]') +
+        ' h-screen pt-6 md:pt-8'
+      }
+      style={{ height: '100vh', minHeight: 0 }}
+    >
+      {/* Botão de expandir/colapsar */}
+      <div className="flex items-center justify-end px-2 pb-2">
+        <button
+          className="bg-white/20 hover:bg-white/40 rounded-full p-1 transition"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          aria-label={isCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+        >
+          {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+        </button>
+      </div>
+      {/* Header com informações do usuário */}
+      {!isCollapsed && (
+        <div className={styles.header + ' bg-white/10 backdrop-blur-md border-b border-white/20 mt-0'}>
+          <div className={styles.userContainer}>
+            <div className={styles.userAvatar + ' bg-gradient-to-br from-blue-500 to-slate-700 shadow-lg rounded-full p-1'}>
+              <User className={styles.userIcon + ' text-blue-400'} />
+            </div>
+            <div>
+              <p className={styles.userName + ' text-slate-100'}>
+                {user?.email?.split('@')[0] || 'Usuário'}
+              </p>
+              <p className={cn(styles.userStatus, USER_STATUS[userStatus].color, 'flex items-center gap-1')}> 
+                <span className={'inline-block w-2 h-2 rounded-full ' + USER_STATUS[userStatus].color}></span>
+                {USER_STATUS[userStatus].label}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Lista de Setores */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {sectors.map((sector) => {
-          const IconComponent = getIconComponent(sector.icon);
-          const counts = getSectorCounts(sector);
-          
-          return (
-            <div key={sector.id} className="relative group">
-              <Button
-                variant={selectedSector?.id === sector.id ? "secondary" : "ghost"}
+      )}
+      {/* Lista de departamentos com scroll */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        <ScrollArea className={styles.scrollArea + ' custom-scrollbar flex-1'}>
+          <div className={styles.departmentList + ' space-y-3'}>
+            {filteredSectors.map((department, index) => (
+              <div
+                key={department.id}
                 className={cn(
-                  "w-full justify-start h-auto p-3 transition-all",
-                  selectedSector?.id === sector.id
-                    ? "bg-gray-800 text-white"
-                    : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                  styles.departmentButton({
+                    active: activeDepartment?.id === department.id
+                  }),
+                  'group transition-all duration-300 border border-transparent hover:border-blue-400/40 shadow-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-blue-400',
+                  'cursor-pointer',
+                  isCollapsed ? 'justify-center px-2' : ''
                 )}
-                onClick={() => onSectorChange(sector)}
+                onClick={() => onSelectDepartment(department)}
+                tabIndex={0}
+                aria-selected={activeDepartment?.id === department.id}
+                role="button"
               >
-                <div className="flex items-center space-x-3 w-full">
-                  <div className={cn(
-                    "flex items-center justify-center rounded-lg text-white text-xs font-medium w-8 h-8",
-                    sector.color
-                  )}>
-                    <IconComponent className="w-4 h-4" />
+                <div className={styles.departmentContent + ' gap-3'}>
+                  <div className={styles.departmentIcon(getDepartmentColor(department)) + ' shadow-md'}>
+                    {getDepartmentIcon(department)}
                   </div>
-                  
-                  <div className="flex-1 text-left">
-                    <div className="font-medium text-sm">{sector.name}</div>
-                    <div className="text-xs text-gray-400">
-                      {counts.total} tickets • {counts.nonVisualized} não visualizados
+                  {!isCollapsed && (
+                    <div className={styles.departmentInfo}>
+                      <span className={styles.departmentName + ' text-base'}>{department.name}</span>
+                      <div className={styles.departmentMeta + ' gap-2'}>
+                        <Badge variant="outline" className={cn(styles.badge({ priority: department.priority }), 'rounded-full px-2 py-0.5')}> 
+                          {PRIORITY_ICONS[department.priority]} {PRIORITY_LABELS[department.priority]}
+                        </Badge>
+                        {ticketCounts[department.id] && (
+                          <Badge variant="secondary" className={styles.ticketCount + ' rounded-full px-2 py-0.5 bg-white/20 text-white'}>
+                            {ticketCounts[department.id].nonVisualized}/{ticketCounts[department.id].total}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  
-                  {counts.nonVisualized > 0 && (
-                    <Badge className="bg-red-500 hover:bg-red-600 text-white text-xs">
-                      {counts.nonVisualized > 99 ? '99+' : counts.nonVisualized}
-                    </Badge>
                   )}
                 </div>
-              </Button>
-
-              {/* Menu de ações do setor */}
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="h-6 w-6 p-0 text-gray-400 hover:text-white hover:bg-gray-700"
-                    >
-                      <MoreHorizontal className="w-3 h-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={() => handleEditSector(sector)}>
-                      <Edit3 className="w-4 h-4 mr-2" />
-                      Editar Setor
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={() => handleDeleteSector(sector)}
-                      className="text-red-600 focus:text-red-600"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Remover Setor
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {!isCollapsed && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className={styles.departmentActions + ' ml-auto'}>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleEditSector(department)}>
+                        <Edit3 className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        className="text-red-600"
+                        onClick={() => handleDeleteSector(department)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        </ScrollArea>
       </div>
-
+      {/* Botão Novo Setor fixo na base */}
+      {!isLoading && departments.length > 0 && !isCollapsed && (
+        <div className="sticky bottom-0 left-0 w-full bg-gradient-to-t from-slate-900/90 to-transparent pt-4 pb-2 px-4 z-10">
+          <Button
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-xl text-base font-semibold py-3"
+            onClick={() => setShowAddModal(true)}
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            Novo Setor
+          </Button>
+        </div>
+      )}
       {/* Modais */}
-      
       {/* Modal Adicionar Setor */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
         <DialogContent className="max-w-md">
@@ -582,7 +695,7 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
             <Button variant="outline" onClick={() => setShowAddModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={saveSector}>
+            <Button variant="default" onClick={handleAddSector}>
               Adicionar Setor
             </Button>
           </DialogFooter>
@@ -603,7 +716,7 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
             <Button variant="outline" onClick={() => setShowEditModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={saveSector}>
+            <Button variant="default" onClick={() => handleUpdateSector(departments[departments.length - 1])}>
               Salvar Alterações
             </Button>
           </DialogFooter>
@@ -634,13 +747,13 @@ export const Sidebar = ({ sectors, selectedSector, onSectorChange, collapsed, on
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeleteSector}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive hover:bg-destructive/90"
             >
               Confirmar Remoção
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </aside>
   );
-}; 
+} 

@@ -110,43 +110,56 @@ export function useTicketsDB() {
           .select('id, name')
           .eq('is_active', true);
         
-        if (!deptError && departments) {
+        if (deptError) {
+          console.error('Erro ao carregar departamentos:', deptError);
+          throw deptError;
+        }
+
+        if (departments && departments.length > 0) {
           // Criar mapeamento: nome -> id
           departmentMapping = departments.reduce((acc, dept) => {
-            acc[dept.name] = dept.id;
+            if (dept && dept.name && dept.id) {
+              acc[dept.name.toLowerCase()] = dept.id; // Normalizar para lowercase
+            }
             return acc;
           }, {} as Record<string, string>);
           
           console.log('📋 Mapeamento de departamentos:', departmentMapping);
+        } else {
+          console.warn('⚠️ Nenhum departamento ativo encontrado');
         }
       } catch (deptError) {
-        console.warn('Erro ao carregar departamentos:', deptError);
+        console.error('Erro ao carregar departamentos:', deptError);
       }
 
-        // Calcular ID do departamento do usuário
-        let userDepartmentId = null;
+      // Calcular ID do departamento do usuário
+      let userDepartmentId = null;
+      
+      // Tratamento especial para roles administrativos globais
+      if (currentUser?.department) {
+        const departmentLower = currentUser.department.toLowerCase(); // Normalizar para lowercase
         
-        // Tratamento especial para roles administrativos globais
-        if (currentUser?.department === 'Diretor' || 
-            currentUser?.department === 'CEO' || 
-            currentUser?.department === 'Administrador') {
+        if (departmentLower === 'diretor' || 
+            departmentLower === 'ceo' || 
+            departmentLower === 'administrador') {
           // Diretores e CEOs têm acesso global - não aplicar filtro de departamento
           userDepartmentId = null;
           console.log('🏢 Usuário com acesso global detectado:', currentUser.department);
-        } else if (currentUser?.department) {
+        } else {
           // Para outros departamentos, usar mapeamento normal
-          userDepartmentId = departmentMapping[currentUser.department] || null;
+          userDepartmentId = departmentMapping[departmentLower];
           
           if (!userDepartmentId) {
             console.warn('⚠️ Departamento não encontrado no mapeamento:', currentUser.department);
             console.log('📋 Departamentos disponíveis:', Object.keys(departmentMapping));
           }
         }
+      }
 
-        // Determinar se o usuário tem acesso global (antes de aplicar filtros)
-        const hasGlobalAccess = currentUser?.department === 'Diretor' || 
-                               currentUser?.department === 'CEO' || 
-                               currentUser?.department === 'Administrador';
+      // Determinar se o usuário tem acesso global (antes de aplicar filtros)
+      const hasGlobalAccess = currentUser?.department === 'Diretor' || 
+                             currentUser?.department === 'CEO' || 
+                             currentUser?.department === 'Administrador';
 
   // Debug: mostrar informações do usuário
   console.log('🔍 Debug - Informações do usuário:', {

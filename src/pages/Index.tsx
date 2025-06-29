@@ -8,10 +8,17 @@ import { useDepartments, Department } from '@/hooks/useDepartments';
 import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { toast } from '@/hooks/use-toast';
 import '@/utils/consoleDiagnostic';
+import { cn } from '@/lib/utils';
 
 const Index = () => {
   // Usar hook de departamentos do banco de dados
-  const { departments, loading: departmentsLoading, error: departmentsError, refreshDepartments } = useDepartments();
+  const { 
+    departments, 
+    loading: departmentsLoading, 
+    error: departmentsError, 
+    refreshDepartments, 
+    reorderDepartments 
+  } = useDepartments();
   
   // Hook para gerenciamento de tickets
   const { createTicket } = useTicketsDB();
@@ -43,8 +50,8 @@ const Index = () => {
       const savedSector = savedSectorId ? departments.find(d => d.id === savedSectorId) : null;
       
       // Se encontrou o setor salvo e está ativo, usar ele; senão, usar o primeiro ativo
-      const activeDepartments = departments.filter(d => d.isActive);
-      const sectorToSelect = (savedSector && savedSector.isActive) ? savedSector : activeDepartments[0];
+      const activeDepartments = departments.filter(d => d.is_active);
+      const sectorToSelect = (savedSector && savedSector.is_active) ? savedSector : activeDepartments[0];
       
       if (sectorToSelect) {
         setSelectedSector(sectorToSelect);
@@ -173,8 +180,24 @@ const Index = () => {
   };
 
   // Função para atualizar departamentos após modificações
-  const handleDepartmentUpdate = async () => {
-    await refreshDepartments();
+  const handleSectorReorder = async (reorderedSectors: Department[]) => {
+    // Atualiza o estado local imediatamente para uma UX responsiva
+    // Nota: useDepartments já gerencia o estado interno, então não precisamos setar 'departments' aqui diretamente
+    // A chamada a reorderDepartments abaixo irá disparar um refreshDepartments que atualizará o estado global
+    try {
+      await reorderDepartments(reorderedSectors);
+      toast({
+        title: "Ordem dos setores atualizada",
+        description: "A nova ordem dos departamentos foi salva com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao reordenar setores:", error);
+      toast({
+        title: "Erro ao reordenar setores",
+        description: error instanceof Error ? error.message : "Erro desconhecido ao salvar a nova ordem.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Se não há setor selecionado e não está carregando, mostrar loading
@@ -190,7 +213,7 @@ const Index = () => {
   }
 
   // Se não há departamentos ativos, mostrar mensagem
-  if (!departmentsLoading && departments.filter(d => d.isActive).length === 0) {
+  if (!departmentsLoading && departments.filter(d => d.is_active).length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -207,100 +230,104 @@ const Index = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 transition-all duration-300 ${isFullScreen ? 'fixed inset-0 z-50' : ''}`}>
-      <div className="flex h-screen overflow-hidden">
-        <Header
+    <div className={cn(
+      "min-h-screen bg-gray-50 flex flex-col",
+      isFullScreen && "fixed inset-0 z-50"
+    )}>
+      <Header
+        selectedSector={selectedSector}
+        currentView={currentView}
+        onViewChange={handleViewChange}
+        isFullScreen={isFullScreen}
+        onToggleFullScreen={toggleFullScreen}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled(!soundEnabled)}
+        onOpenAddTicket={() => setShowAddTicketModal(true)}
+      />
+      
+      <div className="flex-1 flex">
+        <Sidebar
+          departments={departments}
+          activeDepartment={selectedSector}
+          onSelectDepartment={handleSectorChange}
+          collapsed={sidebarCollapsed}
+          onToggle={toggleSidebar}
+          onDepartmentUpdate={refreshDepartments}
+          onDepartmentReorder={handleSectorReorder}
+          isLoading={departmentsLoading}
+          error={departmentsError}
+        />
+        
+        <MainContent
           selectedSector={selectedSector}
           currentView={currentView}
           onViewChange={handleViewChange}
-          isFullScreen={isFullScreen}
-          onToggleFullScreen={toggleFullScreen}
-          soundEnabled={soundEnabled}
-          onToggleSound={setSoundEnabled}
+          isLoading={isLoading}
+          sidebarCollapsed={sidebarCollapsed}
           onOpenAddTicket={() => setShowAddTicketModal(true)}
         />
-        
-        <div className="flex flex-1 pt-[76px] md:pt-[76px] lg:pt-[120px]">
-          <Sidebar
-            sectors={departments.filter(d => d.isActive)}
-            selectedSector={selectedSector}
-            onSectorChange={handleSectorChange}
-            collapsed={sidebarCollapsed}
-            onToggle={toggleSidebar}
-            onSectorUpdate={handleDepartmentUpdate}
-          />
-          
-          <MainContent
-            selectedSector={selectedSector}
-            currentView={currentView}
-            onViewChange={handleViewChange}
-            isLoading={isLoading}
-            sidebarCollapsed={sidebarCollapsed}
-            onOpenAddTicket={() => setShowAddTicketModal(true)}
-          />
-        </div>
-
-        {showImageModal && (
-          <ImagePasteModal
-            onClose={() => {
-              setShowImageModal(false);
-              setPastedImage(null);
-            }}
-            image={pastedImage}
-            onSend={(comment: string, isInternal: boolean) => {
-              console.log('Enviando imagem:', { comment, isInternal });
-              toast({
-                title: "🖼️ Imagem enviada",
-                description: isInternal ? "Imagem salva como nota interna" : "Imagem enviada para o cliente",
-              });
-              setShowImageModal(false);
-              setPastedImage(null);
-            }}
-          />
-        )}
-
-        {showAddTicketModal && (
-          <AddTicketModal
-            sector={selectedSector}
-            onClose={() => setShowAddTicketModal(false)}
-            onSave={async (ticketData) => {
-              try {
-                const newTicketData = {
-                  title: ticketData.subject,
-                  description: ticketData.description,
-                  subject: ticketData.subject, // Para compatibilidade
-                  status: ticketData.status,
-                  priority: ticketData.priority,
-                  channel: ticketData.channel,
-                  department_id: selectedSector?.id,
-                  metadata: {
-                    client_name: ticketData.client,
-                    anonymous_contact: ticketData.email,
-                    phone: ticketData.phone,
-                    assignee: ticketData.assignee
-                  }
-                };
-
-                await createTicket(newTicketData);
-                
-                toast({
-                  title: "Ticket criado com sucesso!",
-                  description: `Ticket "${ticketData.subject}" foi criado para o cliente ${ticketData.client}`,
-                });
-                
-                setShowAddTicketModal(false);
-              } catch (error) {
-                console.error('Erro ao criar ticket:', error);
-                toast({
-                  title: "Erro ao criar ticket",
-                  description: "Ocorreu um erro ao criar o ticket. Tente novamente.",
-                  variant: "destructive",
-                });
-              }
-            }}
-          />
-        )}
       </div>
+
+      {showImageModal && (
+        <ImagePasteModal
+          onClose={() => {
+            setShowImageModal(false);
+            setPastedImage(null);
+          }}
+          image={pastedImage}
+          onSend={(comment: string, isInternal: boolean) => {
+            console.log('Enviando imagem:', { comment, isInternal });
+            toast({
+              title: "🖼️ Imagem enviada",
+              description: isInternal ? "Imagem salva como nota interna" : "Imagem enviada para o cliente",
+            });
+            setShowImageModal(false);
+            setPastedImage(null);
+          }}
+        />
+      )}
+
+      {showAddTicketModal && (
+        <AddTicketModal
+          sector={selectedSector}
+          onClose={() => setShowAddTicketModal(false)}
+          onSave={async (ticketData) => {
+            try {
+              const newTicketData = {
+                title: ticketData.subject,
+                description: ticketData.description,
+                subject: ticketData.subject, // Para compatibilidade
+                status: ticketData.status,
+                priority: ticketData.priority,
+                channel: ticketData.channel,
+                department_id: selectedSector?.id,
+                metadata: {
+                  client_name: ticketData.client,
+                  anonymous_contact: ticketData.email,
+                  phone: ticketData.phone,
+                  assignee: ticketData.assignee
+                }
+              };
+
+              await createTicket(newTicketData);
+              
+              toast({
+                title: "Ticket criado com sucesso!",
+                description: `Ticket "${ticketData.subject}" foi criado para o cliente ${ticketData.client}`,
+              });
+              
+              setShowAddTicketModal(false);
+            } catch (error) {
+              console.error('Erro ao criar ticket:', error);
+              toast({
+                title: "Erro ao criar ticket",
+                description: "Ocorreu um erro ao criar o ticket. Tente novamente.",
+                variant: "destructive",
+              });
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

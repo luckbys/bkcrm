@@ -1,24 +1,30 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import type { DepartmentType } from '../components/crm/Sidebar.types';
 
 export interface Department {
   id: string;
   name: string;
+  type: DepartmentType;
+  icon?: string;
+  color?: string;
   description?: string;
-  color: string;
-  icon: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  metadata?: any;
+  priority: 'high' | 'normal' | 'low';
+  is_active?: boolean;
+  metadata?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+  order?: number;
 }
 
 interface DepartmentFromDB {
   id: string;
   name: string;
+  type: string;
   description: string | null;
-  color: string;
-  icon: string;
+  color: string | null;
+  icon: string | null;
+  priority: 'high' | 'normal' | 'low';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -30,9 +36,10 @@ interface UseDepartmentsReturn {
   loading: boolean;
   error: Error | null;
   refreshDepartments: () => Promise<void>;
-  addDepartment: (department: Omit<Department, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  addDepartment: (department: Omit<Department, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateDepartment: (id: string, updates: Partial<Department>) => Promise<void>;
   deleteDepartment: (id: string) => Promise<void>;
+  reorderDepartments: (reorderedDepartments: Department[]) => Promise<void>;
 }
 
 export function useDepartments(): UseDepartmentsReturn {
@@ -40,59 +47,130 @@ export function useDepartments(): UseDepartmentsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  const reorderDepartments = async (reorderedSectors: Department[]) => {
+    try {
+      console.log('🔄 Reordenando departamentos localmente...');
+      setLoading(true);
+      setError(null);
+
+      // Atualizar apenas o estado local com a nova ordem
+      setDepartments(reorderedSectors);
+      
+      console.log('✅ Departamentos reordenados localmente');
+    } catch (err) {
+      console.error('❌ Erro ao reordenar departamentos:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido ao reordenar departamentos';
+      setError(new Error(errorMessage));
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchDepartments = async () => {
     try {
+      console.log('🔄 Iniciando carregamento dos departamentos...');
       setLoading(true);
       setError(null);
 
       // Verificar usuário atual
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError) {
-        console.error('Erro ao obter usuário:', authError);
-        throw authError;
+        console.error('❌ Erro ao obter usuário:', authError);
+        throw new Error(`Erro de autenticação: ${authError.message}`);
       }
       if (!user) {
-        throw new Error('Usuário não autenticado');
+        console.warn('⚠️ Usuário não autenticado');
+        setDepartments([]); // Limpar departamentos se não houver usuário
+        return;
       }
 
-      console.log('Carregando departamentos...');
+      console.log('👤 Usuário autenticado:', user.email);
 
+      // Tentar buscar departamentos
       const { data, error: supabaseError } = await supabase
         .from('departments')
         .select('*')
         .eq('is_active', true)
-        .order('name', { ascending: true })
-        .returns<DepartmentFromDB[]>();
+        .order('name', { ascending: true });
 
-      if (supabaseError) throw supabaseError;
+      if (supabaseError) {
+        console.error('❌ Erro ao buscar departamentos:', supabaseError);
+        throw new Error(`Erro ao buscar departamentos: ${supabaseError.message}`);
+      }
 
-      const formattedDepartments: Department[] = (data || []).map(dept => ({
+      if (!data) {
+        console.warn('⚠️ Nenhum dado retornado do Supabase');
+        setDepartments([]);
+        return;
+      }
+
+      console.log('📊 Dados brutos recebidos:', data.length, 'departamentos');
+
+      const formattedDepartments: Department[] = data.map(dept => ({
         id: dept.id,
         name: dept.name,
-        description: dept.description || undefined,
-        color: dept.color,
-        icon: dept.icon,
-        isActive: dept.is_active,
-        createdAt: dept.created_at,
-        updatedAt: dept.updated_at,
-        metadata: dept.metadata
+        type: dept.type as DepartmentType,
+        description: dept.description || '',
+        color: dept.color || '#3B82F6', // Cor padrão se não definida
+        icon: dept.icon || 'Headphones', // Ícone padrão se não definido
+        priority: dept.priority || 'normal',
+        is_active: dept.is_active,
+        metadata: dept.metadata || {},
+        created_at: dept.created_at,
+        updated_at: dept.updated_at,
+        order: 0 // Valor padrão já que não existe a coluna order
       }));
 
+      console.log('✅ Departamentos formatados:', formattedDepartments.length);
       setDepartments(formattedDepartments);
-      console.log('Departamentos carregados:', formattedDepartments.length);
+      
     } catch (err) {
-      console.error('Erro ao carregar departamentos:', err);
-      setError(err instanceof Error ? err : new Error('Erro ao carregar departamentos'));
+      console.error('❌ Erro no fetchDepartments:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido ao carregar departamentos';
+      setError(new Error(errorMessage));
+      setDepartments([]); // Limpar departamentos em caso de erro
     } finally {
       setLoading(false);
     }
   };
 
+  // Função refreshDepartments para manter compatibilidade com a interface
   const refreshDepartments = async () => {
     await fetchDepartments();
   };
 
-  const addDepartment = async (department: Omit<Department, 'id' | 'createdAt' | 'updatedAt'>) => {
+  // Carregar departamentos na montagem do componente
+  useEffect(() => {
+    console.log('🔄 useEffect: Carregando departamentos...');
+    fetchDepartments();
+  }, []);
+
+  // Configurar listener para mudanças em tempo real
+  useEffect(() => {
+    console.log('🔄 Configurando listener de tempo real...');
+    
+    const subscription = supabase
+      .channel('departments-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'departments'
+      }, (payload) => {
+        console.log('🔔 Mudança detectada em departments:', payload);
+        fetchDepartments(); // Recarregar dados quando houver mudanças
+      })
+      .subscribe((status) => {
+        console.log('📡 Status da subscription:', status);
+      });
+
+    return () => {
+      console.log('🔄 Limpando subscription de departments');
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const addDepartment = async (department: Omit<Department, 'id' | 'created_at' | 'updated_at'>) => {
     try {
       setLoading(true);
       setError(null);
@@ -133,10 +211,11 @@ export function useDepartments(): UseDepartmentsReturn {
         .from('departments')
         .insert({
           name: department.name,
+          type: department.type,
           description: department.description,
           color: department.color,
           icon: department.icon,
-          is_active: department.isActive,
+          is_active: department.is_active,
           metadata: department.metadata || {}
         });
 
@@ -180,7 +259,7 @@ export function useDepartments(): UseDepartmentsReturn {
           ...(updates.description !== undefined && { description: updates.description }),
           ...(updates.color && { color: updates.color }),
           ...(updates.icon && { icon: updates.icon }),
-          ...(updates.isActive !== undefined && { is_active: updates.isActive }),
+          ...(updates.is_active !== undefined && { is_active: updates.is_active }),
           ...(updates.metadata && { metadata: updates.metadata })
         })
         .eq('id', id);
@@ -240,10 +319,6 @@ export function useDepartments(): UseDepartmentsReturn {
     }
   };
 
-  useEffect(() => {
-    fetchDepartments();
-  }, []);
-
   return {
     departments,
     loading,
@@ -251,6 +326,7 @@ export function useDepartments(): UseDepartmentsReturn {
     refreshDepartments,
     addDepartment,
     updateDepartment,
-    deleteDepartment
+    deleteDepartment,
+    reorderDepartments
   };
 } 
