@@ -62,7 +62,7 @@ $easypanelContent = @{
         }
         domains = @(
             @{
-                host = "ws.bkcrm.devsible.com.br"
+                host = "websocket.bkcrm.devsible.com.br"
                 port = 4000
                 https = $true
             }
@@ -138,7 +138,7 @@ Write-Host "1. 🔄 Faça upload do ZIP no EasyPanel" -ForegroundColor White
 Write-Host "2. ⚙️ Configure as variáveis de ambiente do webhook.env" -ForegroundColor White
 Write-Host "3. 🌐 Configure domínio: ws.bkcrm.devsible.com.br" -ForegroundColor White
 Write-Host "4. 🚀 Faça deploy e aguarde container inicializar" -ForegroundColor White
-Write-Host "5. ✅ Teste: https://ws.bkcrm.devsible.com.br/webhook/health" -ForegroundColor White
+Write-Host "5. ✅ Teste: https://websocket.bkcrm.devsible.com.br/webhook/health" -ForegroundColor White
 Write-Host ""
 Write-Host "⚡ ENDPOINTS DISPONÍVEIS:" -ForegroundColor Yellow
 Write-Host "   📥 POST /webhook/evolution (webhook principal)" -ForegroundColor Gray
