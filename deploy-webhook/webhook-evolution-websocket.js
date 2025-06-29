@@ -131,6 +131,59 @@ class WebSocketManager {
 // Instância global do WebSocket Manager
 const wsManager = new WebSocketManager();
 
+// Função para salvar mensagem enviada via WebSocket
+async function saveMessageFromWebSocket({ ticketId, content, isInternal, userId, senderName }) {
+  try {
+    const messagePayload = {
+      id: crypto.randomUUID(),
+      ticket_id: ticketId,
+      content: content,
+      sender_id: userId,
+      sender_name: senderName,
+      sender_email: null,
+      sender_type: 'agent',
+      type: 'text',
+      message_type: 'text',
+      is_internal: isInternal,
+      metadata: {
+        sent_via_websocket: true,
+        sender_id: userId,
+        sender_name: senderName,
+        is_internal: isInternal,
+        processed_at: new Date().toISOString()
+      },
+      created_at: new Date().toISOString()
+    };
+    
+    const { data: savedMessage, error } = await supabase
+      .from('messages')
+      .insert([messagePayload])
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('❌ [WS-SEND] Erro ao salvar mensagem:', error);
+      throw error;
+    }
+    
+    // Atualizar última atividade do ticket
+    await supabase
+      .from('tickets')
+      .update({
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ticketId);
+    
+    console.log(`💬 [WS-SEND] Mensagem salva: ${savedMessage.id} no ticket ${ticketId}`);
+    return savedMessage.id;
+    
+  } catch (error) {
+    console.error('❌ [WS-SEND] Erro ao salvar mensagem:', error);
+    throw error;
+  }
+}
+
 // 🔗 WEBSOCKET EVENT HANDLERS
 io.on('connection', (socket) => {
   console.log(`✅ [WS] Nova conexão WebSocket: ${socket.id}`);
