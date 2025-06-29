@@ -410,7 +410,7 @@ async function findOrCreateCustomerEnhanced(phone, instanceName, pushName = null
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
-    
+
     if (searchError && searchError.code !== 'PGRST116') {
       console.warn('⚠️ Erro ao buscar cliente:', searchError);
     }
@@ -449,7 +449,7 @@ async function findOrCreateCustomerEnhanced(phone, instanceName, pushName = null
       
       return existingCustomer.id;
     }
-    
+
     // Criar novo cliente
     console.log(`➕ Criando novo cliente para ${phoneFormatted}`);
     
@@ -478,15 +478,15 @@ async function findOrCreateCustomerEnhanced(phone, instanceName, pushName = null
       .insert([clientData])
       .select()
       .single();
-    
+
     if (createError) {
       console.error('❌ Erro ao criar cliente:', createError);
       return null;
     }
-    
+
     console.log(`✅ Cliente criado: ${newCustomer.id} (${newCustomer.full_name})`);
     return newCustomer.id;
-    
+
   } catch (error) {
     console.error('❌ Erro em findOrCreateCustomerEnhanced:', error);
     return null;
@@ -508,7 +508,7 @@ async function findOrCreateTicketEnhanced(customerId, phone, instanceName, first
       .in('status', ['open', 'in_progress', 'pending'])
       .order('created_at', { ascending: false })
       .limit(1);
-    
+
     if (existingTickets && existingTickets.length > 0) {
       const ticket = existingTickets[0];
       console.log(`✅ Ticket existente encontrado: ${ticket.id}`);
@@ -537,7 +537,7 @@ async function findOrCreateTicketEnhanced(customerId, phone, instanceName, first
       
       return ticket.id;
     }
-    
+
     // Criar novo ticket
     console.log(`➕ Criando novo ticket para cliente ${customerId}`);
     
@@ -574,21 +574,21 @@ async function findOrCreateTicketEnhanced(customerId, phone, instanceName, first
       updated_at: new Date().toISOString(),
       last_message_at: new Date().toISOString()
     };
-    
+
     const { data: newTicket, error } = await supabase
       .from('tickets')
       .insert([ticketData])
       .select()
       .single();
-    
+
     if (error) {
       console.error('❌ Erro ao criar ticket:', error);
       return null;
     }
-    
+
     console.log(`✅ Ticket criado: ${newTicket.id} com telefone ${phoneFormatted}`);
     return newTicket.id;
-    
+
   } catch (error) {
     console.error('❌ Erro em findOrCreateTicketEnhanced:', error);
     return null;
@@ -622,18 +622,18 @@ async function saveMessageEnhanced(ticketId, messageData, senderName, senderPhon
       },
       created_at: new Date().toISOString()
     };
-    
+
     const { data: savedMessage, error } = await supabase
       .from('messages')
       .insert([messagePayload])
       .select()
       .single();
-    
+
     if (error) {
       console.error('❌ Erro ao salvar mensagem:', error);
       return null;
     }
-    
+
     console.log(`💬 Mensagem salva: ${savedMessage.id} no ticket ${ticketId}`);
     
     // Broadcast via WebSocket para todos conectados ao ticket
@@ -654,7 +654,7 @@ async function saveMessageEnhanced(ticketId, messageData, senderName, senderPhon
     console.log(`📡 Broadcast enviado: ${broadcastSent}`);
     
     return savedMessage.id;
-    
+
   } catch (error) {
     console.error('❌ Erro ao salvar mensagem:', error);
     return null;
@@ -673,13 +673,13 @@ async function processCompleteMessage(payload) {
       console.warn('⚠️ Dados de mensagem inválidos');
       return { success: false, message: 'Dados inválidos' };
     }
-    
+
     // Ignorar mensagens enviadas por nós
     if (messageData.key.fromMe) {
       console.log('📤 Mensagem enviada por nós, ignorando');
       return { success: true, message: 'Mensagem própria ignorada' };
     }
-    
+
     // Extrair informações da mensagem
     const clientPhone = extractPhoneFromJid(messageData.key.remoteJid);
     const messageContent = extractMessageContent(messageData.message);
@@ -689,26 +689,26 @@ async function processCompleteMessage(payload) {
       console.warn('⚠️ Telefone ou conteúdo da mensagem inválido');
       return { success: false, message: 'Dados da mensagem inválidos' };
     }
-    
+
     console.log('📨 Processando mensagem completa:', {
       from: senderName,
       phone: clientPhone,
       content: messageContent.substring(0, 50) + '...',
       instance: instanceName
     });
-    
+
     // 1. Buscar ou criar cliente
     const customerId = await findOrCreateCustomerEnhanced(clientPhone, instanceName, senderName);
     if (!customerId) {
       return { success: false, message: 'Erro ao processar cliente' };
     }
-    
+
     // 2. Buscar ou criar ticket
     const ticketId = await findOrCreateTicketEnhanced(customerId, clientPhone, instanceName, messageContent);
     if (!ticketId) {
       return { success: false, message: 'Erro ao processar ticket' };
     }
-    
+
     // 3. Salvar mensagem (com broadcast automático)
     const messageId = await saveMessageEnhanced(ticketId, {
       content: messageContent,
@@ -722,10 +722,10 @@ async function processCompleteMessage(payload) {
     }
     
     console.log('✅ [WEBHOOK] Processamento completo finalizado com sucesso');
-    
-    return {
-      success: true,
-      message: 'Mensagem processada com sucesso',
+      
+      return { 
+        success: true, 
+        message: 'Mensagem processada com sucesso',
       data: {
         customerId,
         ticketId,
@@ -737,7 +737,7 @@ async function processCompleteMessage(payload) {
         enhanced: true
       }
     };
-    
+
   } catch (error) {
     console.error('❌ Erro no processamento completo:', error);
     return { success: false, message: error.message };
@@ -763,13 +763,13 @@ app.post('/webhook/evolution', async (req, res) => {
       
       if (result.success) {
         res.status(200).json({
-          success: true,
+        success: true,
           message: 'Webhook processado com sucesso',
           ...result.data
-        });
-      } else {
+      });
+    } else {
         res.status(400).json({
-          success: false,
+        success: false,
           message: result.message
         });
       }
@@ -780,7 +780,7 @@ app.post('/webhook/evolution', async (req, res) => {
       console.log('ℹ️ [WEBHOOK] Evento não processado:', payload.event);
       res.status(200).json({ success: true, message: 'Evento recebido mas não processado' });
     }
-    
+
   } catch (error) {
     console.error('❌ [WEBHOOK] Erro no endpoint principal:', error);
     res.status(500).json({
@@ -796,10 +796,10 @@ app.post('/webhook/evolution/connection-update', async (req, res) => {
   try {
     console.log('🔗 [CONNECTION] Update recebido:', req.body);
     res.status(200).json({ 
-      success: true, 
+        success: true,
       message: 'Connection update processado',
-      timestamp: new Date().toISOString()
-    });
+        timestamp: new Date().toISOString()
+      });
   } catch (error) {
     console.error('❌ [CONNECTION] Erro:', error);
     res.status(500).json({ success: false, message: error.message });

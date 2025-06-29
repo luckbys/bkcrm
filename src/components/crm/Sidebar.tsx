@@ -156,7 +156,7 @@ export function Sidebar({
   const [searchTerm, setSearchTerm] = useState('');
   
   const [ticketCounts, setTicketCounts] = useState<Record<string, { nonVisualized: number; total: number }>>({});
-
+  
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const onDragEnd = (result: DropResult) => {
@@ -606,7 +606,7 @@ export function Sidebar({
             {filteredSectors.map((department, index) => (
               <div
                 key={department.id}
-                className={cn(
+                            className={cn(
                   styles.departmentButton({
                     active: activeDepartment?.id === department.id
                   }),
@@ -623,7 +623,7 @@ export function Sidebar({
                 <div className={styles.departmentContent + ' gap-3'}>
                   <div className={styles.departmentIcon(getDepartmentColor(department)) + ' shadow-md'}>
                     {getDepartmentIcon(department)}
-                  </div>
+                              </div>
                   {!isCollapsed && (
                     <div className={styles.departmentInfo}>
                       <span className={styles.departmentName + ' text-base'}>{department.name}</span>
@@ -634,40 +634,40 @@ export function Sidebar({
                         {ticketCounts[department.id] && (
                           <Badge variant="secondary" className={styles.ticketCount + ' rounded-full px-2 py-0.5 bg-white/20 text-white'}>
                             {ticketCounts[department.id].nonVisualized}/{ticketCounts[department.id].total}
-                          </Badge>
-                        )}
-                      </div>
+                                  </Badge>
+                                )}
+                              </div>
                     </div>
-                  )}
-                </div>
+                              )}
+                            </div>
                 {!isCollapsed && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
                       <Button variant="ghost" className={styles.departmentActions + ' ml-auto'}>
                         <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
+                                </Button>
+                              </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleEditSector(department)}>
                         <Edit3 className="mr-2 h-4 w-4" />
                         Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
                         className="text-red-600"
                         onClick={() => handleDeleteSector(department)}
-                      >
+                                >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Excluir
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                 )}
               </div>
             ))}
-          </div>
+                          </div>
         </ScrollArea>
-      </div>
+                        </div>
       {/* Botão Novo Setor fixo na base */}
       {!isLoading && departments.length > 0 && !isCollapsed && (
         <div className="sticky bottom-0 left-0 w-full bg-gradient-to-t from-slate-900/90 to-transparent pt-4 pb-2 px-4 z-10">
@@ -678,8 +678,8 @@ export function Sidebar({
             <Plus className="mr-2 h-5 w-5" />
             Novo Setor
           </Button>
-        </div>
-      )}
+            </div>
+          )}
       {/* Modais */}
       {/* Modal Adicionar Setor */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
