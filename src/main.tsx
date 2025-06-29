@@ -198,6 +198,18 @@ import './utils/test-nunmsg-integration'
 // 🚀 Importar teste da correção do realtime
 import './utils/test-realtime-fix'
 
+// 🔍 Importar diagnóstico de mensagens
+import './utils/diagnose-messages-issue'
+
+// 🔧 Importar correções WebSocket
+import './utils/websocket-fix'
+
+// 🔧 Importar correção específica de conexão
+import './utils/websocket-connection-fix'
+
+// 🔧 Importar correção do endpoint /messages-upsert
+import './utils/fix-messages-upsert'
+
 // 🔧 Importar correções de QR Code e CSS
 import './utils/fix-qr-code-and-css'
 

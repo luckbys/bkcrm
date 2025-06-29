@@ -1175,6 +1175,74 @@ app.post('/webhook/evolution', async (req, res) => {
   }
 });
 
+// Endpoint para atualizações de conexão da Evolution API
+app.post('/webhook/evolution/connection-update', async (req, res) => {
+  try {
+    const payload = req.body;
+    const timestamp = new Date().toISOString();
+
+    console.log('🔗 [CONNECTION] Atualização de conexão recebida:', {
+      instance: payload.instance,
+      state: payload.data?.state,
+      statusReason: payload.data?.statusReason,
+      timestamp
+    });
+
+    // Processar diferentes estados de conexão
+    let connectionStatus = 'unknown';
+    let statusMessage = 'Status desconhecido';
+
+    if (payload.data?.state === 'open') {
+      connectionStatus = 'connected';
+      statusMessage = 'WhatsApp conectado e pronto';
+      console.log('✅ [CONNECTION] WhatsApp conectado:', payload.instance);
+    } else if (payload.data?.state === 'connecting') {
+      connectionStatus = 'connecting';
+      statusMessage = 'Conectando ao WhatsApp...';
+      console.log('🔄 [CONNECTION] Conectando ao WhatsApp:', payload.instance);
+    } else if (payload.data?.state === 'close') {
+      connectionStatus = 'disconnected';
+      statusMessage = 'WhatsApp desconectado';
+      console.log('❌ [CONNECTION] WhatsApp desconectado:', payload.instance);
+    } else if (payload.data?.state === 'qr') {
+      connectionStatus = 'qr_required';
+      statusMessage = 'QR Code necessário';
+      console.log('📱 [CONNECTION] QR Code necessário:', payload.instance);
+    }
+
+    // Broadcast do status de conexão para todos os clientes WebSocket
+    const connectionUpdate = {
+      instance: payload.instance,
+      status: connectionStatus,
+      state: payload.data?.state,
+      statusReason: payload.data?.statusReason,
+      timestamp,
+      message: statusMessage
+    };
+
+    // Enviar para todos os clientes conectados (broadcast global)
+    io.emit('connection-update', connectionUpdate);
+
+    res.status(200).json({
+      received: true,
+      timestamp,
+      event: 'connection.update',
+      instance: payload.instance,
+      status: connectionStatus,
+      message: statusMessage,
+      broadcast: true
+    });
+
+  } catch (error) {
+    console.error('❌ [CONNECTION] Erro ao processar atualização de conexão:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      timestamp: new Date().toISOString(),
+      details: error.message
+    });
+  }
+});
+
 // Endpoint de health check
 app.get('/webhook/health', (req, res) => {
   const stats = wsManager.getStats();
@@ -1246,6 +1314,7 @@ server.listen(PORT, () => {
   console.log(`🚀 Servidor Webhook Evolution + WebSocket rodando na porta ${PORT}`);
   console.log('📋 Funcionalidades:');
   console.log('   📥 Webhook Evolution API: POST /webhook/evolution');
+  console.log('   🔗 Connection Updates: POST /webhook/evolution/connection-update');
   console.log('   🔗 WebSocket Server: ws://localhost:4000');
   console.log('   📊 Estatísticas: GET /webhook/ws-stats');
   console.log('   🏥 Health Check: GET /webhook/health');

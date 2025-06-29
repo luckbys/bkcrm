@@ -3,52 +3,38 @@
 
 const fetch = require('node-fetch');
 
-console.log('🧪 Testando rota /connection-update...\n');
-
-// Payload de teste simulando connection.update da Evolution API
-const testPayload = {
-  instance: 'atendimento-ao-cliente-suporte-n1',
-  data: {
-    instance: 'atendimento-ao-cliente-suporte-n1',
-    wuid: '5512981022013@s.whatsapp.net',
-    profileName: 'Lucas Borges',
-    profilePictureUrl: 'https://pps.whatsapp.net/v/t61.24694-24/test.jpg',
-    state: 'open',
-    statusReason: 200
-  }
-};
-
-async function testarConnectionUpdate() {
+async function testConnectionUpdate() {
   try {
-    console.log('📤 Enviando connection.update para /connection-update...');
+    console.log('🧪 Testando endpoint /webhook/evolution/connection-update...');
     
-    const response = await fetch('http://localhost:4000/connection-update', {
+    const response = await fetch('http://localhost:4000/webhook/evolution/connection-update', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(testPayload),
-      timeout: 10000
+      body: JSON.stringify({
+        instance: 'atendimento-ao-cliente-suporte-n1',
+        data: {
+          state: 'connecting',
+          statusReason: 200
+        }
+      })
     });
 
-    console.log(`📊 Status Response: ${response.status}`);
+    const result = await response.json();
     
-    if (response.ok) {
-      const data = await response.json();
-      console.log('📥 Resposta do webhook:');
-      console.log(JSON.stringify(data, null, 2));
-      console.log('✅ SUCESSO: Rota /connection-update esta funcionando!');
+    console.log('✅ Status:', response.status);
+    console.log('📄 Resposta:', JSON.stringify(result, null, 2));
+    
+    if (response.status === 200) {
+      console.log('🎉 Endpoint /connection-update funcionando corretamente!');
     } else {
-      console.log('❌ ERRO: Webhook retornou status', response.status);
-      const errorText = await response.text();
-      console.log('📄 Erro:', errorText);
+      console.log('❌ Endpoint retornou erro');
     }
     
   } catch (error) {
-    console.log('❌ ERRO ao testar webhook:', error.message);
-    console.log('🔌 CAUSA PROVAVEL: Servidor webhook nao esta rodando na porta 4000');
-    console.log('💡 SOLUCAO: Execute "npm run webhook" em outro terminal');
+    console.error('❌ Erro no teste:', error.message);
   }
 }
 
-testarConnectionUpdate(); 
+testConnectionUpdate(); 
