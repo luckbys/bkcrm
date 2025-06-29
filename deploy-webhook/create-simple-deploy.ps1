@@ -74,13 +74,13 @@ Write-Host "   EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11" -ForegroundCo
 Write-Host "   NODE_ENV=production" -ForegroundColor Gray
 Write-Host "3. Configure dominio: ws.bkcrm.devsible.com.br" -ForegroundColor White
 Write-Host "4. Faca deploy e aguarde container inicializar" -ForegroundColor White
-Write-Host "5. Teste: https://ws.bkcrm.devsible.com.br/webhook/health" -ForegroundColor White
+Write-Host "5. Teste: https://websocket.bkcrm.devsible.com.br/webhook/health" -ForegroundColor White
 Write-Host ""
 Write-Host "ENDPOINTS DISPONIVEIS:" -ForegroundColor Yellow
 Write-Host "  POST /webhook/evolution (webhook principal)" -ForegroundColor Gray
 Write-Host "  POST /connection-update (resolve erro 404)" -ForegroundColor Gray
 Write-Host "  GET /webhook/health (health check)" -ForegroundColor Gray
 Write-Host "  GET /webhook/ws-stats (estatisticas)" -ForegroundColor Gray
-Write-Host "  WebSocket: ws://ws.bkcrm.devsible.com.br" -ForegroundColor Gray
+Write-Host "  WebSocket: ws://websocket.bkcrm.devsible.com.br" -ForegroundColor Gray
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan 
