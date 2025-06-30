@@ -7,10 +7,10 @@ const getWebSocketURL = () => {
   const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
   
   if (isDev) {
-    return import.meta.env.VITE_EVOLUTION_WEBHOOK_URL || 'https://webhook.bkcrm.devsible.com.br';
+    return window.location.origin;  // Usa o proxy local
   }
   
-  return import.meta.env.VITE_EVOLUTION_WEBHOOK_URL || 'https://webhook.bkcrm.devsible.com.br';
+  return window.location.origin;  // Usa o proxy local
 };
 
 export interface EvolutionMessage {
@@ -72,7 +72,16 @@ export const useEvolutionWebhook = () => {
         reconnectionAttempts: maxReconnectAttempts,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: 20000
+        timeout: 20000,
+        extraHeaders: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey'
+        },
+        // Configurações de segurança
+        withCredentials: true,
+        autoConnect: true,
+        forceNew: true
       });
 
       socketRef.current = socket;

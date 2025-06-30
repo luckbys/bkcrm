@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
 // Configurações da Evolution API
-const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://webhook.bkcrm.devsible.com.br/api';
+const EVOLUTION_API_URL = '/api';  // Usa o proxy local
 const API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
 // Rate limiting e retry configuration
@@ -14,11 +14,15 @@ class EvolutionApiManager {
     baseURL: EVOLUTION_API_URL,
     headers: {
       'apikey': API_KEY,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey'
     },
-    timeout: 30000
-    // Nota: httpsAgent não é suportado no navegador
-    // SSL é tratado automaticamente pelo navegador
+    timeout: 30000,
+    // Ignorar certificados auto-assinados
+    validateStatus: () => true, // Aceitar qualquer status HTTP
+    maxRedirects: 5
   });
 
   private requestQueue: Array<() => Promise<any>> = [];
