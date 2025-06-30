@@ -1,4 +1,5 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios';
+import { API_CONFIG, EVOLUTION_CONFIG, APP_CONFIG } from '@/config';
 
 // Configurações da Evolution API
 const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://webhook.bkcrm.devsible.com.br/api';
@@ -9,790 +10,380 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 segundo
 const RATE_LIMIT_DELAY = 100; // 100ms entre requests
 
-class EvolutionApiManager {
-  private apiClient = axios.create({
-    baseURL: EVOLUTION_API_URL,
-    headers: {
-      'apikey': API_KEY,
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey'
-    },
-    timeout: 30000,
-    validateStatus: () => true, // Aceitar qualquer status HTTP
-    maxRedirects: 5
-  });
+interface HealthCheckResponse {
+  status: string;
+  timestamp: string;
+  uptime: number;
+  version?: string;
+}
 
-  private requestQueue: Array<() => Promise<any>> = [];
-  private isProcessingQueue = false;
-  private connectionStatus = new Map<string, 'connected' | 'disconnected' | 'connecting'>();
-  private lastHealthCheck = 0;
-  private healthCheckInterval = 30000; // 30 segundos
+interface StatsResponse {
+  success: boolean;
+  server: {
+    uptime: number;
+    memory: {
+      rss: number;
+      heapTotal: number;
+      heapUsed: number;
+      external: number;
+    };
+    cpu: any;
+  };
+  websocket: {
+    connectedClients: number;
+    totalConnections: number;
+    rooms: string[];
+  };
+  evolution: {
+    instances: number;
+    connected: number;
+    disconnected: number;
+  };
+}
+
+interface EvolutionInstance {
+  instanceName: string;
+  status: 'open' | 'close' | 'connecting';
+  serverUrl: string;
+  apikey: string;
+  qrcode?: {
+    base64: string;
+    code: string;
+  };
+}
+
+interface SendMessageRequest {
+  instance: string;
+  to: string;
+  message: string;
+  type?: 'text' | 'image' | 'video' | 'audio' | 'document';
+  options?: {
+    delay?: number;
+    presence?: 'composing' | 'recording';
+    quoted?: string;
+  };
+}
+
+interface SendMessageResponse {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+interface MessagesResponse {
+  success: boolean;
+  messages: any[];
+  count: number;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+}
+
+class EvolutionApiService {
+  private api: AxiosInstance;
 
   constructor() {
-    this.setupInterceptors();
-    this.startHealthCheck();
-    
-    // Log inicial de configuração
-    console.log('🔧 Evolution API configurada:', {
-      url: EVOLUTION_API_URL,
-      hasApiKey: !!API_KEY,
-      environment: 'browser'
+    this.api = axios.create({
+      baseURL: API_CONFIG.API_BASE_URL,
+      timeout: APP_CONFIG.API_TIMEOUT,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
     });
+
+    this.setupInterceptors();
   }
 
-  private setupInterceptors() {
-    // Request interceptor para logging
-    this.apiClient.interceptors.request.use((config) => {
-      console.log(`🚀 [Evolution API] ${config.method?.toUpperCase()} ${config.url}`);
+  private setupInterceptors(): void {
+    // Request interceptor
+    this.api.interceptors.request.use(
+      (config) => {
+        const method = config.method?.toUpperCase() || 'GET';
+        const url = config.url || '';
+        
+        if (APP_CONFIG.DEBUG) {
+          console.log(`🚀 [Evolution API] ${method} ${url}`);
+          if (config.data) {
+            console.log('📤 Request Data:', config.data);
+          }
+        }
+        
       return config;
-    });
+      },
+      (error) => {
+        console.error('❌ [Evolution API] Request Error:', error);
+        return Promise.reject(error);
+      }
+    );
 
-    // Response interceptor para tratamento de erros
-    this.apiClient.interceptors.response.use(
-      (response) => {
-        console.log(`✅ [Evolution API] ${response.status} ${response.config.url}`);
+    // Response interceptor
+    this.api.interceptors.response.use(
+      (response: AxiosResponse) => {
+        const method = response.config.method?.toUpperCase() || 'GET';
+        const url = response.config.url || '';
+        const status = response.status;
+        
+        if (APP_CONFIG.DEBUG) {
+          console.log(`✅ [Evolution API] ${method} ${url} - ${status}`);
+          if (response.data) {
+            console.log('📥 Response Data:', response.data);
+          }
+        }
+        
         return response;
       },
-      (error: AxiosError) => {
-        console.error(`❌ [Evolution API] ${error.response?.status} ${error.config?.url}`, error.response?.data);
+      (error) => {
+        const method = error.config?.method?.toUpperCase() || 'GET';
+        const url = error.config?.url || '';
+        const status = error.response?.status || 'No Response';
+        
+        console.error(`❌ [Evolution API] ${method} ${url} - ${status}`, error.message);
+        
+        if (error.response?.data) {
+          console.error('📥 Error Response:', error.response.data);
+        }
+        
         return Promise.reject(error);
       }
     );
   }
 
-  private async processQueue() {
-    if (this.isProcessingQueue) return;
-    
-    this.isProcessingQueue = true;
-    
-    while (this.requestQueue.length > 0) {
-      const request = this.requestQueue.shift();
-      if (request) {
-        try {
-          await request();
-          await this.delay(RATE_LIMIT_DELAY);
-        } catch (error) {
-          console.error('❌ Erro ao processar request na fila:', error);
-        }
-      }
-    }
-    
-    this.isProcessingQueue = false;
-  }
-
-  private async delay(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  private isRetryableError(error: any): boolean {
-    // Add more retryable status codes
-    const retryableStatuses = [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524];
-    const retryableNetworkErrors = [
-      'ECONNRESET',
-      'ETIMEDOUT',
-      'ECONNREFUSED',
-      'ENOTFOUND',
-      'ENETUNREACH'
-    ];
-
-    // Retry on status codes
-    if (error.response?.status && retryableStatuses.includes(error.response.status)) {
-      return true;
-    }
-
-    // Retry on network errors
-    if (error.code && retryableNetworkErrors.includes(error.code)) {
-      return true;
-    }
-
-    // Retry on timeout
-    if (error.code === 'ECONNABORTED') {
-      return true;
-    }
-
-    return false;
-  }
-
-  private async retryRequest<T>(
-    requestFn: () => Promise<T>,
-    retries = MAX_RETRIES
-  ): Promise<T> {
+  // Health check do servidor webhook
+  async checkHealth(): Promise<HealthCheckResponse> {
     try {
-      return await requestFn();
+      const response = await this.api.get<HealthCheckResponse>('/health');
+      return response.data;
     } catch (error: any) {
-      // Log detalhado do erro
-      console.error(`❌ [Evolution API] Erro na requisição:`, {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        url: error.config?.url,
-        method: error.config?.method,
-        message: error.message,
-        data: error.response?.data,
-        code: error.code
-      });
-      
-      if (retries > 0 && this.isRetryableError(error)) {
-        const attempt = MAX_RETRIES - retries + 1;
-        const delay = RETRY_DELAY * Math.pow(2, attempt - 1); // Exponential backoff
-        
-        console.warn(`⚠️ Tentativa ${attempt}/${MAX_RETRIES} falhou, tentando novamente em ${delay}ms...`);
-        await this.delay(delay);
-        return this.retryRequest(requestFn, retries - 1);
-      }
-      
-      // Melhorar mensagem de erro
-      if (error.response?.status === 404) {
-        const urlParts = error.config?.url?.split('/') || [];
-        const resource = urlParts[urlParts.length - 1];
-        throw new Error(`Recurso '${resource}' não encontrado na Evolution API. Verifique se a instância existe.`);
-      }
-      
-      if (error.response?.status === 401) {
-        throw new Error('API Key inválida. Verifique as credenciais da Evolution API.');
-      }
-      
-      if (error.response?.status === 502) {
-        throw new Error('Evolution API está inacessível. Verifique se o servidor está online.');
-      }
-      
-      if (error.response?.status >= 500) {
-        throw new Error('Erro interno da Evolution API. Tente novamente em alguns minutos.');
-      }
-      
-      throw error;
+      throw new Error(`Health check failed: ${error.message}`);
     }
   }
 
-  private async startHealthCheck() {
-    setInterval(async () => {
-      if (Date.now() - this.lastHealthCheck < this.healthCheckInterval) return;
-      
-      try {
-        await this.testConnection();
-        this.lastHealthCheck = Date.now();
-      } catch (error) {
-        console.warn('⚠️ Health check falhou:', error);
-      }
-    }, this.healthCheckInterval);
-  }
-
-  // Método público para testar conexão
-  async testConnection(): Promise<{ success: boolean; latency?: number; error?: string }> {
-    const startTime = Date.now();
-    
+  // Buscar estatísticas do servidor
+  async getStats(): Promise<StatsResponse> {
     try {
-      await this.retryRequest(() => this.apiClient.get('/', { timeout: 5000 }));
-      const latency = Date.now() - startTime;
-      
-      console.log(`✅ Evolution API conectada (${latency}ms)`);
-      return { success: true, latency };
+      const response = await this.api.get<StatsResponse>('/stats');
+      return response.data;
     } catch (error: any) {
-      console.error('❌ Falha na conexão com Evolution API:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message || 'Conexão falhou'
-      };
+      throw new Error(`Failed to get stats: ${error.message}`);
     }
   }
 
-  // Melhorado: Criação de instância com validação robusta
-  async createInstance(
+  // Buscar estatísticas WebSocket
+  async getWebSocketStats(): Promise<any> {
+    try {
+      const response = await this.api.get('/ws-stats');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to get WebSocket stats: ${error.message}`);
+    }
+  }
+
+  // Buscar instâncias Evolution API
+  async fetchInstances(instanceName?: string): Promise<EvolutionInstance[]> {
+    try {
+      const url = instanceName 
+        ? `/instance/fetchInstances?instanceName=${instanceName}` 
+        : '/instance/fetchInstances';
+      
+      const response = await this.api.get<EvolutionInstance[]>(url);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to fetch instances: ${error.message}`);
+    }
+  }
+
+  // Buscar status de uma instância específica
+  async getInstanceStatus(instanceName: string): Promise<EvolutionInstance> {
+    try {
+      const response = await this.api.get<EvolutionInstance>(`/instance/status/${instanceName}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to get instance status: ${error.message}`);
+    }
+  }
+
+  // Buscar QR Code de uma instância
+  async getInstanceQRCode(instanceName: string): Promise<string | null> {
+    try {
+      const response = await this.api.get(`/instance/qrcode/${instanceName}`);
+      return response.data.qrCode || null;
+    } catch (error: any) {
+      console.warn(`QR Code not available for ${instanceName}:`, error.message);
+      return null;
+    }
+  }
+
+  // Buscar mensagens de uma instância
+  async getMessages(
     instanceName: string, 
-    options: {
-      webhookUrl?: string;
-      qrcode?: boolean;
-      integration?: string;
-      rejectCall?: boolean;
-      msgCall?: string;
-      groupsIgnore?: boolean;
-      alwaysOnline?: boolean;
-      readMessages?: boolean;
-      readStatus?: boolean;
-    } = {}
-  ) {
-    const payload = {
-      instanceName,
-      qrcode: options.qrcode ?? true,
-      integration: options.integration || 'WHATSAPP-BAILEYS',
-      webhook: {
-        enabled: !!options.webhookUrl,
-        url: options.webhookUrl || `${window.location.origin}/api/webhooks/evolution`,
-        byEvents: true,
-        base64: false,
-        events: [
-          'APPLICATION_STARTUP',
-          'QRCODE_UPDATED', 
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE',
-          'CONNECTION_UPDATE',
-          'SEND_MESSAGE'
-        ]
-      },
-      rejectCall: options.rejectCall ?? false,
-      msgCall: options.msgCall || 'Chamadas não são aceitas por este número.',
-      groupsIgnore: options.groupsIgnore ?? false,
-      alwaysOnline: options.alwaysOnline ?? false,
-      readMessages: options.readMessages ?? true,
-      readStatus: options.readStatus ?? true,
-      syncFullHistory: false
-    };
-
-    return this.retryRequest(async () => {
-      const response = await this.apiClient.post('/instance/create', payload);
-      
-      // Atualizar status local
-      this.connectionStatus.set(instanceName, 'connecting');
-      
-      console.log('✅ Instância criada:', instanceName);
-      return response.data;
-    });
-  }
-
-  // Melhorado: Status com cache e validação
-  async getInstanceStatus(instanceName: string, useCache = true): Promise<{
-    instance: {
-      instanceName: string;
-      state: 'open' | 'close' | 'connecting';
-    };
-    connectionInfo?: any;
-  }> {
-    // Verificar cache primeiro se solicitado
-    if (useCache && this.connectionStatus.has(instanceName)) {
-      const cachedStatus = this.connectionStatus.get(instanceName)!;
-      console.log(`📋 Status em cache para ${instanceName}: ${cachedStatus}`);
+    limit: number = 50, 
+    offset: number = 0,
+    filters?: {
+      fromMe?: boolean;
+      messageType?: string;
+      startDate?: string;
+      endDate?: string;
     }
-
+  ): Promise<MessagesResponse> {
     try {
-      return await this.retryRequest(async () => {
-        const response = await this.apiClient.get(`/instance/connectionState/${instanceName}`);
-        const status = response.data;
-        
-        // Atualizar cache local
-        if (status.instance?.state === 'open') {
-          this.connectionStatus.set(instanceName, 'connected');
-        } else {
-          this.connectionStatus.set(instanceName, 'disconnected');
-        }
-        
-        console.log(`📊 Status da instância ${instanceName}:`, status.instance?.state);
-        return status;
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        offset: offset.toString(),
+        ...filters
       });
+
+      const response = await this.api.get<MessagesResponse>(
+        `/messages/${instanceName}?${params}`
+      );
+      return response.data;
     } catch (error: any) {
-      // Se instância não existe, verificar se precisa ser criada
-      if (error.message.includes('não encontrado')) {
-        console.warn(`⚠️ Instância ${instanceName} não encontrada na Evolution API`);
-        
-        // Verificar se existe no banco local
-        const instanceExistsLocally = await this.checkLocalInstance(instanceName);
-        if (instanceExistsLocally) {
-          console.log(`🔄 Tentando recriar instância ${instanceName} na Evolution API...`);
-          try {
-            await this.createInstance(instanceName);
-            // Retry o status após criação
-            return this.getInstanceStatus(instanceName, false);
-          } catch (createError) {
-            console.error('❌ Falha ao recriar instância:', createError);
-          }
-        }
-      }
-      
-      // Retornar status offline se não conseguir conectar
-      return {
-        instance: {
-          instanceName,
-          state: 'close' as const
-        },
-        connectionInfo: null
-      };
+      throw new Error(`Failed to get messages: ${error.message}`);
     }
   }
 
-  private async checkLocalInstance(instanceName: string): Promise<boolean> {
+  // Enviar mensagem (através do webhook)
+  async sendMessage(request: SendMessageRequest): Promise<SendMessageResponse> {
     try {
-      // Verificar no Supabase se instância existe localmente
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_ANON_KEY
-      );
-      
-      const { data } = await supabase
-        .from('evolution_instances')
-        .select('id')
-        .eq('instance_name', instanceName)
-        .eq('is_active', true)
-        .single();
-      
-      return !!data;
-    } catch {
-      return false;
-    }
-  }
-
-  // Otimizado: QR Code com múltiplos formatos e fallback
-  async getInstanceQRCode(instanceName: string): Promise<any> {
-    try {
-      console.log(`🔍 Buscando QR code para instância ${instanceName}...`);
-      const response = await this.retryRequest(() => 
-        this.apiClient.get(`/instance/qrcode/${instanceName}`)
-      );
-
-      if (!response.data || !response.data.qrcode) {
-        console.log(`ℹ️ QR code não disponível para ${instanceName}`);
-        return { success: false };
-      }
-
-      console.log(`✅ QR code obtido para ${instanceName}`);
-      return {
-        success: true,
-        base64: response.data.qrcode
-      };
-    } catch (error) {
-      console.error(`❌ Erro ao buscar QR code para ${instanceName}:`, error);
-      return { success: false };
-    }
-  }
-
-  // Envio de mensagem com validação
-  async sendTextMessage(instanceName: string, payload: {
-    number: string;
-    textMessage: { text: string };
-    options?: {
-      delay?: number;
-      presence?: 'composing' | 'paused';
-      linkPreview?: boolean;
-    };
-  }) {
-    const formattedPayload = {
-      ...payload,
-      number: this.formatPhoneNumber(payload.number),
-      options: {
-        delay: 1200,
-        presence: 'composing' as const,
-        linkPreview: false,
-        ...payload.options
-      }
-    };
-
-    return this.retryRequest(async () => {
-      console.log('📤 Enviando mensagem de texto para:', formattedPayload.number);
-      const response = await this.apiClient.post(`/message/sendText/${instanceName}`, formattedPayload);
-      console.log('✅ Mensagem enviada com sucesso');
-      return response.data;
-    });
-  }
-
-  // Webhook configuration
-  async setInstanceWebhook(instanceName: string, webhookData: {
-    url: string;
-    events?: string[];
-    enabled?: boolean;
-  }) {
-    if (!this.isValidUrl(webhookData.url)) {
-      throw new Error('URL do webhook inválida');
-    }
-
-    const payload = {
-      url: webhookData.url,
-      enabled: webhookData.enabled ?? true,
-      events: webhookData.events ?? this.getValidEvents()
-    };
-
-    return this.retryRequest(async () => {
-      console.log(`🔗 Configurando webhook para ${instanceName}:`, webhookData.url);
-      const response = await this.apiClient.put(`/webhook/set/${instanceName}`, payload);
-      console.log('✅ Webhook configurado com sucesso');
-      return response.data;
-    });
-  }
-
-  // Método auxiliar para gerar QR Code visual
-  private async generateQRCodeImage(qrText: string): Promise<string> {
-    try {
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrText)}`;
-      const response = await fetch(qrApiUrl);
-      const blob = await response.blob();
-      
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+      const response = await this.api.post<SendMessageResponse>('/send-message', {
+        instance: request.instance,
+        to: request.to,
+        message: request.message,
+        type: request.type || 'text',
+        options: request.options || {}
       });
-    } catch (error) {
-      console.error('❌ Erro ao gerar QR Code via API externa:', error);
-      throw error;
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to send message: ${error.message}`);
     }
   }
 
-  // Validações
-  isValidWhatsAppNumber(phone: string): boolean {
-    const cleanPhone = phone.replace(/\D/g, '');
-    return cleanPhone.length >= 10 && cleanPhone.length <= 15;
-  }
-
-  private isValidUrl(url: string): boolean {
+  // Testar envio de mensagem
+  async testSendMessage(instanceName?: string): Promise<SendMessageResponse> {
     try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
+      const instance = instanceName || EVOLUTION_CONFIG.DEFAULT_INSTANCE;
+      const response = await this.api.post<SendMessageResponse>('/test-send', {
+        instance,
+        to: '5511999999999@s.whatsapp.net', // Número de teste
+        message: `🧪 Teste de envio - ${new Date().toLocaleString()}`,
+        type: 'text'
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to test send message: ${error.message}`);
     }
   }
 
-  private getValidEvents(): string[] {
-    return [
+  // Verificar instância na Evolution API
+  async checkEvolutionInstance(instanceName?: string): Promise<any> {
+    try {
+      const instance = instanceName || EVOLUTION_CONFIG.DEFAULT_INSTANCE;
+      const response = await this.api.get(`/check-instance?instance=${instance}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to check Evolution instance: ${error.message}`);
+    }
+  }
+
+  // Criar/configurar instância Evolution API
+  async createInstance(instanceData: {
+    instanceName: string;
+    token?: string;
+    qrcode?: boolean;
+    webhook?: string;
+  }): Promise<any> {
+    try {
+      const response = await this.api.post('/create-instance', {
+        instanceName: instanceData.instanceName,
+        token: instanceData.token || EVOLUTION_CONFIG.GLOBAL_API_KEY,
+        qrcode: instanceData.qrcode !== false,
+        webhook: instanceData.webhook || EVOLUTION_CONFIG.WEBHOOK_URL,
+        events: [
       'APPLICATION_STARTUP',
       'QRCODE_UPDATED',
+          'CONNECTION_UPDATE',
       'MESSAGES_UPSERT',
       'MESSAGES_UPDATE', 
       'MESSAGES_DELETE',
       'SEND_MESSAGE',
-      'CONNECTION_UPDATE',
+          'CONTACTS_SET',
+          'CONTACTS_UPSERT',
+          'CONTACTS_UPDATE',
       'PRESENCE_UPDATE',
       'CHATS_SET',
       'CHATS_UPSERT',
       'CHATS_UPDATE',
-      'CHATS_DELETE',
-      'CONTACTS_SET',
-      'CONTACTS_UPSERT',
-      'CONTACTS_UPDATE'
-    ];
-  }
-
-  // Utilitários
-  formatPhoneNumber(phone: string): string {
-    const cleanPhone = phone.replace(/\D/g, '');
-    
-    if (cleanPhone.startsWith('55') && cleanPhone.length >= 12) {
-      return cleanPhone;
-    }
-    
-    if (cleanPhone.length === 11) {
-      return `55${cleanPhone}`;
-    }
-    
-    if (cleanPhone.length === 10) {
-      const ddd = cleanPhone.substring(0, 2);
-      const number = cleanPhone.substring(2);
-      return `55${ddd}9${number}`;
-    }
-    
-    return cleanPhone;
-  }
-
-  phoneToJid(phone: string): string {
-    const formattedPhone = this.formatPhoneNumber(phone);
-    return `${formattedPhone}@s.whatsapp.net`;
-  }
-
-  async listInstances(): Promise<any[]> {
-    try {
-      console.log('📱 Buscando instâncias Evolution API...');
-      const response = await this.retryRequest(() => 
-        this.apiClient.get('/instance/fetchInstances')
-      );
-
-      // Check if response is HTML (error page)
-      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-        console.error('❌ Resposta inválida da API: Página HTML recebida');
-        return [];
-      }
-
-      if (!Array.isArray(response.data)) {
-        console.error('❌ Resposta inválida da API:', response.data);
-        return [];
-      }
-
-      // Filtrar apenas instâncias válidas e formatar dados
-      const instances = response.data
-        .filter((instance: any) => instance && instance.instanceName)
-        .map((instance: any) => ({
-          name: instance.instanceName,
-          status: instance.state || 'close',
-          phone: instance.phone || '',
-          connected: instance.state === 'open',
-          lastSeen: instance.lastSeen || null,
-          isOnline: instance.isOnline || false
-        }));
-
-      console.log(`✅ ${instances.length} instâncias encontradas`);
-      console.log('📊 Status das instâncias:', instances.map(i => `${i.name}: ${i.status}`));
-      
-      return instances;
-    } catch (error) {
-      console.error('❌ Erro ao buscar instâncias:', error);
-      return [];
-    }
-  }
-
-  async deleteInstance(instanceName: string) {
-    return this.retryRequest(async () => {
-      const response = await this.apiClient.delete(`/instance/delete/${instanceName}`);
-      this.connectionStatus.delete(instanceName);
+          'CHATS_DELETE'
+        ]
+      });
       return response.data;
-    });
-  }
-
-  async restartInstance(instanceName: string) {
-    return this.retryRequest(async () => {
-      const response = await this.apiClient.put(`/instance/restart/${instanceName}`);
-      this.connectionStatus.set(instanceName, 'connecting');
-      return response.data;
-    });
-  }
-
-  async logoutInstance(instanceName: string) {
-    return this.retryRequest(async () => {
-      const response = await this.apiClient.delete(`/instance/logout/${instanceName}`);
-      this.connectionStatus.set(instanceName, 'disconnected');
-      console.log('👋 Logout da instância realizado:', instanceName);
-      return response.data;
-    });
-  }
-
-  // Reconectar instâncias desconectadas automaticamente
-  async autoReconnectInstances() {
-    try {
-      const instances = await this.listInstances();
-      
-      for (const instance of instances) {
-        const instanceName = instance.instanceName || instance.instance?.instanceName;
-        
-        if (instanceName) {
-          try {
-            const status = await this.getInstanceStatus(instanceName, false);
-            
-            if (status.instance?.state === 'close') {
-              console.log(`🔄 Tentando reconectar instância: ${instanceName}`);
-              await this.apiClient.get(`/instance/connect/${instanceName}`);
-              console.log(`✅ Reconexão iniciada para: ${instanceName}`);
-            }
-          } catch (error) {
-            console.warn(`⚠️ Falha ao reconectar ${instanceName}:`, error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ Erro na reconexão automática:', error);
-    }
-  }
-
-  // Adiciona método para verificar se a instância existe
-  async instanceExists(instanceName: string): Promise<boolean> {
-    try {
-      await this.apiClient.get(`/instance/connectionState/${instanceName}`);
-      return true;
     } catch (error: any) {
-      if (error.response && error.response.status === 404) {
-        return false;
-      }
-      throw error;
+      throw new Error(`Failed to create instance: ${error.message}`);
     }
   }
 
-  // Método para obter estatísticas do sistema
-  async getStats(): Promise<{
-    instances: {
-      total: number;
-      connected: number;
-      disconnected: number;
-    };
-    messages: {
-      total: number;
-      today: number;
-    };
-    uptime: string;
-    version: string;
+  // Configurar webhook para instância
+  async configureWebhook(instanceName: string, webhookUrl?: string): Promise<any> {
+    try {
+      const response = await this.api.post('/configure-webhook', {
+        instance: instanceName,
+        webhook: webhookUrl || EVOLUTION_CONFIG.WEBHOOK_URL,
+        events: [
+          'APPLICATION_STARTUP',
+          'QRCODE_UPDATED',
+          'CONNECTION_UPDATE',
+          'MESSAGES_UPSERT'
+        ]
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to configure webhook: ${error.message}`);
+    }
+  }
+
+  // Métodos de diagnóstico
+  async runDiagnostics(): Promise<{
+    health: HealthCheckResponse;
+    stats: StatsResponse;
+    instances: EvolutionInstance[];
+    websocketStats: any;
   }> {
     try {
-      const instances = await this.listInstances();
+      console.log('🔍 Executando diagnóstico completo...');
       
-      // Se não conseguimos obter instâncias, retorna estatísticas zeradas
-      if (!Array.isArray(instances)) {
-        return {
-          instances: { total: 0, connected: 0, disconnected: 0 },
-          messages: { total: 0, today: 0 },
-          uptime: '0',
-          version: '1.0.0'
-        };
-      }
-
-      const connected = instances.filter(i => i.status === 'open' || i.connected).length;
-      const total = instances.length;
+      const [health, stats, instances, websocketStats] = await Promise.allSettled([
+        this.checkHealth(),
+        this.getStats(),
+        this.fetchInstances(),
+        this.getWebSocketStats()
+      ]);
 
       return {
-        instances: {
-          total,
-          connected,
-          disconnected: total - connected
-        },
-        messages: {
-          total: 0,
-          today: 0
-        },
-        uptime: '0',
-        version: '1.0.0'
+        health: health.status === 'fulfilled' ? health.value : { status: 'error', timestamp: new Date().toISOString(), uptime: 0 },
+        stats: stats.status === 'fulfilled' ? stats.value : {} as StatsResponse,
+        instances: instances.status === 'fulfilled' ? instances.value : [],
+        websocketStats: websocketStats.status === 'fulfilled' ? websocketStats.value : {}
       };
-    } catch (error) {
-      console.error('❌ Erro ao obter estatísticas:', error);
-      // Retorna estatísticas zeradas em caso de erro
-      return {
-        instances: { total: 0, connected: 0, disconnected: 0 },
-        messages: { total: 0, today: 0 },
-        uptime: '0',
-        version: '1.0.0'
-      };
+    } catch (error: any) {
+      throw new Error(`Diagnostics failed: ${error.message}`);
     }
   }
 }
 
-// Interfaces TypeScript
-export interface InstanceCreatePayload {
-  instanceName: string;
-  qrcode?: boolean;
-  integration?: string;
-  webhook?: {
-    enabled?: boolean;
-    url?: string;
-    byEvents?: boolean;
-    base64?: boolean;
-    events?: string[];
-  };
-  token?: string;
-  number?: string;
-  rejectCall?: boolean;
-  msgCall?: string;
-  groupsIgnore?: boolean;
-  alwaysOnline?: boolean;
-  readMessages?: boolean;
-  readStatus?: boolean;
-  syncFullHistory?: boolean;
-}
+// Exportar instância única
+export const evolutionApi = new EvolutionApiService();
 
-export interface InstanceStatus {
-  instance: {
-    instanceName: string;
-    state: 'open' | 'close' | 'connecting';
-  };
-}
+// Exportar classe para casos especiais
+export { EvolutionApiService };
 
-export interface QRCodeResponse {
-  base64?: string | null;
-  code?: string;
-  count?: number;
-  success?: boolean;
-  error?: string;
-  rawCode?: string;
-}
-
-export interface SendTextPayload {
-  number: string;
-  options?: {
-    delay?: number;
-    presence?: 'composing' | 'paused';
-    linkPreview?: boolean;
-  };
-  textMessage: {
-    text: string;
-  };
-}
-
-export interface SendMediaPayload {
-  number: string;
-  options?: {
-    delay?: number;
-    presence?: 'composing' | 'paused';
-  };
-  mediaMessage: {
-    mediatype: 'image' | 'video' | 'audio' | 'document';
-    media: string;
-    caption?: string;
-    fileName?: string;
-  };
-}
-
-export interface WebhookPayload {
-  event: string;
-  instance: string;
-  data: any;
-  destination?: string;
-  date_time: string;
-  sender: string;
-  server_url: string;
-  apikey: string;
-}
-
-// Instância global
-const evolutionManager = new EvolutionApiManager();
-
-// Exports das funções principais (delegando para a instância)
-export const createInstance = (instanceName: string, webhookUrl?: string) =>
-  evolutionManager.createInstance(instanceName, { webhookUrl });
-
-export const getInstanceQRCode = (instanceName: string) =>
-  evolutionManager.getInstanceQRCode(instanceName);
-
-export const getInstanceStatus = (instanceName: string) =>
-  evolutionManager.getInstanceStatus(instanceName);
-
-export const sendTextMessage = (instanceName: string, payload: SendTextPayload) =>
-  evolutionManager.sendTextMessage(instanceName, payload);
-
-export const deleteInstance = (instanceName: string) =>
-  evolutionManager.deleteInstance(instanceName);
-
-export const restartInstance = (instanceName: string) =>
-  evolutionManager.restartInstance(instanceName);
-
-export const logoutInstance = (instanceName: string) =>
-  evolutionManager.logoutInstance(instanceName);
-
-export const listInstances = () =>
-  evolutionManager.listInstances();
-
-export const testConnection = () =>
-  evolutionManager.testConnection();
-
-export const formatPhoneNumber = (phone: string) =>
-  evolutionManager.formatPhoneNumber(phone);
-
-export const isValidWhatsAppNumber = (phone: string) =>
-  evolutionManager.isValidWhatsAppNumber(phone);
-
-export const phoneToJid = (phone: string) =>
-  evolutionManager.phoneToJid(phone);
-
-export const setInstanceWebhook = (instanceName: string, webhookData: {
-  url: string;
-  events?: string[];
-  enabled?: boolean;
-}) => evolutionManager.setInstanceWebhook(instanceName, webhookData);
-
-export const autoReconnectInstances = () =>
-  evolutionManager.autoReconnectInstances();
-
-export const instanceExists = (instanceName: string) =>
-  evolutionManager.instanceExists(instanceName);
-
-export const getStats = () =>
-  evolutionManager.getStats();
-
-// Interface simplificada para o Dashboard
-export const evolutionApiService = {
-  getStats: () => evolutionManager.getStats(),
-  testConnection: () => evolutionManager.testConnection(),
-  listInstances: () => evolutionManager.listInstances(),
-  getInstanceStatus: (instanceName: string) => evolutionManager.getInstanceStatus(instanceName),
-  getInstanceQRCode: (instanceName: string) => evolutionManager.getInstanceQRCode(instanceName),
-  sendTextMessage: (instanceName: string, payload: SendTextPayload) => 
-    evolutionManager.sendTextMessage(instanceName, payload),
-  createInstance: (instanceName: string, options?: any) => 
-    evolutionManager.createInstance(instanceName, options),
-  deleteInstance: (instanceName: string) => evolutionManager.deleteInstance(instanceName),
-  restartInstance: (instanceName: string) => evolutionManager.restartInstance(instanceName),
-};
-
-export default evolutionManager; 
+// Exportar tipos
+export type {
+  HealthCheckResponse,
+  StatsResponse,
+  EvolutionInstance,
+  SendMessageRequest,
+  SendMessageResponse,
+  MessagesResponse
+}; 
