@@ -549,6 +549,80 @@ class EvolutionApiManager {
       throw error;
     }
   }
+
+  // Método para obter estatísticas do sistema
+  async getStats(): Promise<{
+    instances: {
+      total: number;
+      connected: number;
+      disconnected: number;
+    };
+    messages: {
+      total: number;
+      today: number;
+    };
+    uptime: string;
+    version: string;
+  }> {
+    try {
+      const instances = await this.listInstances();
+      
+      let connectedCount = 0;
+      let disconnectedCount = 0;
+      
+      // Verificar status de cada instância
+      for (const instance of instances) {
+        const instanceName = instance.instanceName || instance.instance?.instanceName;
+        if (instanceName) {
+          try {
+            const status = await this.getInstanceStatus(instanceName, true);
+            if (status.instance?.state === 'open') {
+              connectedCount++;
+            } else {
+              disconnectedCount++;
+            }
+          } catch (error) {
+            disconnectedCount++;
+          }
+        }
+      }
+
+      // Calcular uptime (simples baseado no tempo de funcionamento)
+      const uptimeMs = Date.now() - this.lastHealthCheck;
+      const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
+      const uptimeMinutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
+      const uptime = `${uptimeHours}h ${uptimeMinutes}m`;
+
+      return {
+        instances: {
+          total: instances.length,
+          connected: connectedCount,
+          disconnected: disconnectedCount
+        },
+        messages: {
+          total: 0, // Pode ser implementado com contadores reais
+          today: 0
+        },
+        uptime: uptime || '0h 0m',
+        version: '1.0.0'
+      };
+    } catch (error) {
+      console.error('❌ Erro ao obter estatísticas:', error);
+      return {
+        instances: {
+          total: 0,
+          connected: 0,
+          disconnected: 0
+        },
+        messages: {
+          total: 0,
+          today: 0
+        },
+        uptime: '0h 0m',
+        version: '1.0.0'
+      };
+    }
+  }
 }
 
 // Interfaces TypeScript
@@ -678,5 +752,23 @@ export const autoReconnectInstances = () =>
 
 export const instanceExists = (instanceName: string) =>
   evolutionManager.instanceExists(instanceName);
+
+export const getStats = () =>
+  evolutionManager.getStats();
+
+// Interface simplificada para o Dashboard
+export const evolutionApiService = {
+  getStats: () => evolutionManager.getStats(),
+  testConnection: () => evolutionManager.testConnection(),
+  listInstances: () => evolutionManager.listInstances(),
+  getInstanceStatus: (instanceName: string) => evolutionManager.getInstanceStatus(instanceName),
+  getInstanceQRCode: (instanceName: string) => evolutionManager.getInstanceQRCode(instanceName),
+  sendTextMessage: (instanceName: string, payload: SendTextPayload) => 
+    evolutionManager.sendTextMessage(instanceName, payload),
+  createInstance: (instanceName: string, options?: any) => 
+    evolutionManager.createInstance(instanceName, options),
+  deleteInstance: (instanceName: string) => evolutionManager.deleteInstance(instanceName),
+  restartInstance: (instanceName: string) => evolutionManager.restartInstance(instanceName),
+};
 
 export default evolutionManager; 

@@ -153,13 +153,8 @@ export class EvolutionWebhookProcessor {
         isFromMe: false
       });
 
-      // Marcar mensagem como lida no WhatsApp
-      try {
-        await evolutionApiService.markMessageAsRead(instanceName, remoteJid);
-        console.log('✅ Mensagem marcada como lida no WhatsApp');
-      } catch (error) {
-        console.warn('⚠️ Não foi possível marcar como lida:', error);
-      }
+      // TODO: Implementar função markMessageAsRead no evolutionApiService se necessário
+      console.log('📨 Mensagem processada, ignorando marcação de lida por enquanto');
 
       console.log('✅ Mensagem processada com sucesso');
 
@@ -327,9 +322,9 @@ export class EvolutionWebhookProcessor {
   }
 
   /**
-   * Cria um novo ticket automaticamente quando uma mensagem chega
+   * Cria um novo ticket automaticamente (método público para dashboard)
    */
-  private static async createTicketAutomatically(data: TicketAutoCreation): Promise<string | null> {
+  public static async createTicketAutomatically(data: TicketAutoCreation): Promise<string | null> {
     try {
       console.log('🎫 Criando ticket automaticamente:', {
         client: data.clientName,

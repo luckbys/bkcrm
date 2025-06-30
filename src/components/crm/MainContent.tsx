@@ -6,6 +6,7 @@ import { DepartmentDiagnostic } from './admin/DepartmentDiagnostic';
 import { DepartmentEvolutionManager } from './admin/DepartmentEvolutionManager';
 import { Dashboard } from './Dashboard';
 import { ChatDemo } from '../chat/ChatDemo';
+import { EvolutionDashboard } from '../chat/EvolutionDashboard';
 import { Loader2, MessageSquare, Filter, Users, Plus, Settings, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -121,10 +122,16 @@ export const MainContent = ({
         );
       case 'whatsapp':
         return (
-          <DepartmentEvolutionManager 
+          <EvolutionDashboard 
             departmentId={selectedSector?.id || ''} 
             departmentName={selectedSector?.name || 'Departamento'} 
-            departmentColor={selectedSector?.color || '#3B82F6'} 
+          />
+        );
+      case 'evolution-api':
+        return (
+          <EvolutionDashboard 
+            departmentId={selectedSector?.id || ''} 
+            departmentName={`${selectedSector?.name || 'Departamento'} - Evolution API`} 
           />
         );
       case 'admin':

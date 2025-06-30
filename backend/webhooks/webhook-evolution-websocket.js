@@ -414,7 +414,7 @@ async function findOrCreateCustomerEnhanced(phone, instanceName, pushName = null
     if (searchError && searchError.code !== 'PGRST116') {
       console.warn('⚠️ Erro ao buscar cliente:', searchError);
     }
-    
+
     if (existingCustomer) {
       console.log(`✅ Cliente existente encontrado: ${existingCustomer.id} (${existingCustomer.full_name || existingCustomer.email})`);
       

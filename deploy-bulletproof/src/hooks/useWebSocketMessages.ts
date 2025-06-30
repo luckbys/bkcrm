@@ -210,7 +210,7 @@ export const useWebSocketMessages = ({
           sender_name: message.sender_name,
           is_internal: message.is_internal
         });
-
+        
         setMessages(prev => {
           // Evitar duplicatas
           const exists = prev.some(msg => msg.id === message.id);
@@ -220,7 +220,7 @@ export const useWebSocketMessages = ({
           return sortMessages([...prev, message]);
         });
         setLastUpdateTime(new Date());
-
+        
         // Notificar apenas se não for mensagem interna
         if (!message.is_internal) {
           toast({
@@ -300,7 +300,7 @@ export const useWebSocketMessages = ({
       console.error('❌ [WS] Não conectado para atualizar mensagens');
       return;
     }
-
+    
     setIsLoading(true);
     socketRef.current.emit('request-messages', { ticketId, limit: 50 });
   }, [ticketId]);
@@ -329,7 +329,7 @@ export const useWebSocketMessages = ({
     if (socketRef.current) {
       socketRef.current.disconnect();
     }
-    connect();
+      connect();
   }, [connect]);
 
   // 🏗️ Setup inicial
@@ -337,7 +337,7 @@ export const useWebSocketMessages = ({
     mountedRef.current = true;
     
     if (enabled && ticketId) {
-      connect();
+    connect();
     }
 
     return () => {

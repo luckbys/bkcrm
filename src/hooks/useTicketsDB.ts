@@ -132,10 +132,10 @@ export function useTicketsDB() {
         console.error('Erro ao carregar departamentos:', deptError);
       }
 
-      // Calcular ID do departamento do usuário
-      let userDepartmentId = null;
-      
-      // Tratamento especial para roles administrativos globais
+        // Calcular ID do departamento do usuário
+        let userDepartmentId = null;
+        
+        // Tratamento especial para roles administrativos globais
       if (currentUser?.department) {
         const departmentLower = currentUser.department.toLowerCase(); // Normalizar para lowercase
         
@@ -153,13 +153,13 @@ export function useTicketsDB() {
             console.warn('⚠️ Departamento não encontrado no mapeamento:', currentUser.department);
             console.log('📋 Departamentos disponíveis:', Object.keys(departmentMapping));
           }
+          }
         }
-      }
 
-      // Determinar se o usuário tem acesso global (antes de aplicar filtros)
-      const hasGlobalAccess = currentUser?.department === 'Diretor' || 
-                             currentUser?.department === 'CEO' || 
-                             currentUser?.department === 'Administrador';
+        // Determinar se o usuário tem acesso global (antes de aplicar filtros)
+        const hasGlobalAccess = currentUser?.department === 'Diretor' || 
+                               currentUser?.department === 'CEO' || 
+                               currentUser?.department === 'Administrador';
 
   // Debug: mostrar informações do usuário
   console.log('🔍 Debug - Informações do usuário:', {

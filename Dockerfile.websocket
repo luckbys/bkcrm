@@ -1,28 +1,43 @@
+# Dockerfile para Servidor WebSocket Evolution API
 FROM node:18-alpine
 
+# Instalar dependências do sistema
+RUN apk add --no-cache \
+    curl \
+    tzdata \
+    && rm -rf /var/cache/apk/*
+
+# Definir timezone
+ENV TZ=America/Sao_Paulo
+
+# Criar diretório de trabalho
 WORKDIR /app
 
-# Instalar curl para health checks
-RUN apk add --no-cache curl
+# Copiar package.json específico do webhook
+COPY webhook-package.json package.json
 
-# Copiar package.json
-COPY package.json ./
+# Instalar dependências
+RUN npm ci --only=production --no-audit --no-fund
 
-# Instalar dependências (usar npm install ao invés de npm ci)
-RUN npm install --only=production
-
-# Copiar código do WebSocket server
-COPY webhook-evolution-websocket.js ./
+# Copiar servidor WebSocket
+COPY webhook-evolution-websocket.cjs server.js
 
 # Criar usuário não-root para segurança
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
-RUN chown -R nodejs:nodejs /app
-USER nodejs
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S webhook -u 1001 -G nodejs
+
+# Mudar proprietário dos arquivos
+RUN chown -R webhook:nodejs /app
+
+# Mudar para usuário não-root
+USER webhook
+
+# Expor porta
+EXPOSE 4000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:4000/webhook/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:4000/webhook/health || exit 1
 
-EXPOSE 4000
-CMD ["node", "webhook-evolution-websocket.js"] 
+# Comando para iniciar o servidor
+CMD ["node", "server.js"] 

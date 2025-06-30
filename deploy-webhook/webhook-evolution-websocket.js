@@ -188,6 +188,22 @@ async function saveMessageFromWebSocket({ ticketId, content, isInternal, userId,
 io.on('connection', (socket) => {
   console.log(`✅ [WS] Nova conexão WebSocket: ${socket.id}`);
 
+  // Enviar status inicial das instâncias
+  socket.emit('instance-status', instances);
+  
+  // Enviar QR codes disponíveis
+  socket.emit('qr-updated', qrCodes);
+
+  // Cliente solicita status das instâncias
+  socket.on('get-instances', () => {
+    socket.emit('instance-status', instances);
+  });
+
+  // Cliente solicita QR codes
+  socket.on('get-qrcodes', () => {
+    socket.emit('qr-updated', qrCodes);
+  });
+
   // Cliente se conecta a um ticket específico
   socket.on('join-ticket', (data) => {
     const { ticketId, userId } = data;

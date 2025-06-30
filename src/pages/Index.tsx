@@ -234,100 +234,100 @@ const Index = () => {
       "min-h-screen bg-gray-50 flex flex-col",
       isFullScreen && "fixed inset-0 z-50"
     )}>
-      <Header
-        selectedSector={selectedSector}
-        currentView={currentView}
-        onViewChange={handleViewChange}
-        isFullScreen={isFullScreen}
-        onToggleFullScreen={toggleFullScreen}
-        soundEnabled={soundEnabled}
+        <Header
+          selectedSector={selectedSector}
+          currentView={currentView}
+          onViewChange={handleViewChange}
+          isFullScreen={isFullScreen}
+          onToggleFullScreen={toggleFullScreen}
+          soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled(!soundEnabled)}
-        onOpenAddTicket={() => setShowAddTicketModal(true)}
-      />
-      
+          onOpenAddTicket={() => setShowAddTicketModal(true)}
+        />
+        
       <div className="flex-1 flex">
-        <Sidebar
+          <Sidebar
           departments={departments}
           activeDepartment={selectedSector}
           onSelectDepartment={handleSectorChange}
-          collapsed={sidebarCollapsed}
-          onToggle={toggleSidebar}
+            collapsed={sidebarCollapsed}
+            onToggle={toggleSidebar}
           onDepartmentUpdate={refreshDepartments}
           onDepartmentReorder={handleSectorReorder}
           isLoading={departmentsLoading}
           error={departmentsError}
-        />
-        
-        <MainContent
-          selectedSector={selectedSector}
-          currentView={currentView}
-          onViewChange={handleViewChange}
-          isLoading={isLoading}
-          sidebarCollapsed={sidebarCollapsed}
-          onOpenAddTicket={() => setShowAddTicketModal(true)}
-        />
-      </div>
+          />
+          
+          <MainContent
+            selectedSector={selectedSector}
+            currentView={currentView}
+            onViewChange={handleViewChange}
+            isLoading={isLoading}
+            sidebarCollapsed={sidebarCollapsed}
+            onOpenAddTicket={() => setShowAddTicketModal(true)}
+          />
+        </div>
 
-      {showImageModal && (
-        <ImagePasteModal
-          onClose={() => {
-            setShowImageModal(false);
-            setPastedImage(null);
-          }}
-          image={pastedImage}
-          onSend={(comment: string, isInternal: boolean) => {
-            console.log('Enviando imagem:', { comment, isInternal });
-            toast({
-              title: "🖼️ Imagem enviada",
-              description: isInternal ? "Imagem salva como nota interna" : "Imagem enviada para o cliente",
-            });
-            setShowImageModal(false);
-            setPastedImage(null);
-          }}
-        />
-      )}
-
-      {showAddTicketModal && (
-        <AddTicketModal
-          sector={selectedSector}
-          onClose={() => setShowAddTicketModal(false)}
-          onSave={async (ticketData) => {
-            try {
-              const newTicketData = {
-                title: ticketData.subject,
-                description: ticketData.description,
-                subject: ticketData.subject, // Para compatibilidade
-                status: ticketData.status,
-                priority: ticketData.priority,
-                channel: ticketData.channel,
-                department_id: selectedSector?.id,
-                metadata: {
-                  client_name: ticketData.client,
-                  anonymous_contact: ticketData.email,
-                  phone: ticketData.phone,
-                  assignee: ticketData.assignee
-                }
-              };
-
-              await createTicket(newTicketData);
-              
+        {showImageModal && (
+          <ImagePasteModal
+            onClose={() => {
+              setShowImageModal(false);
+              setPastedImage(null);
+            }}
+            image={pastedImage}
+            onSend={(comment: string, isInternal: boolean) => {
+              console.log('Enviando imagem:', { comment, isInternal });
               toast({
-                title: "Ticket criado com sucesso!",
-                description: `Ticket "${ticketData.subject}" foi criado para o cliente ${ticketData.client}`,
+                title: "🖼️ Imagem enviada",
+                description: isInternal ? "Imagem salva como nota interna" : "Imagem enviada para o cliente",
               });
-              
-              setShowAddTicketModal(false);
-            } catch (error) {
-              console.error('Erro ao criar ticket:', error);
-              toast({
-                title: "Erro ao criar ticket",
-                description: "Ocorreu um erro ao criar o ticket. Tente novamente.",
-                variant: "destructive",
-              });
-            }
-          }}
-        />
-      )}
+              setShowImageModal(false);
+              setPastedImage(null);
+            }}
+          />
+        )}
+
+        {showAddTicketModal && (
+          <AddTicketModal
+            sector={selectedSector}
+            onClose={() => setShowAddTicketModal(false)}
+            onSave={async (ticketData) => {
+              try {
+                const newTicketData = {
+                  title: ticketData.subject,
+                  description: ticketData.description,
+                  subject: ticketData.subject, // Para compatibilidade
+                  status: ticketData.status,
+                  priority: ticketData.priority,
+                  channel: ticketData.channel,
+                  department_id: selectedSector?.id,
+                  metadata: {
+                    client_name: ticketData.client,
+                    anonymous_contact: ticketData.email,
+                    phone: ticketData.phone,
+                    assignee: ticketData.assignee
+                  }
+                };
+
+                await createTicket(newTicketData);
+                
+                toast({
+                  title: "Ticket criado com sucesso!",
+                  description: `Ticket "${ticketData.subject}" foi criado para o cliente ${ticketData.client}`,
+                });
+                
+                setShowAddTicketModal(false);
+              } catch (error) {
+                console.error('Erro ao criar ticket:', error);
+                toast({
+                  title: "Erro ao criar ticket",
+                  description: "Ocorreu um erro ao criar o ticket. Tente novamente.",
+                  variant: "destructive",
+                });
+              }
+            }}
+          />
+        )}
     </div>
   );
 };
