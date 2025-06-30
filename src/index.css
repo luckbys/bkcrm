@@ -421,16 +421,15 @@ div[data-radix-alert-dialog-content] {
 
 /* === MENSAGENS CSS === */
 .message-text-break {
-  word-wrap: break-word !important;
-  overflow-wrap: break-word !important;
-  word-break: break-word !important;
-  hyphens: auto !important;
-  -webkit-hyphens: auto !important;
-  -moz-hyphens: auto !important;
-  -ms-hyphens: auto !important;
-  white-space: pre-wrap !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -moz-hyphens: auto;
+  -ms-hyphens: auto;
+  white-space: pre-wrap;
+  max-width: 100%;
 }
 
 /* === CHAT LAYOUT === */
@@ -621,4 +620,26 @@ div[data-radix-alert-dialog-content] {
 
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
   @apply bg-slate-600/50;
+}
+
+/* Correção para layout com header fixo */
+.header-offset {
+  padding-top: 5rem; /* 80px - altura do header desktop */
+}
+
+@media (max-width: 767px) {
+  .header-offset {
+    padding-top: 9rem; /* 144px - altura do header mobile */
+  }
+}
+
+/* Garantir que o conteúdo não seja cortado pelo header fixo */
+.main-content-container {
+  min-height: calc(100vh - 5rem); /* Subtrair altura do header desktop */
+}
+
+@media (max-width: 767px) {
+  .main-content-container {
+    min-height: calc(100vh - 9rem); /* Subtrair altura do header mobile */
+  }
 }

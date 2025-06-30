@@ -245,7 +245,7 @@ const Index = () => {
           onOpenAddTicket={() => setShowAddTicketModal(true)}
         />
         
-      <div className="flex-1 flex">
+      <div className="flex-1 flex pt-36 md:pt-20">
           <Sidebar
           departments={departments}
           activeDepartment={selectedSector}

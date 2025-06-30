@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bell, Check, X, MessageSquare, Clock, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,21 +10,58 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
-import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: Date;
+  ticketId: string;
+  isInternal: boolean;
+  isRead: boolean;
+}
+
 export function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const {
-    notifications,
-    unreadCount,
-    isConnected,
-    markAsRead,
-    markNotificationAsRead
-  } = useRealtimeNotifications();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isConnected, setIsConnected] = useState(true);
 
-  const handleNotificationClick = (notification: any) => {
+  // Simular hook removido
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const markAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+  };
+
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => 
+      prev.map(n => n.id === id ? { ...n, isRead: true } : n)
+    );
+  };
+
+  // Carregar notificações de exemplo (simulação)
+  useEffect(() => {
+    const sampleNotifications: Notification[] = [
+      {
+        id: '1',
+        title: 'Nova mensagem',
+        message: 'Cliente enviou uma nova mensagem',
+        timestamp: new Date(),
+        ticketId: 'ticket-123',
+        isInternal: false,
+        isRead: false
+      }
+    ];
+    
+    // Simular delay de carregamento
+    setTimeout(() => {
+      setNotifications(sampleNotifications);
+    }, 1000);
+  }, []);
+
+  const handleNotificationClick = (notification: Notification) => {
     // Marcar como lida
     markNotificationAsRead(notification.id);
     

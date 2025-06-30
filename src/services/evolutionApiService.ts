@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
 // Configurações da Evolution API
-const EVOLUTION_API_URL = '/api';  // Usa o proxy local
+const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://webhook.bkcrm.devsible.com.br/api';
 const API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
 // Rate limiting e retry configuration
@@ -20,7 +20,6 @@ class EvolutionApiManager {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey'
     },
     timeout: 30000,
-    // Ignorar certificados auto-assinados
     validateStatus: () => true, // Aceitar qualquer status HTTP
     maxRedirects: 5
   });
@@ -87,8 +86,37 @@ class EvolutionApiManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  private isRetryableError(error: any): boolean {
+    // Add more retryable status codes
+    const retryableStatuses = [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524];
+    const retryableNetworkErrors = [
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'ENETUNREACH'
+    ];
+
+    // Retry on status codes
+    if (error.response?.status && retryableStatuses.includes(error.response.status)) {
+      return true;
+    }
+
+    // Retry on network errors
+    if (error.code && retryableNetworkErrors.includes(error.code)) {
+      return true;
+    }
+
+    // Retry on timeout
+    if (error.code === 'ECONNABORTED') {
+      return true;
+    }
+
+    return false;
+  }
+
   private async retryRequest<T>(
-    requestFn: () => Promise<T>, 
+    requestFn: () => Promise<T>,
     retries = MAX_RETRIES
   ): Promise<T> {
     try {
@@ -101,12 +129,16 @@ class EvolutionApiManager {
         url: error.config?.url,
         method: error.config?.method,
         message: error.message,
-        data: error.response?.data
+        data: error.response?.data,
+        code: error.code
       });
       
       if (retries > 0 && this.isRetryableError(error)) {
-        console.warn(`⚠️ Tentativa ${MAX_RETRIES - retries + 1}/${MAX_RETRIES} falhou, tentando novamente...`);
-        await this.delay(RETRY_DELAY * (MAX_RETRIES - retries + 1));
+        const attempt = MAX_RETRIES - retries + 1;
+        const delay = RETRY_DELAY * Math.pow(2, attempt - 1); // Exponential backoff
+        
+        console.warn(`⚠️ Tentativa ${attempt}/${MAX_RETRIES} falhou, tentando novamente em ${delay}ms...`);
+        await this.delay(delay);
         return this.retryRequest(requestFn, retries - 1);
       }
       
@@ -121,17 +153,16 @@ class EvolutionApiManager {
         throw new Error('API Key inválida. Verifique as credenciais da Evolution API.');
       }
       
+      if (error.response?.status === 502) {
+        throw new Error('Evolution API está inacessível. Verifique se o servidor está online.');
+      }
+      
       if (error.response?.status >= 500) {
         throw new Error('Erro interno da Evolution API. Tente novamente em alguns minutos.');
       }
       
       throw error;
     }
-  }
-
-  private isRetryableError(error: any): boolean {
-    const retryableStatuses = [408, 429, 500, 502, 503, 504];
-    return error.response?.status && retryableStatuses.includes(error.response.status);
   }
 
   private async startHealthCheck() {
@@ -301,51 +332,26 @@ class EvolutionApiManager {
   }
 
   // Otimizado: QR Code com múltiplos formatos e fallback
-  async getInstanceQRCode(instanceName: string): Promise<{
-    base64?: string;
-    success: boolean;
-    error?: string;
-    count?: number;
-  }> {
+  async getInstanceQRCode(instanceName: string): Promise<any> {
     try {
-      console.log(`📱 Obtendo QR Code para instância: ${instanceName}`);
-      
+      console.log(`🔍 Buscando QR code para instância ${instanceName}...`);
       const response = await this.retryRequest(() => 
-        this.apiClient.get(`/instance/connect/${instanceName}`)
+        this.apiClient.get(`/instance/qrcode/${instanceName}`)
       );
 
-      const data = response.data;
-      
-      if (data?.base64) {
-        console.log('✅ QR Code obtido com sucesso');
-        return { 
-          base64: data.base64, 
-          success: true,
-          count: data.count || 0
-        };
+      if (!response.data || !response.data.qrcode) {
+        console.log(`ℹ️ QR code não disponível para ${instanceName}`);
+        return { success: false };
       }
-      
-      if (data?.code && typeof data.code === 'string') {
-        // Se recebeu um código textual, gerar imagem QR
-        const qrCodeImage = await this.generateQRCodeImage(data.code);
-        return {
-          base64: qrCodeImage,
-          success: true,
-          count: data.count || 0
-        };
-      }
-      
-      return { 
-        success: false, 
-        error: 'QR Code não disponível' 
+
+      console.log(`✅ QR code obtido para ${instanceName}`);
+      return {
+        success: true,
+        base64: response.data.qrcode
       };
-      
-    } catch (error: any) {
-      console.error('❌ Erro ao obter QR Code:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message 
-      };
+    } catch (error) {
+      console.error(`❌ Erro ao buscar QR code para ${instanceName}:`, error);
+      return { success: false };
     }
   }
 
@@ -482,11 +488,44 @@ class EvolutionApiManager {
     return `${formattedPhone}@s.whatsapp.net`;
   }
 
-  async listInstances() {
-    return this.retryRequest(async () => {
-      const response = await this.apiClient.get('/instance/fetchInstances');
-      return response.data;
-    });
+  async listInstances(): Promise<any[]> {
+    try {
+      console.log('📱 Buscando instâncias Evolution API...');
+      const response = await this.retryRequest(() => 
+        this.apiClient.get('/instance/fetchInstances')
+      );
+
+      // Check if response is HTML (error page)
+      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+        console.error('❌ Resposta inválida da API: Página HTML recebida');
+        return [];
+      }
+
+      if (!Array.isArray(response.data)) {
+        console.error('❌ Resposta inválida da API:', response.data);
+        return [];
+      }
+
+      // Filtrar apenas instâncias válidas e formatar dados
+      const instances = response.data
+        .filter((instance: any) => instance && instance.instanceName)
+        .map((instance: any) => ({
+          name: instance.instanceName,
+          status: instance.state || 'close',
+          phone: instance.phone || '',
+          connected: instance.state === 'open',
+          lastSeen: instance.lastSeen || null,
+          isOnline: instance.isOnline || false
+        }));
+
+      console.log(`✅ ${instances.length} instâncias encontradas`);
+      console.log('📊 Status das instâncias:', instances.map(i => `${i.name}: ${i.status}`));
+      
+      return instances;
+    } catch (error) {
+      console.error('❌ Erro ao buscar instâncias:', error);
+      return [];
+    }
   }
 
   async deleteInstance(instanceName: string) {
@@ -571,58 +610,39 @@ class EvolutionApiManager {
     try {
       const instances = await this.listInstances();
       
-      let connectedCount = 0;
-      let disconnectedCount = 0;
-      
-      // Verificar status de cada instância
-      for (const instance of instances) {
-        const instanceName = instance.instanceName || instance.instance?.instanceName;
-        if (instanceName) {
-          try {
-            const status = await this.getInstanceStatus(instanceName, true);
-            if (status.instance?.state === 'open') {
-              connectedCount++;
-            } else {
-              disconnectedCount++;
-            }
-          } catch (error) {
-            disconnectedCount++;
-          }
-        }
+      // Se não conseguimos obter instâncias, retorna estatísticas zeradas
+      if (!Array.isArray(instances)) {
+        return {
+          instances: { total: 0, connected: 0, disconnected: 0 },
+          messages: { total: 0, today: 0 },
+          uptime: '0',
+          version: '1.0.0'
+        };
       }
 
-      // Calcular uptime (simples baseado no tempo de funcionamento)
-      const uptimeMs = Date.now() - this.lastHealthCheck;
-      const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
-      const uptimeMinutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
-      const uptime = `${uptimeHours}h ${uptimeMinutes}m`;
+      const connected = instances.filter(i => i.status === 'open' || i.connected).length;
+      const total = instances.length;
 
       return {
         instances: {
-          total: instances.length,
-          connected: connectedCount,
-          disconnected: disconnectedCount
+          total,
+          connected,
+          disconnected: total - connected
         },
         messages: {
-          total: 0, // Pode ser implementado com contadores reais
+          total: 0,
           today: 0
         },
-        uptime: uptime || '0h 0m',
+        uptime: '0',
         version: '1.0.0'
       };
     } catch (error) {
       console.error('❌ Erro ao obter estatísticas:', error);
+      // Retorna estatísticas zeradas em caso de erro
       return {
-        instances: {
-          total: 0,
-          connected: 0,
-          disconnected: 0
-        },
-        messages: {
-          total: 0,
-          today: 0
-        },
-        uptime: '0h 0m',
+        instances: { total: 0, connected: 0, disconnected: 0 },
+        messages: { total: 0, today: 0 },
+        uptime: '0',
         version: '1.0.0'
       };
     }

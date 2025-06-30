@@ -7,6 +7,21 @@ export default defineConfig(({ mode }) => {
   // Carregar variáveis de ambiente baseado no modo
   const env = loadEnv(mode, process.cwd(), '');
 
+  const radixComponents = [
+    '@radix-ui/react-dialog',
+    '@radix-ui/react-popover',
+    '@radix-ui/react-select',
+    '@radix-ui/react-tabs',
+    '@radix-ui/react-tooltip',
+    '@radix-ui/react-slot',
+    '@radix-ui/react-label',
+    '@radix-ui/react-toast',
+    '@radix-ui/react-switch',
+    '@radix-ui/react-checkbox',
+    '@radix-ui/react-avatar',
+    '@radix-ui/react-dropdown-menu'
+  ];
+
   return {
     plugins: [react()],
     resolve: {
@@ -30,14 +45,7 @@ export default defineConfig(({ mode }) => {
             'react-vendor': ['react', 'react-dom', 'react-router-dom'],
             'supabase-vendor': ['@supabase/supabase-js'],
             'ui-vendor': ['sonner', '@tanstack/react-query', 'zustand', 'next-themes'],
-            'radix-vendor': [
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-popover',
-              '@radix-ui/react-select',
-              '@radix-ui/react-tabs',
-              '@radix-ui/react-tooltip',
-              '@radix-ui/react-slot'
-            ],
+            'radix-vendor': radixComponents,
             'utils-vendor': ['class-variance-authority', 'clsx', 'tailwind-merge', 'lucide-react']
           }
         }
@@ -64,56 +72,13 @@ export default defineConfig(({ mode }) => {
         'tailwind-merge',
         'lucide-react',
         'react-resizable-panels',
-        '@radix-ui/react-dialog',
-        '@radix-ui/react-popover',
-        '@radix-ui/react-select',
-        '@radix-ui/react-tabs',
-        '@radix-ui/react-tooltip',
-        '@radix-ui/react-slot',
-        '@radix-ui/react-toast',
-        '@radix-ui/react-switch',
-        '@radix-ui/react-label'
+        ...radixComponents
       ]
     },
     server: {
       port: 3000,
       host: '0.0.0.0',
-      strictPort: false,
-      proxy: {
-        '/api': {
-          target: 'https://webhook.bkcrm.devsible.com.br',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/api/, '/api'),
-          configure: (proxy, _options) => {
-            proxy.on('error', (err, _req, _res) => {
-              console.log('proxy error', err);
-            });
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Sending Request to the Target:', req.method, req.url);
-            });
-            proxy.on('proxyRes', (proxyRes, req, _res) => {
-              console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
-            });
-          }
-        },
-        '/socket.io': {
-          target: 'https://webhook.bkcrm.devsible.com.br',
-          changeOrigin: true,
-          secure: false,
-          ws: true,
-          configure: (proxy, _options) => {
-            proxy.on('error', (err) => {
-              console.log('proxy error', err);
-            });
-          }
-        }
-      },
-      cors: {
-        origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
-      }
+      strictPort: false
     },
     preview: {
       port: parseInt(process.env.PORT || '3000'),
