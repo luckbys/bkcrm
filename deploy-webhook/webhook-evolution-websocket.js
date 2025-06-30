@@ -32,6 +32,82 @@ const EVOLUTION_API_URL = 'https://press-evolution-api.jhkbgs.easypanel.host';
 const EVOLUTION_API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
 const BASE_URL = 'https://bkcrm.devsible.com.br';
 
+// Estado global das instâncias e QR codes
+let instances = [];
+let qrCodes = {};
+
+// Função para buscar instâncias da Evolution API
+async function fetchInstances() {
+  try {
+    const response = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
+      method: 'GET',
+      headers: {
+        'apikey': EVOLUTION_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    instances = data.map(instance => ({
+      name: instance.instanceName,
+      status: instance.status || 'close',
+      phone: instance.phone,
+      connected: instance.status === 'open'
+    }));
+
+    console.log('✅ [Evolution] Instâncias atualizadas:', instances);
+    io.emit('instance-status', instances);
+  } catch (error) {
+    console.error('❌ [Evolution] Erro ao buscar instâncias:', error);
+  }
+}
+
+// Função para buscar QR code de uma instância
+async function fetchQRCode(instanceName) {
+  try {
+    const response = await fetch(`${EVOLUTION_API_URL}/instance/qrcode/${instanceName}`, {
+      method: 'GET',
+      headers: {
+        'apikey': EVOLUTION_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.qrcode) {
+      qrCodes[instanceName] = data.qrcode;
+      io.emit('qr-updated', { instanceName, qrcode: data.qrcode });
+      console.log(`✅ [Evolution] QR Code atualizado para ${instanceName}`);
+    }
+  } catch (error) {
+    console.error(`❌ [Evolution] Erro ao buscar QR code para ${instanceName}:`, error);
+  }
+}
+
+// Função para verificar QR codes de instâncias desconectadas
+async function checkDisconnectedInstances() {
+  for (const instance of instances) {
+    if (instance.status === 'close' || instance.status === 'connecting') {
+      await fetchQRCode(instance.name);
+    }
+  }
+}
+
+// Verificar QR codes periodicamente
+setInterval(checkDisconnectedInstances, 20000); // A cada 20 segundos
+
+// Atualizar instâncias periodicamente
+setInterval(fetchInstances, 30000); // A cada 30 segundos
+fetchInstances(); // Buscar imediatamente
+
 // Configurar Supabase
 const supabaseUrl = 'https://ajlgjjjvuglwgfnyqqvb.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqbGdqamp2dWdsd2dmbnlxcXZiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTU0MzE2NiwiZXhwIjoyMDY1MTE5MTY2fQ.dfIdvOZijcwmRW-6yAchp0CVPIytCKMAjezJxz5YXCU';
@@ -863,14 +939,10 @@ app.post('/webhook/evolution', async (req, res) => {
 // Endpoint específico para connection updates (que estava dando 404)
 app.post('/webhook/evolution/connection-update', async (req, res) => {
   try {
-    console.log('🔗 [CONNECTION] Update recebido:', req.body);
-    res.status(200).json({ 
-      success: true, 
-      message: 'Connection update processado',
-      timestamp: new Date().toISOString()
-    });
+    console.log('🔗 [WEBHOOK] Status de conexão:', req.body);
+    res.status(200).json({ success: true, message: 'Status de conexão recebido' });
   } catch (error) {
-    console.error('❌ [CONNECTION] Erro:', error);
+    console.error('❌ [WEBHOOK] Erro:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -928,6 +1000,48 @@ app.get('/', (req, res) => {
       'GET /webhook/ws-stats - Estatísticas WebSocket'
     ]
   });
+});
+
+// Endpoint para criar nova instância
+app.post('/webhook/create-instance', async (req, res) => {
+  try {
+    const { instanceName } = req.body;
+    
+    if (!instanceName) {
+      return res.status(400).json({ error: 'Nome da instância é obrigatório' });
+    }
+
+    const response = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
+      method: 'POST',
+      headers: {
+        'apikey': EVOLUTION_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        instanceName,
+        qrcode: true,
+        webhook: {
+          url: `${BASE_URL}/api/webhooks/evolution`,
+          enabled: true
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`✅ [Evolution] Nova instância criada: ${instanceName}`);
+    
+    // Atualizar lista de instâncias
+    await fetchInstances();
+    
+    res.json(data);
+  } catch (error) {
+    console.error('❌ [Evolution] Erro ao criar instância:', error);
+    res.status(500).json({ error: 'Erro ao criar instância' });
+  }
 });
 
 // Iniciar servidor

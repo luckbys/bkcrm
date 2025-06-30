@@ -7,7 +7,7 @@ const getWebSocketURL = () => {
   const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
   
   if (isDev) {
-    return import.meta.env.VITE_EVOLUTION_WEBHOOK_URL || 'http://localhost:4000';
+    return import.meta.env.VITE_EVOLUTION_WEBHOOK_URL || 'https://webhook.bkcrm.devsible.com.br';
   }
   
   return import.meta.env.VITE_EVOLUTION_WEBHOOK_URL || 'https://webhook.bkcrm.devsible.com.br';
