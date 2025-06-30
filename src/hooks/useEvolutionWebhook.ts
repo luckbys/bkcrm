@@ -5,12 +5,8 @@ import { toast } from '@/hooks/use-toast';
 // Configuração baseada no ambiente
 const getWebSocketURL = () => {
   const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
-  
-  if (isDev) {
-    return window.location.origin;  // Usa o proxy local
-  }
-  
-  return window.location.origin;  // Usa o proxy local
+  const baseUrl = isDev ? 'http://localhost:3001' : 'https://webhook.bkcrm.devsible.com.br';
+  return baseUrl;
 };
 
 export interface EvolutionMessage {
@@ -376,6 +372,25 @@ export const useEvolutionWebhook = () => {
     });
   }, []);
 
+  // Carregar mensagens de um ticket
+  const loadTicketMessages = useCallback(async (ticketId: string) => {
+    if (!socketRef.current?.connected) {
+      throw new Error('WebSocket não está conectado');
+    }
+
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('request-messages', { ticketId }, (response: any) => {
+        if (response.error) {
+          reject(new Error(response.error));
+        } else {
+          const messages = response.messages || [];
+          setMessages(messages);
+          resolve(messages);
+        }
+      });
+    });
+  }, []);
+
   // Effect para inicializar conexão
   useEffect(() => {
     connect();
@@ -412,6 +427,7 @@ export const useEvolutionWebhook = () => {
     getInstanceStatus,
     clearMessages,
     clearQRCode,
+    loadTicketMessages,
     
     // Informações úteis
     messagesCount: messages.length,

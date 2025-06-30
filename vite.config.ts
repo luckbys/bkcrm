@@ -108,6 +108,11 @@ export default defineConfig(({ mode }) => {
             });
           }
         }
+      },
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
       }
     },
     preview: {

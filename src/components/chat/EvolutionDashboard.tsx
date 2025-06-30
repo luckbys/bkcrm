@@ -127,7 +127,8 @@ export const EvolutionDashboard: React.FC<EvolutionDashboardProps> = ({
     reconnect,
     joinInstance,
     sendMessage,
-    getInstanceStatus
+    getInstanceStatus,
+    loadTicketMessages
   } = useEvolutionWebhook();
 
   // Carregar dados iniciais
@@ -318,9 +319,21 @@ export const EvolutionDashboard: React.FC<EvolutionDashboardProps> = ({
     }
   };
 
-  const handleOpenTicketChat = (ticketId: string) => {
-    // Navegar para o chat do ticket
-    navigate(`/tickets?openChat=${ticketId}`);
+  const handleOpenTicketChat = async (ticketId: string) => {
+    try {
+      // Carregar mensagens do ticket
+      await loadTicketMessages(ticketId);
+      
+      // Navegar para a página do chat
+      navigate(`/chat/${ticketId}`);
+    } catch (error) {
+      console.error('❌ [CHAT] Erro ao carregar mensagens:', error);
+      toast({
+        title: "Erro ao carregar mensagens",
+        description: "Não foi possível carregar o histórico de mensagens",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleJoinInstance = async (instanceName: string) => {
