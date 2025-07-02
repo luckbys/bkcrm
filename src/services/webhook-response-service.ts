@@ -186,7 +186,7 @@ class WebhookResponseService {
         quotedMessage: messageInfo.quotedMessage,
         timestamp: new Date(messageTimestamp * 1000).toISOString(),
         isFromMe,
-        messageStatus: 'received',
+        messageStatus: 'delivered',
         metadata: {
           is_from_whatsapp: true,
           evolution_instance: instanceName,

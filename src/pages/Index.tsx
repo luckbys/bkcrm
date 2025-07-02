@@ -16,8 +16,7 @@ const Index = () => {
     departments, 
     loading: departmentsLoading, 
     error: departmentsError, 
-    refreshDepartments, 
-    reorderDepartments 
+    refresh: refreshDepartments 
   } = useDepartments();
   
   // Hook para gerenciamento de tickets
@@ -49,9 +48,8 @@ const Index = () => {
       const savedSectorId = sessionStorage.getItem('selectedSectorId');
       const savedSector = savedSectorId ? departments.find(d => d.id === savedSectorId) : null;
       
-      // Se encontrou o setor salvo e está ativo, usar ele; senão, usar o primeiro ativo
-      const activeDepartments = departments.filter(d => d.is_active);
-      const sectorToSelect = (savedSector && savedSector.is_active) ? savedSector : activeDepartments[0];
+      // Se encontrou o setor salvo, usar ele; senão, usar o primeiro
+      const sectorToSelect = savedSector || departments[0];
       
       if (sectorToSelect) {
         setSelectedSector(sectorToSelect);
@@ -72,7 +70,7 @@ const Index = () => {
     if (departmentsError) {
       toast({
         title: "Erro ao carregar departamentos",
-        description: departmentsError.message,
+        description: departmentsError,
         variant: "destructive",
       });
     }
@@ -135,6 +133,8 @@ const Index = () => {
   }, [soundEnabled]);
 
   const handleSectorChange = (sector: Department) => {
+    console.log('🏢 [Index] handleSectorChange chamado com:', sector)
+    
     setIsLoading(true);
     setSelectedSector(sector);
     setCurrentView('conversas'); // Reset to default view
@@ -182,19 +182,18 @@ const Index = () => {
   // Função para atualizar departamentos após modificações
   const handleSectorReorder = async (reorderedSectors: Department[]) => {
     // Atualiza o estado local imediatamente para uma UX responsiva
-    // Nota: useDepartments já gerencia o estado interno, então não precisamos setar 'departments' aqui diretamente
-    // A chamada a reorderDepartments abaixo irá disparar um refreshDepartments que atualizará o estado global
     try {
-      await reorderDepartments(reorderedSectors);
+      // Como não temos reorderDepartments, vamos apenas refreshar
+      await refreshDepartments();
       toast({
-        title: "Ordem dos setores atualizada",
-        description: "A nova ordem dos departamentos foi salva com sucesso.",
+        title: "Departamentos atualizados",
+        description: "Os departamentos foram atualizados com sucesso.",
       });
     } catch (error) {
-      console.error("Erro ao reordenar setores:", error);
+      console.error("Erro ao atualizar departamentos:", error);
       toast({
-        title: "Erro ao reordenar setores",
-        description: error instanceof Error ? error.message : "Erro desconhecido ao salvar a nova ordem.",
+        title: "Erro ao atualizar departamentos",
+        description: error instanceof Error ? error.message : "Erro desconhecido ao atualizar.",
         variant: "destructive",
       });
     }
@@ -212,12 +211,12 @@ const Index = () => {
     );
   }
 
-  // Se não há departamentos ativos, mostrar mensagem
-  if (!departmentsLoading && departments.filter(d => d.is_active).length === 0) {
+  // Se não há departamentos, mostrar mensagem
+  if (!departmentsLoading && departments.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600 mb-4">Nenhum departamento ativo encontrado.</p>
+          <p className="text-gray-600 mb-4">Nenhum departamento encontrado.</p>
           <button 
             onClick={() => refreshDepartments()}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -247,15 +246,10 @@ const Index = () => {
         
       <div className="flex-1 flex pt-36 md:pt-20">
           <Sidebar
-          departments={departments}
-          activeDepartment={selectedSector}
-          onSelectDepartment={handleSectorChange}
-            collapsed={sidebarCollapsed}
-            onToggle={toggleSidebar}
-          onDepartmentUpdate={refreshDepartments}
-          onDepartmentReorder={handleSectorReorder}
-          isLoading={departmentsLoading}
-          error={departmentsError}
+            onDepartmentSelect={handleSectorChange}
+            selectedDepartmentId={selectedSector?.id}
+            className=""
+            onCollapsedChange={setSidebarCollapsed}
           />
           
           <MainContent

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import evolutionApiManager from '../services/evolutionApiService';
+import { evolutionApi } from '../services/evolutionApiService';
 
 interface SystemHealth {
   evolution: 'connected' | 'disconnected' | 'checking';
@@ -36,7 +36,7 @@ export const useSystemHealthCheck = (): UseSystemHealthCheckReturn => {
       setHealth(prev => ({ ...prev, evolution: 'checking' }));
 
       // Verificar Evolution API
-      const evolutionStats = await evolutionApiManager.getStats();
+      const evolutionStats = await evolutionApi.getStats();
       
       setHealth({
         evolution: evolutionStats ? 'connected' : 'disconnected',

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { evolutionApiService, WebhookPayload } from './evolutionApiService';
+import { evolutionApi, WebhookPayload } from './evolutionApiService';
 
 export interface ProcessedMessage {
   ticketId: string;

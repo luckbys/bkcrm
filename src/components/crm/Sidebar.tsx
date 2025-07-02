@@ -1,759 +1,600 @@
-import React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import { 
+  Building2,
+  Plus,
+  Search,
   ChevronLeft, 
   ChevronRight,
-  Plus,
-  Trash2,
-  Edit3,
-  MoreHorizontal,
-  ClipboardCheck,
-  Headphones,
-  ShoppingCart,
-  BarChart3,
-  TrendingUp,
+  MoreVertical,
+  Filter,
+  Star,
   Users,
   MessageSquare,
-  Phone,
-  Mail,
-  Globe,
-  Shield,
-  Heart,
-  Target,
-  Briefcase,
-  Home,
-  Building,
-  Package,
-  Truck,
-  CreditCard,
-  UserCheck,
-  HelpCircle,
-  Code,
-  Database,
-  Cloud,
-  Laptop,
-  Smartphone,
-  Monitor,
-  Wifi,
-  Lock,
-  Key,
-  Award,
-  Flag,
-  Bookmark,
-  Tag,
-  Calendar,
-  Clock,
+  CheckCircle,
   AlertCircle,
-  CheckCircle2,
-  User,
-  Megaphone,
+  Clock,
+  TrendingUp,
+  BarChart3,
   Settings,
-  Cog
-} from 'lucide-react';
+  Edit,
+  Trash2
+} from 'lucide-react'
+import { styles as sidebarStyles } from './Sidebar.styles'
+import { useDepartments } from '../../hooks/useDepartments'
+import type { Department } from '../../types/department'
+import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu'
+import { cn } from '../../lib/utils'
+import DepartmentCreateModal from './DepartmentCreateModal'
 
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+interface SidebarProps {
+  onDepartmentSelect?: (department: Department) => void
+  selectedDepartmentId?: string
+  className?: string
+  onCollapsedChange?: (collapsed: boolean) => void
+}
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
-import { useDepartments } from '@/hooks/useDepartments';
-import { supabase } from '@/lib/supabase';
-import type { SectorFormData, PriorityType } from '@/types/sector';
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from '@/hooks/useAuth';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { sidebarStyles as styles } from './Sidebar.styles';
-import { 
-  PRIORITY_LABELS, 
-  PRIORITY_ICONS, 
-  DEPARTMENT_ICONS, 
-  DEPARTMENT_COLORS,
-  USER_STATUS,
-  ERROR_MESSAGES 
-} from './Sidebar.constants';
-import type { 
-  SidebarProps,
-  DepartmentType,
-  DepartmentColor,
-  UserStatusType,
-  Department
-} from './Sidebar.types';
-import { useSectorForm } from '@/hooks/useSectorForm';
-import { Textarea } from '@/components/ui/textarea';
+// Função para determinar cor baseada na prioridade
+const getPriorityColor = (priority: Department['priority']) => {
+  switch (priority) {
+    case 'high': return 'red'
+    case 'medium': return 'yellow'
+    case 'low': return 'green'
+    default: return 'gray'
+  }
+}
 
-const departmentTypeToIcon: Record<string, React.ElementType> = {
-  default: Briefcase,
-  support: Headphones,
-  sales: ShoppingCart,
-  marketing: Megaphone || Tag,
-  development: Code,
-  finance: CreditCard,
-  hr: Users,
-  legal: Shield,
-  operations: Settings || Cog,
-  logistics: Truck
-};
+// Função para determinar cor baseada no status dos tickets
+const getStatusColor = (unreadTickets: number, totalTickets: number) => {
+  if (totalTickets === 0) return 'gray'
+  if (unreadTickets === 0) return 'green'
+  if (unreadTickets >= totalTickets * 0.7) return 'red'
+  return 'yellow'
+}
 
-const getDepartmentIcon = (department: Department) => {
-  const Icon = departmentTypeToIcon[department.type] || Briefcase;
-  return <Icon className="w-5 h-5" />;
-};
-
-const getDepartmentColor = (department: Department): string => {
-  return DEPARTMENT_COLORS[department.type as DepartmentColor];
-};
-
-const initialSectorForm = {
-  name: '',
-  type: 'support' as DepartmentType,
-  icon: 'Headphones',
-  color: 'blue',
-  description: '',
-  priority: 'normal' as PriorityType,
-  is_active: true
-} satisfies SectorFormData;
-
-const isPriorityType = (value: string): value is PriorityType => {
-  return ['high', 'normal', 'low'].includes(value);
-};
-
-export function Sidebar({
-  departments = [],
-  isLoading,
-  error,
-  activeDepartment,
-  onSelectDepartment
-}: SidebarProps) {
-  const { toast } = useToast();
-  const { addDepartment, updateDepartment, deleteDepartment } = useDepartments();
-  const { user } = useAuth();
-  const userStatus: UserStatusType = 'online'; // TODO: Implementar lógica de status
-  const { 
-    form: sectorForm, 
-    updateForm: setSectorForm, 
-    setName,
-    setDescription,
-    setIcon,
-    setColor,
-    setPriority, 
-    resetForm 
-  } = useSectorForm();
+export const Sidebar: React.FC<SidebarProps> = ({
+  onDepartmentSelect,
+  selectedDepartmentId,
+  className = '',
+  onCollapsedChange
+}) => {
+  const [collapsed, setCollapsed] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [priorityFilter, setPriorityFilter] = useState<Department['priority'] | 'all'>('all')
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
   
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [editingSector, setEditingSector] = useState<Department | null>(null);
-  const [deletingSector, setDeletingSector] = useState<Department | null>(null);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const { departments, loading, error, addDepartment, updateDepartment, archiveDepartment, refresh } = useDepartments()
   
-  const [ticketCounts, setTicketCounts] = useState<Record<string, { nonVisualized: number; total: number }>>({});
-  
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Debug log para verificar os departamentos carregados
+  console.log('🔍 [Sidebar] Departamentos carregados:', departments.length, departments)
 
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination) {
-      return;
+  // Filtrar departamentos baseado na busca e filtros
+  const filteredDepartments = useMemo(() => {
+    let filtered = departments
+
+    // Filtro de busca
+    if (searchTerm) {
+      filtered = filtered.filter(dept =>
+        dept.name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     }
 
-    const reorderedSectors = Array.from(departments);
-    const [removed] = reorderedSectors.splice(result.source.index, 1);
-    reorderedSectors.splice(result.destination.index, 0, removed);
-
-    onSelectDepartment(reorderedSectors[result.destination.index]);
-  };
-
-  const filteredSectors = departments?.filter(sector => 
-    sector?.name?.toLowerCase().includes(searchTerm?.toLowerCase() || '')
-  ) || [];
-
-  // Fetch real-time ticket counts
-  useEffect(() => {
-    const fetchTicketCounts = async () => {
-      try {
-        const { data: tickets, error } = await supabase
-          .from('tickets')
-          .select('department_id, status, is_visualized');
-
-        if (error) throw error;
-
-        const counts: Record<string, { nonVisualized: number; total: number }> = {};
-        
-        tickets?.forEach(ticket => {
-          if (!counts[ticket.department_id]) {
-            counts[ticket.department_id] = { nonVisualized: 0, total: 0 };
-          }
-          
-          counts[ticket.department_id].total++;
-          
-          if (!ticket.is_visualized) {
-            counts[ticket.department_id].nonVisualized++;
-          }
-        });
-
-        setTicketCounts(counts);
-      } catch (error) {
-        console.error("Erro ao buscar contagem de tickets:", error);
-        toast({
-          title: "Erro ao carregar tickets",
-          description: "Não foi possível carregar a contagem de tickets.",
-          variant: "destructive",
-        });
-      }
-    };
-
-    // Fetch immediately and then every 5 seconds
-    fetchTicketCounts();
-    const interval = setInterval(fetchTicketCounts, 5000);
-
-    return () => clearInterval(interval);
-  }, [toast]);
-
-  const availableIcons = {
-    'clipboard-check': ClipboardCheck,
-    'headphones': Headphones,
-    'shopping-cart': ShoppingCart,
-    'chart-bar': BarChart3,
-    'trending-up': TrendingUp,
-    'users': Users,
-    'message-square': MessageSquare,
-    'phone': Phone,
-    'mail': Mail,
-    'globe': Globe,
-    'shield': Shield,
-    'heart': Heart,
-    'target': Target,
-    'briefcase': Briefcase,
-    'home': Home,
-    'building': Building,
-    'package': Package,
-    'truck': Truck,
-    'credit-card': CreditCard,
-    'user-check': UserCheck,
-    'help-circle': HelpCircle,
-    'code': Code,
-    'database': Database,
-    'cloud': Cloud,
-    'laptop': Laptop,
-    'smartphone': Smartphone,
-    'monitor': Monitor,
-    'wifi': Wifi,
-    'lock': Lock,
-    'key': Key,
-    'award': Award,
-    'flag': Flag,
-    'bookmark': Bookmark,
-    'tag': Tag,
-    'calendar': Calendar,
-    'clock': Clock
-  };
-
-  const availableColors = [
-    'bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500', 'bg-purple-500', 
-    'bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-cyan-500',
-    'bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-lime-500', 'bg-rose-500'
-  ];
-
-  const getIconComponent = (iconName: string) => {
-    return availableIcons[iconName as keyof typeof availableIcons] || ClipboardCheck;
-  };
-
-  const getSectorCounts = (department: Department) => {
-    return {
-      nonVisualized: ticketCounts[department.id]?.nonVisualized || 0,
-      total: ticketCounts[department.id]?.total || 0
-    };
-  };
-
-  const handleAddSector = async () => {
-    if (!sectorForm.name.trim()) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Por favor, insira um nome para o setor.",
-        variant: "destructive"
-      });
-      return;
+    // Filtro de prioridade
+    if (priorityFilter !== 'all') {
+      filtered = filtered.filter(dept => dept.priority === priorityFilter)
     }
 
-    try {
-      const newDepartment: Omit<Department, 'id' | 'created_at' | 'updated_at'> = {
-        name: sectorForm.name,
-        type: sectorForm.type,
-        icon: sectorForm.icon,
-        color: sectorForm.color,
-        description: sectorForm.description,
-        priority: sectorForm.priority,
-        is_active: true
-      };
+    // Filtro de não lidos
+    if (showUnreadOnly) {
+      filtered = filtered.filter(dept => dept.unreadTickets > 0)
+    }
 
-      await addDepartment(newDepartment);
+    // Ordenar por prioridade e tickets não lidos
+    const sorted = filtered.sort((a, b) => {
+      // Primeiro por prioridade (high > medium > low)
+      const priorityOrder = { high: 3, medium: 2, low: 1 }
+      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]
+      if (priorityDiff !== 0) return priorityDiff
       
-      toast({
-        title: "Setor criado",
-        description: "O setor foi criado com sucesso.",
-      });
-      
-      setShowAddModal(false);
-      resetForm();
-    } catch (error) {
-      console.error("Erro ao criar setor:", error);
-      toast({
-        title: "Erro ao criar",
-        description: "Não foi possível criar o setor.",
-        variant: "destructive"
-      });
+      // Depois por tickets não lidos
+      return b.unreadTickets - a.unreadTickets
+    })
+    
+    console.log('🔍 [Sidebar] Departamentos filtrados:', sorted.length, sorted)
+    return sorted
+  }, [departments, searchTerm, priorityFilter, showUnreadOnly])
+
+  // Estatísticas gerais
+  const totalStats = useMemo(() => {
+    return departments.reduce(
+      (acc, dept) => ({
+        totalDepartments: acc.totalDepartments + 1,
+        totalTickets: acc.totalTickets + dept.totalTickets,
+        unreadTickets: acc.unreadTickets + dept.unreadTickets,
+        resolvedTickets: acc.resolvedTickets + dept.resolvedTickets
+      }),
+      { totalDepartments: 0, totalTickets: 0, unreadTickets: 0, resolvedTickets: 0 }
+    )
+  }, [departments])
+
+  const handleDepartmentClick = (department: Department) => {
+    console.log('🎯 [Sidebar] Departamento clicado:', department)
+    console.log('🎯 [Sidebar] onDepartmentSelect está definido?', typeof onDepartmentSelect)
+    
+    if (onDepartmentSelect) {
+      console.log('🎯 [Sidebar] Chamando onDepartmentSelect...')
+      onDepartmentSelect(department)
+    } else {
+      console.warn('⚠️ [Sidebar] onDepartmentSelect não está definido!')
     }
-  };
+  }
 
-  const handleEditSector = (department: Department) => {
-    setEditingSector(department);
-    setSectorForm({
-      id: department.id,
-      name: department.name,
-      type: department.type,
-      icon: department.icon || 'Headphones',
-      color: department.color || 'blue',
-      description: department.description || '',
-      priority: department.priority as PriorityType,
-      is_active: department.is_active
-    });
-    setShowEditModal(true);
-  };
+  const handleAddDepartment = () => {
+    setShowCreateModal(true)
+  }
 
-  const handleDeleteSector = (department: Department) => {
-    setDeletingSector(department);
-    setShowDeleteDialog(true);
-  };
-
-  const validateAdminPassword = async (): Promise<boolean> => {
+  const handleCreateDepartment = async (name: string, priority: Department['priority'], description?: string) => {
+    setIsCreating(true)
     try {
-      const response = await fetch('/api/admin/validate-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password: adminPassword }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.valid) {
-        return true;
-      } else {
-        toast({
-          title: "Senha incorreta",
-          description: data.message || "A senha de administrador está incorreta.",
-          variant: "destructive"
-        });
-        return false;
-      }
+      await addDepartment(name, priority)
+      setShowCreateModal(false)
     } catch (error) {
-      console.error("Erro ao validar senha do administrador:", error);
-      toast({
-        title: "Erro de conexão",
-        description: "Não foi possível validar a senha do administrador. Tente novamente.",
-        variant: "destructive",
-      });
-      return false;
-    }
-  };
-
-  const confirmDeleteSector = async () => {
-    const isValidPassword = await validateAdminPassword();
-    if (!isValidPassword || !deletingSector) return;
-
-    try {
-      await deleteDepartment(deletingSector.id);
-      
-      toast({
-        title: "Setor removido",
-        description: `O setor "${deletingSector.name}" foi removido com sucesso.`,
-      });
-
-      onSelectDepartment(departments[departments.length - 2]);
-    } catch (error) {
-      toast({
-        title: "Erro ao remover setor",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      });
+      console.error('Erro ao criar departamento:', error)
+      throw error
     } finally {
-      setShowDeleteDialog(false);
-      setDeletingSector(null);
-      setAdminPassword('');
+      setIsCreating(false)
     }
-  };
+  }
 
-  const handleUpdateSector = async (sector: Department) => {
+  const handleEditDepartment = async (name: string, priority: Department['priority'], description?: string) => {
+    if (!editingDepartment) return
+    
+    setIsEditing(true)
     try {
-      if (!editingSector) return;
-
-      const updates: Partial<Department> = {
-          name: sectorForm.name,
-        type: sectorForm.type,
-        icon: sectorForm.icon,
-        color: sectorForm.color,
-          description: sectorForm.description,
-        priority: sectorForm.priority,
-        is_active: sector.is_active
-      };
-
-      await updateDepartment(editingSector.id, updates);
-        
-        toast({
-        title: "Departamento atualizado",
-        description: "As alterações foram salvas com sucesso.",
-        });
-        
-        setShowEditModal(false);
-      setEditingSector(null);
-      resetForm();
-      
+      await updateDepartment(editingDepartment.id, { 
+        name, 
+        priority,
+        ...(description && { description })
+      })
+      setShowEditModal(false)
+      setEditingDepartment(null)
     } catch (error) {
-      console.error('Erro ao atualizar departamento:', error);
-      toast({
-        title: "Erro ao atualizar",
-        description: error instanceof Error ? error.message : "Ocorreu um erro ao atualizar o departamento.",
-        variant: "destructive",
-      });
+      console.error('Erro ao editar departamento:', error)
+      throw error
+    } finally {
+      setIsEditing(false)
     }
-  };
+  }
 
-  // Componente para os campos do formulário
-  const SectorFormFieldsComponent = () => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>Nome</Label>
-        <Input
-          value={sectorForm.name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nome do setor"
-        />
-      </div>
+  const handleDepartmentAction = async (action: string, department: Department) => {
+    try {
+      switch (action) {
+        case 'edit':
+          setEditingDepartment(department)
+          setShowEditModal(true)
+          break
+        case 'delete':
+          if (confirm(`Tem certeza que deseja remover o departamento "${department.name}"?\n\nEsta ação não pode ser desfeita.`)) {
+            await archiveDepartment(department.id)
+          }
+          break
+        case 'priority-high':
+          await updateDepartment(department.id, { priority: 'high' })
+          break
+        case 'priority-medium':
+          await updateDepartment(department.id, { priority: 'medium' })
+          break
+        case 'priority-low':
+          await updateDepartment(department.id, { priority: 'low' })
+          break
+      }
+    } catch (error) {
+      console.error('Erro na ação do departamento:', error)
+    }
+  }
 
-      <div className="space-y-2">
-        <Label>Descrição</Label>
-        <Textarea
-          value={sectorForm.description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Descrição do setor"
-        />
-      </div>
+  const toggleCollapse = () => {
+    const newCollapsed = !collapsed
+    setCollapsed(newCollapsed)
+    onCollapsedChange?.(newCollapsed)
+  }
 
-        <div className="space-y-2">
-          <Label>Ícone</Label>
-        <Select value={sectorForm.icon} onValueChange={setIcon}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Selecione um ícone" />
-            </SelectTrigger>
-          <SelectContent>
-            {Object.keys(availableIcons).map((icon) => (
-              <SelectItem key={icon} value={icon}>
-                {icon}
-                  </SelectItem>
-            ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Prioridade</Label>
-        <Select value={sectorForm.priority} onValueChange={setPriority}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Selecione a prioridade" />
-            </SelectTrigger>
-            <SelectContent>
-            <SelectItem value="high">Alta</SelectItem>
-              <SelectItem value="normal">Normal</SelectItem>
-            <SelectItem value="low">Baixa</SelectItem>
-            </SelectContent>
-          </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Cor</Label>
-        <div className="grid grid-cols-5 gap-2">
-          {availableColors.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={cn(
-                "h-8 w-8 rounded-full",
-                color,
-                sectorForm.color === color && "ring-2 ring-offset-2 ring-black"
-              )}
-              onClick={() => setColor(color)}
-            />
-          ))}
+  if (loading) {
+    return (
+      <div className={sidebarStyles.container({ collapsed: true })}>
+        <div className={sidebarStyles.loadingState()}>
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          <span className="mt-2 text-xs">Carregando departamentos...</span>
         </div>
       </div>
-
-      <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-lg">
-        <div className={cn(
-          "flex items-center justify-center rounded-lg text-white text-xs font-medium w-8 h-8",
-          sectorForm.color
-        )}>
-          {(() => {
-            const IconComponent = getIconComponent(sectorForm.icon);
-            return <IconComponent className="w-4 h-4" />;
-          })()}
-        </div>
-        <div>
-          <div className="font-medium text-sm">{sectorForm.name || 'Nome do Setor'}</div>
-          <div className="text-2xs text-muted-foreground">{sectorForm.description || 'Descrição do setor'}</div>
-        </div>
-      </div>
-    </div>
-  );
+    )
+  }
 
   if (error) {
     return (
-      <div className={styles.errorContainer}>
-        <div className={styles.errorMessage}>
-          <AlertCircle className={styles.errorIcon} />
-          <p className={styles.errorText}>{ERROR_MESSAGES.loading}</p>
+      <div className={sidebarStyles.container({ collapsed: true })}>
+        <div className={sidebarStyles.errorState()}>
+          <AlertCircle className="w-5 h-5 mb-2" />
+          <span className="text-xs text-center">Erro ao carregar departamentos</span>
+          <Button size="sm" variant="outline" onClick={refresh} className="mt-2">
+            Tentar novamente
+          </Button>
         </div>
-                <Button
-          variant="outline" 
-          className="w-full"
-          onClick={() => window.location.reload()}
-        >
-          {ERROR_MESSAGES.retry}
-                </Button>
       </div>
-    );
+    )
   }
 
-  if (isLoading) {
     return (
-      <div className={styles.loadingContainer}>
-        <div className={styles.loadingHeader}>
-          <Skeleton className="h-8 w-8 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-3 w-32" />
+    <TooltipProvider>
+      <div className={sidebarStyles.container({ collapsed })}>
+        {/* Header com estatísticas gerais */}
+        <div className={sidebarStyles.header({ collapsed })}>
+          {!collapsed ? (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <Building2 className="w-3 h-3 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-sm font-bold text-gray-800 dark:text-gray-200">Departamentos</h1>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {totalStats.totalDepartments} setores • {totalStats.unreadTickets} não lidos
+                  </p>
           </div>
         </div>
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className={styles.loadingSkeleton} />
-        ))}
+              <div className="flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleAddDepartment}
+                      className="w-6 h-6 p-0"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Adicionar departamento</TooltipContent>
+                </Tooltip>
+                <button
+                  onClick={toggleCollapse}
+                  className="w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50"
+                >
+                  <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </button>
               </div>
-            );
-  }
-
-  if (!departments.length) {
-    return (
-      <div className={styles.emptyContainer}>
-        <div className={styles.emptyMessage}>
-          <p className={styles.emptyTitle}>{ERROR_MESSAGES.empty}</p>
-          <p className={styles.emptySubtitle}>{ERROR_MESSAGES.emptySubtitle}</p>
+            </>
+          ) : (
+            <>
+              <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center relative">
+                <Building2 className="w-3 h-3 text-white" />
+                {totalStats.unreadTickets > 0 && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
+                    <span className="text-[8px] text-white font-bold">
+                      {totalStats.unreadTickets > 9 ? '9+' : totalStats.unreadTickets}
+                    </span>
         </div>
+                )}
       </div>
-    );
-  }
-
-  return (
-    <aside
-      className={
-        styles.root +
-        ' fixed md:static top-0 left-0 z-30 bg-slate-900 glass-effect shadow-xl border border-white/20 rounded-none md:rounded-2xl overflow-hidden flex flex-col transition-all duration-300 ' +
-        (isCollapsed ? 'w-16 min-w-[64px] max-w-[64px]' : 'w-72 min-w-[240px] max-w-[320px]') +
-        ' h-screen pt-6 md:pt-8'
-      }
-      style={{ height: '100vh', minHeight: 0 }}
-    >
-      {/* Botão de expandir/colapsar */}
-      <div className="flex items-center justify-end px-2 pb-2">
         <button
-          className="bg-white/20 hover:bg-white/40 rounded-full p-1 transition"
-          onClick={() => setIsCollapsed((prev) => !prev)}
-          aria-label={isCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+                onClick={toggleCollapse}
+                className="w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50"
         >
-          {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+                <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
         </button>
+            </>
+          )}
       </div>
-      {/* Header com informações do usuário */}
-      {!isCollapsed && (
-        <div className={styles.header + ' bg-white/10 backdrop-blur-md border-b border-white/20 mt-0'}>
-          <div className={styles.userContainer}>
-            <div className={styles.userAvatar + ' bg-gradient-to-br from-blue-500 to-slate-700 shadow-lg rounded-full p-1'}>
-              <User className={styles.userIcon + ' text-blue-400'} />
+
+        {/* Área de busca e filtros */}
+        {!collapsed && (
+          <div className={sidebarStyles.searchArea({ collapsed: false })}>
+            {/* Campo de busca */}
+            <div className="flex items-center gap-2 w-full bg-gray-100/80 dark:bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-200/50 dark:border-gray-700/50 mb-2">
+              <Search className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Buscar departamentos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 bg-transparent border-none focus:outline-none text-sm placeholder:text-gray-500 dark:placeholder:text-gray-400 p-0 h-auto"
+              />
             </div>
-            <div>
-              <p className={styles.userName + ' text-slate-100'}>
-                {user?.email?.split('@')[0] || 'Usuário'}
-              </p>
-              <p className={cn(styles.userStatus, USER_STATUS[userStatus].color, 'flex items-center gap-1')}> 
-                <span className={'inline-block w-2 h-2 rounded-full ' + USER_STATUS[userStatus].color}></span>
-                {USER_STATUS[userStatus].label}
-              </p>
+
+            {/* Filtros */}
+            <div className="flex items-center justify-between gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7 text-xs">
+                    <Filter className="w-3 h-3 mr-1" />
+                    {priorityFilter === 'all' ? 'Todos' : priorityFilter}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => setPriorityFilter('all')}>
+                    Todas as prioridades
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setPriorityFilter('high')}>
+                    <AlertCircle className="w-3 h-3 mr-2 text-red-500" />
+                    Alta prioridade
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setPriorityFilter('medium')}>
+                    <Clock className="w-3 h-3 mr-2 text-yellow-500" />
+                    Média prioridade
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setPriorityFilter('low')}>
+                    <CheckCircle className="w-3 h-3 mr-2 text-green-500" />
+                    Baixa prioridade
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                size="sm"
+                variant={showUnreadOnly ? "default" : "outline"}
+                onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+                className="h-7 text-xs"
+              >
+                Não lidos
+              </Button>
             </div>
           </div>
+        )}
+
+        {/* Lista de departamentos */}
+        <div className="flex-1 overflow-y-auto p-2">
+          {filteredDepartments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-gray-400">
+              <Building2 className="w-8 h-8 mb-2 opacity-50" />
+              <span className="text-xs text-center">
+                {searchTerm || priorityFilter !== 'all' || showUnreadOnly
+                  ? 'Nenhum departamento encontrado'
+                  : 'Nenhum departamento criado'}
+              </span>
         </div>
-      )}
-      {/* Lista de departamentos com scroll */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        <ScrollArea className={styles.scrollArea + ' custom-scrollbar flex-1'}>
-          <div className={styles.departmentList + ' space-y-3'}>
-            {filteredSectors.map((department, index) => (
-              <div
-                key={department.id}
-                            className={cn(
-                  styles.departmentButton({
-                    active: activeDepartment?.id === department.id
-                  }),
-                  'group transition-all duration-300 border border-transparent hover:border-blue-400/40 shadow-sm',
-                  'focus:outline-none focus:ring-2 focus:ring-blue-400',
-                  'cursor-pointer',
-                  isCollapsed ? 'justify-center px-2' : ''
-                )}
-                onClick={() => onSelectDepartment(department)}
-                tabIndex={0}
-                aria-selected={activeDepartment?.id === department.id}
-                role="button"
-              >
-                <div className={styles.departmentContent + ' gap-3'}>
-                  <div className={styles.departmentIcon(getDepartmentColor(department)) + ' shadow-md'}>
-                    {getDepartmentIcon(department)}
+          ) : (
+            filteredDepartments.map((department) => {
+              const isSelected = selectedDepartmentId === department.id
+              const statusColor = getStatusColor(department.unreadTickets, department.totalTickets)
+              const priorityColor = getPriorityColor(department.priority)
+              
+              if (collapsed) {
+                return (
+                  <Tooltip key={department.id}>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={sidebarStyles.departmentCard({ 
+                          collapsed: true, 
+                          active: isSelected 
+                        })}
+                        onClick={() => handleDepartmentClick(department)}
+                      >
+                        <div className={cn(
+                          sidebarStyles.departmentIcon({ type: statusColor }),
+                          "relative"
+                        )}>
+                          <Building2 className="w-4 h-4" />
+                          {department.unreadTickets > 0 && (
+                            <div className={sidebarStyles.countBadge({ 
+                              variant: statusColor === 'red' ? 'danger' : 
+                                      statusColor === 'yellow' ? 'warning' : 'primary'
+                            })}>
+                              {department.unreadTickets > 99 ? '99+' : department.unreadTickets}
                               </div>
-                  {!isCollapsed && (
-                    <div className={styles.departmentInfo}>
-                      <span className={styles.departmentName + ' text-base'}>{department.name}</span>
-                      <div className={styles.departmentMeta + ' gap-2'}>
-                        <Badge variant="outline" className={cn(styles.badge({ priority: department.priority }), 'rounded-full px-2 py-0.5')}> 
-                          {PRIORITY_ICONS[department.priority]} {PRIORITY_LABELS[department.priority]}
-                        </Badge>
-                        {ticketCounts[department.id] && (
-                          <Badge variant="secondary" className={styles.ticketCount + ' rounded-full px-2 py-0.5 bg-white/20 text-white'}>
-                            {ticketCounts[department.id].nonVisualized}/{ticketCounts[department.id].total}
-                                  </Badge>
-                                )}
+                          )}
+                          {/* Indicador de prioridade */}
+                          <div className={cn(
+                            "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-gray-900",
+                            priorityColor === 'red' && "bg-red-500",
+                            priorityColor === 'yellow' && "bg-yellow-500",
+                            priorityColor === 'green' && "bg-green-500",
+                            priorityColor === 'gray' && "bg-gray-500"
+                          )} />
                               </div>
                     </div>
-                              )}
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="z-50">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{department.name}</p>
+                          <Badge variant="outline" className="text-xs">
+                            {department.priority}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-gray-500 space-y-0.5">
+                          <div className="flex items-center gap-1">
+                            <MessageSquare className="w-3 h-3" />
+                            {department.totalTickets} tickets total
+                          </div>
+                          {department.unreadTickets > 0 && (
+                            <div className="flex items-center gap-1 text-red-500">
+                              <AlertCircle className="w-3 h-3" />
+                              {department.unreadTickets} não lidos
                             </div>
-                {!isCollapsed && (
+                          )}
+                          <div className="flex items-center gap-1 text-green-500">
+                            <CheckCircle className="w-3 h-3" />
+                            {department.resolvedTickets} resolvidos
+                          </div>
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )
+              }
+
+              return (
+                <div
+                  key={department.id}
+                  className={sidebarStyles.departmentCard({ 
+                    collapsed: false, 
+                    active: isSelected 
+                  })}
+                  onClick={() => handleDepartmentClick(department)}
+                >
+                  <div className={cn(
+                    sidebarStyles.departmentIcon({ type: statusColor }),
+                    "relative"
+                  )}>
+                    <Building2 className="w-4 h-4" />
+                    {/* Indicador de prioridade */}
+                    <div className={cn(
+                      "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-gray-900",
+                      priorityColor === 'red' && "bg-red-500",
+                      priorityColor === 'yellow' && "bg-yellow-500",
+                      priorityColor === 'green' && "bg-green-500",
+                      priorityColor === 'gray' && "bg-gray-500"
+                    )} />
+                  </div>
+                  
+                  <div className="flex-1 min-w-0 ml-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {department.name}
+                      </h3>
+                      <div className="flex items-center gap-1">
+                        {department.priority === 'high' && (
+                          <Star className="w-3 h-3 text-red-500" />
+                        )}
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className={styles.departmentActions + ' ml-auto'}>
-                        <MoreHorizontal className="h-4 w-4" />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="w-5 h-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="w-3 h-3" />
                                 </Button>
                               </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEditSector(department)}>
-                        <Edit3 className="mr-2 h-4 w-4" />
-                        Editar
+                            <DropdownMenuItem onClick={() => handleDepartmentAction('edit', department)}>
+                              <Edit className="w-3 h-3 mr-2 text-blue-500" />
+                              Editar departamento
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleDepartmentAction('priority-high', department)}>
+                              <AlertCircle className="w-3 h-3 mr-2 text-red-500" />
+                              Prioridade alta
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDepartmentAction('priority-medium', department)}>
+                              <Clock className="w-3 h-3 mr-2 text-yellow-500" />
+                              Prioridade média
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDepartmentAction('priority-low', department)}>
+                              <CheckCircle className="w-3 h-3 mr-2 text-green-500" />
+                              Prioridade baixa
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem 
+                              onClick={() => handleDepartmentAction('delete', department)}
                         className="text-red-600"
-                        onClick={() => handleDeleteSector(department)}
                                 >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Excluir
+                              <Trash2 className="w-3 h-3 mr-2" />
+                              Remover departamento
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 mt-1">
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <MessageSquare className="w-3 h-3" />
+                        {department.totalTickets}
+                      </div>
+                      {department.unreadTickets > 0 && (
+                        <Badge variant="destructive" className="text-xs h-4 px-1">
+                          {department.unreadTickets} novos
+                        </Badge>
+                      )}
+                      <div className="flex items-center gap-1 text-xs text-green-600">
+                        <CheckCircle className="w-3 h-3" />
+                        {department.resolvedTickets}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {/* Rodapé com estatísticas resumidas */}
+        <div className="p-3 border-t border-gray-200/30 dark:border-gray-700/30 bg-gradient-to-r from-gray-50/30 to-white/30 dark:bg-gradient-to-r dark:from-gray-800/30 dark:to-gray-900/30 rounded-b-2xl">
+          {!collapsed ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 dark:text-gray-400">Total</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600 dark:text-gray-300">{totalStats.totalTickets} tickets</span>
+                  {totalStats.unreadTickets > 0 && (
+                    <Badge variant="destructive" className="text-xs h-4 px-1">
+                      {totalStats.unreadTickets}
+                    </Badge>
+                  )}
+                </div>
               </div>
-            ))}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1">
+                  <div 
+                    className="bg-green-500 h-1 rounded-full transition-all duration-300"
+                    style={{ 
+                      width: `${totalStats.totalTickets > 0 ? (totalStats.resolvedTickets / totalStats.totalTickets) * 100 : 0}%` 
+                    }}
+                  />
+                </div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {totalStats.totalTickets > 0 ? Math.round((totalStats.resolvedTickets / totalStats.totalTickets) * 100) : 0}%
+                </span>
                           </div>
-        </ScrollArea>
                         </div>
-      {/* Botão Novo Setor fixo na base */}
-      {!isLoading && departments.length > 0 && !isCollapsed && (
-        <div className="sticky bottom-0 left-0 w-full bg-gradient-to-t from-slate-900/90 to-transparent pt-4 pb-2 px-4 z-10">
-          <Button
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-xl text-base font-semibold py-3"
-            onClick={() => setShowAddModal(true)}
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            Novo Setor
-          </Button>
+          ) : (
+            <div className="flex justify-center">
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                totalStats.unreadTickets > 0 ? "bg-red-500" : "bg-green-500"
+              )} />
             </div>
           )}
-      {/* Modais */}
-      {/* Modal Adicionar Setor */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Adicionar Novo Setor</DialogTitle>
-            <DialogDescription>
-              Configure as informações do novo setor do CRM
-            </DialogDescription>
-          </DialogHeader>
-          <SectorFormFieldsComponent />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddModal(false)}>
-              Cancelar
-            </Button>
-            <Button variant="default" onClick={handleAddSector}>
-              Adicionar Setor
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
 
-      {/* Modal Editar Setor */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar Setor</DialogTitle>
-            <DialogDescription>
-              Altere as configurações do setor selecionado
-            </DialogDescription>
-          </DialogHeader>
-          <SectorFormFieldsComponent />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
-              Cancelar
-            </Button>
-            <Button variant="default" onClick={() => handleUpdateSector(departments[departments.length - 1])}>
-              Salvar Alterações
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* Modal de criação de departamento */}
+        <DepartmentCreateModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreateDepartment}
+          isLoading={isCreating}
+                />
 
-      {/* Dialog Confirmar Remoção */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O setor "{deletingSector?.name}" será removido permanentemente.
-              
-              <div className="mt-4 space-y-2">
-                <Label htmlFor="admin-password">Digite a senha de administrador:</Label>
-                <Input
-                  id="admin-password"
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="Senha de administrador"
+        {/* Modal de edição de departamento */}
+        <DepartmentCreateModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false)
+            setEditingDepartment(null)
+          }}
+          onSubmit={handleEditDepartment}
+          isLoading={isEditing}
+          editMode={true}
+          initialData={editingDepartment ? {
+            name: editingDepartment.name,
+            priority: editingDepartment.priority,
+            description: editingDepartment.description || ''
+          } : undefined}
                 />
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteSector}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              Confirmar Remoção
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </aside>
-  );
-} 
+    </TooltipProvider>
+  )
+}
+
+export default Sidebar 

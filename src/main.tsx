@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
+import './utils/test-department-actions'
 
 // Importar helpers para desenvolvimento
 import './utils/dev-helpers'

@@ -1,85 +1,168 @@
-import { cva } from "class-variance-authority";
-import type { VariantProps } from "class-variance-authority";
+import { cva } from 'class-variance-authority'
+import type { VariantProps } from 'class-variance-authority'
 
-export const sidebarStyles = {
-  root: "flex flex-col h-full bg-slate-900 text-white glass-effect shadow-xl border border-white/20 rounded-2xl overflow-hidden min-w-[260px] max-w-[320px]",
-  header: "flex items-center justify-between p-4 border-b border-slate-800 bg-white/10 backdrop-blur-md border-b border-white/20",
-  userContainer: "flex items-center space-x-3",
-  userAvatar: "relative bg-gradient-to-br from-blue-500 to-slate-700 shadow-lg rounded-full p-1",
-  userIcon: "h-8 w-8 text-blue-400",
-  userName: "text-sm font-medium text-slate-100",
-  userStatus: "text-xs text-slate-400 flex items-center gap-1",
-  
-  scrollArea: "flex-1 custom-scrollbar",
-  departmentList: "space-y-3 p-4",
-  
-  departmentItem: "flex items-center justify-between p-3 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer border border-transparent hover:border-blue-400/40 shadow-sm transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-400",
-  activeDepartment: "bg-slate-700 text-white border-blue-500",
-  departmentContent: "flex items-center gap-3",
-  departmentIcon: (color: string) => `flex items-center justify-center h-10 w-10 rounded-lg ${color} shadow-md`,
-  departmentInfo: "flex flex-col",
-  departmentName: "text-base font-medium",
-  departmentMeta: "flex items-center gap-2 mt-1",
-  priorityBadge: "text-xs",
-  ticketCount: "text-xs rounded-full px-2 py-0.5 bg-white/20 text-white",
-  departmentActions: "text-slate-400 hover:text-white ml-auto",
-  departmentButton: cva(
-    "flex items-center w-full p-3 rounded-lg transition-colors border border-transparent hover:border-blue-400/40 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer",
+// Container principal do sidebar - design minimalista e moderno
+const container = cva(
+  [
+    'fixed left-6 top-1/2 -translate-y-1/2',
+    'flex flex-col',
+    'bg-white/90 dark:bg-gray-900/90',
+    'border border-gray-200/50 dark:border-gray-700/50',
+    'transition-all duration-300 ease-out',
+    'backdrop-blur-xl backdrop-saturate-150',
+    'shadow-xl shadow-black/5 dark:shadow-black/20',
+    'rounded-2xl',
+    'z-50',
+    'max-h-[85vh]',
+    'overflow-hidden',
+    'hover:shadow-2xl hover:shadow-black/10 dark:hover:shadow-black/30'
+  ],
     {
       variants: {
+      collapsed: {
+        true: 'w-14',
+        false: 'w-64'
+      },
         active: {
-          true: "bg-slate-700 text-white border-blue-500",
-          false: "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+        true: 'border-blue-400/60 dark:border-blue-500/60',
+        false: ''
         }
       },
       defaultVariants: {
+      collapsed: false,
         active: false
+    }
+  }
+)
+
+// Header do sidebar com informações principais
+const header = cva(
+  [
+    'flex items-center gap-2 p-3',
+    'border-b border-gray-200/30 dark:border-gray-700/30',
+    'bg-gradient-to-r from-gray-50/30 to-white/30 dark:bg-gradient-to-r dark:from-gray-800/30 dark:to-gray-900/30',
+    'rounded-t-2xl'
+  ],
+  {
+    variants: {
+      collapsed: {
+        true: 'justify-center flex-col gap-2',
+        false: 'justify-between'
       }
     }
-  ),
-  
-  badge: cva(
-    "text-xs font-medium rounded-full px-2 py-0.5",
+  }
+)
+
+// Área de busca e filtros
+const searchArea = cva(
+  [
+    'p-3 space-y-2',
+    'border-b border-gray-200/30 dark:border-gray-700/30',
+    'bg-gray-50/20 dark:bg-gray-800/20'
+  ],
     {
       variants: {
-        priority: {
-          high: "bg-red-500/10 text-red-500 border-red-500/20",
-          normal: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-          low: "bg-green-500/10 text-green-500 border-green-500/20"
-        }
-      },
-      defaultVariants: {
-        priority: "normal"
+      collapsed: {
+        true: 'hidden',
+        false: 'block'
       }
     }
-  ),
+  }
+)
 
-  // Estados
-  errorContainer: "w-64 glass-effect p-4 flex flex-col gap-4 min-h-screen animate-fade-in",
-  errorMessage: "flex items-center gap-2 text-red-500 p-3 rounded-lg bg-red-500/10",
-  errorIcon: "h-5 w-5",
-  errorText: "text-sm",
-  
-  loadingContainer: "w-64 glass-effect p-4 flex flex-col gap-4 min-h-screen animate-fade-in",
-  loadingHeader: "flex items-center gap-2 mb-4",
-  loadingSkeleton: "h-16 w-full rounded-lg",
-  
-  emptyContainer: "w-64 glass-effect p-4 flex flex-col items-center justify-center gap-4 min-h-screen animate-fade-in",
-  emptyMessage: "text-center text-slate-400",
-  emptyTitle: "text-lg font-medium text-slate-300 mb-2",
-  emptySubtitle: "text-sm text-slate-400",
-  emptyState: "flex flex-col items-center justify-center h-full p-4 text-center",
-  emptyIcon: "h-12 w-12 text-slate-400 mb-4",
+// Card do departamento
+const departmentCard = cva(
+  [
+    'group relative flex items-center p-3 rounded-xl',
+    'transition-all duration-200 ease-out',
+    'cursor-pointer',
+    'hover:bg-gray-50 dark:hover:bg-gray-800/50',
+    'hover:shadow-md hover:scale-[1.02]',
+    'active:scale-[0.98]'
+  ],
+  {
+    variants: {
+      collapsed: {
+        true: 'justify-center p-2 w-10 h-10 mx-auto mb-2',
+        false: 'gap-3 mx-1 mb-1'
+      },
+      active: {
+        true: 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 shadow-md',
+        false: ''
+      }
+    }
+  }
+)
 
-  // Custom scrollbar
-  customScrollbar: `
-    &::-webkit-scrollbar {
-      width: 8px;
-      background: transparent;
+// Ícone do departamento com cores contextuais
+const departmentIcon = cva(
+  [
+    'w-8 h-8 rounded-lg flex items-center justify-center',
+    'transition-all duration-200',
+    'group-hover:scale-110'
+  ],
+  {
+    variants: {
+      type: {
+        blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+        red: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+        yellow: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
+        green: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+        purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+        gray: 'bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400'
+      }
+    },
+    defaultVariants: {
+      type: 'blue'
     }
-    &::-webkit-scrollbar-thumb {
-      background: rgba(59, 130, 246, 0.2);
-      border-radius: 8px;
+  }
+)
+
+// Badge de contagem com variantes
+const countBadge = cva(
+  [
+    'absolute -top-1 -right-1',
+    'min-w-[18px] h-[18px] px-1',
+    'rounded-full border-2 border-white dark:border-gray-900',
+    'text-[10px] font-bold text-white',
+    'flex items-center justify-center',
+    'transition-all duration-200',
+    'animate-pulse'
+  ],
+  {
+    variants: {
+      variant: {
+        primary: 'bg-blue-500',
+        danger: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        success: 'bg-green-500'
+      }
+    },
+    defaultVariants: {
+      variant: 'primary'
     }
-  `
-}; 
+  }
+)
+
+// Estados de loading
+const loadingState = cva([
+  'flex flex-col items-center justify-center p-6 text-gray-500 dark:text-gray-400'
+])
+
+// Estados de erro
+const errorState = cva([
+  'flex flex-col items-center justify-center p-6 text-red-500 dark:text-red-400 text-center'
+])
+
+export const styles = {
+  container,
+  header,
+  searchArea,
+  departmentCard,
+  departmentIcon,
+  countBadge,
+  loadingState,
+  errorState
+}
+
+export type SidebarVariants = VariantProps<typeof container>

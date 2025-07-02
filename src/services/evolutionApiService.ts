@@ -5,6 +5,14 @@ import { API_CONFIG, EVOLUTION_CONFIG, APP_CONFIG } from '@/config';
 const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://webhook.bkcrm.devsible.com.br/api';
 const API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
+export interface WebhookPayload {
+  event: string;
+  instance: string;
+  data: any;
+  timestamp: string;
+  type?: string;
+}
+
 // Rate limiting e retry configuration
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 segundo
