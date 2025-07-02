@@ -141,8 +141,9 @@ export function useTicketsDB() {
         
         if (departmentLower === 'diretor' || 
             departmentLower === 'ceo' || 
-            departmentLower === 'administrador') {
-          // Diretores e CEOs têm acesso global - não aplicar filtro de departamento
+            departmentLower === 'administrador' ||
+            departmentLower === 'geral') {
+          // Diretores, CEOs, Administradores e "Geral" têm acesso global - não aplicar filtro de departamento
           userDepartmentId = null;
           console.log('🏢 Usuário com acesso global detectado:', currentUser.department);
         } else {
@@ -153,13 +154,14 @@ export function useTicketsDB() {
             console.warn('⚠️ Departamento não encontrado no mapeamento:', currentUser.department);
             console.log('📋 Departamentos disponíveis:', Object.keys(departmentMapping));
           }
-          }
         }
+      }
 
         // Determinar se o usuário tem acesso global (antes de aplicar filtros)
         const hasGlobalAccess = currentUser?.department === 'Diretor' || 
                                currentUser?.department === 'CEO' || 
-                               currentUser?.department === 'Administrador';
+                               currentUser?.department === 'Administrador' ||
+                               currentUser?.department === 'Geral';
 
   // Debug: mostrar informações do usuário
   console.log('🔍 Debug - Informações do usuário:', {

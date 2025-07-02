@@ -38,16 +38,34 @@ export function useDepartments() {
       // Carrega estatísticas dos tickets para cada departamento
       const departmentStats: Record<string, DepartmentStats> = {};
       for (const dept of data || []) {
-        const { data: ticketStats } = await supabase
-          .from('tickets')
-          .select('id, status, is_read')
-          .eq('department_id', dept.id);
+        try {
+          const { data: ticketStats, error: ticketError } = await supabase
+            .from('tickets')
+            .select('id, status, is_read')
+            .eq('department_id', dept.id);
 
-        if (ticketStats) {
+          if (ticketError) {
+            console.warn(`⚠️ Erro ao carregar estatísticas para departamento ${dept.name}:`, ticketError);
+            // Usar valores padrão em caso de erro
+            departmentStats[dept.id] = {
+              totalTickets: 0,
+              unreadTickets: 0,
+              resolvedTickets: 0
+            };
+          } else if (ticketStats) {
+            departmentStats[dept.id] = {
+              totalTickets: ticketStats.length,
+              unreadTickets: ticketStats.filter(t => !t.is_read).length,
+              resolvedTickets: ticketStats.filter(t => t.status === 'resolved').length
+            };
+          }
+        } catch (error) {
+          console.warn(`⚠️ Erro ao processar estatísticas para departamento ${dept.name}:`, error);
+          // Usar valores padrão em caso de erro
           departmentStats[dept.id] = {
-            totalTickets: ticketStats.length,
-            unreadTickets: ticketStats.filter(t => !t.is_read).length,
-            resolvedTickets: ticketStats.filter(t => t.status === 'resolved').length
+            totalTickets: 0,
+            unreadTickets: 0,
+            resolvedTickets: 0
           };
         }
       }

@@ -254,11 +254,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ...(description && { description }),
         ...(icon && { icon })
       })
+      
+      // Sucesso - fechar modal e limpar estado
       setShowEditModal(false)
       setEditingDepartment(null)
+      
+      // Feedback visual de sucesso
+      console.log('✅ Departamento editado com sucesso:', name)
+      
     } catch (error) {
-      console.error('Erro ao editar departamento:', error)
-      throw error
+      console.error('❌ Erro ao editar departamento:', error)
+      
+      // Em caso de erro, manter o modal aberto para o usuário tentar novamente
+      // Mas limpar o estado de loading
+      setIsEditing(false)
+      
+      // Mostrar erro amigável ao usuário
+      alert(`Erro ao editar departamento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+      
+      // Não fazer throw do erro para evitar que o modal trave
+      return
     } finally {
       setIsEditing(false)
     }

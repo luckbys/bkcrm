@@ -231,34 +231,49 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
     
     try {
       await onSubmit(name.trim(), priority, description.trim() || undefined, selectedIcon)
+      
+      // Sucesso - fechar modal
       handleClose()
+      
+      // Feedback visual de sucesso
+      console.log('✅ Departamento salvo com sucesso:', name.trim())
+      
     } catch (error) {
-      console.error('Erro ao criar departamento:', error)
+      console.error('❌ Erro ao salvar departamento:', error)
+      
+      // Mostrar erro amigável ao usuário
+      alert(`Erro ao salvar departamento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+      
+      // Não fechar o modal em caso de erro para permitir correção
+      // O usuário pode tentar novamente
     }
   }
 
   const handleClose = () => {
+    // Limpar estados primeiro
     if (editMode && initialData) {
-      // Em modo de edição, voltar aos valores iniciais
       setName(initialData.name)
       setPriority(initialData.priority)
       setDescription(initialData.description || '')
       setSelectedIcon(initialData.icon || 'Building2')
     } else {
-      // Em modo de criação, limpar tudo
       setName('')
       setPriority('medium')
       setDescription('')
       setSelectedIcon('Building2')
       setStep('template')
     }
-    onClose()
+    onClose() // Chamar imediatamente
   }
 
   const isValid = name.trim().length >= 2
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) {
+        handleClose()
+      }
+    }}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">

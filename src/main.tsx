@@ -5,6 +5,9 @@ import App from './App.tsx'
 import './index.css'
 import './utils/test-department-actions'
 
+// Importar diagnóstico de departamentos
+import './utils/department-diagnostic'
+
 // Importar helpers para desenvolvimento
 import './utils/dev-helpers'
 import './utils/migration-helpers'
@@ -67,17 +70,11 @@ import { useChatStore } from './stores/chatStore'
     'Carregando': store.isLoading ? '⏳' : '✅',
     'Enviando': store.isSending ? '📤' : '✅',
     'Erro': store.error || 'Nenhum',
-    'Socket': store.socket ? 'Ativo' : 'Inativo',
     'Tickets': Object.keys(store.messages).length,
     'Total Mensagens': Object.values(store.messages).reduce((total, msgs) => total + msgs.length, 0)
   });
   
   console.log('📨 Mensagens por ticket:', store.messages);
-  
-  if (store.socket) {
-    console.log('🔗 Socket conectado:', store.socket.connected);
-    console.log('🆔 Socket ID:', store.socket.id);
-  }
 };
 
 // Função para limpar estado do chat
