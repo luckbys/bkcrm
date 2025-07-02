@@ -255,6 +255,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ...(icon && { icon })
       })
       
+      // Refresh departments list
+      await refresh()
+      
       // Sucesso - fechar modal e limpar estado
       setShowEditModal(false)
       setEditingDepartment(null)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -200,40 +200,84 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
   editMode = false,
   initialData
 }) => {
-  const [name, setName] = useState(initialData?.name || '')
-  const [priority, setPriority] = useState<Department['priority']>(initialData?.priority || 'medium')
-  const [description, setDescription] = useState(initialData?.description || '')
-  const [selectedIcon, setSelectedIcon] = useState(initialData?.icon || 'Building2')
+  // Estados do modal
+  const [name, setName] = useState('')
+  const [priority, setPriority] = useState<Department['priority']>('medium')
+  const [description, setDescription] = useState('')
+  const [selectedIcon, setSelectedIcon] = useState('Building2')
   const [step, setStep] = useState<'template' | 'custom'>(editMode ? 'custom' : 'template')
+  
+  // Ref para controlar se já inicializou os valores
+  const initializedRef = useRef(false)
+  const isOpenRef = useRef(isOpen)
+
+  // Atualizar ref quando isOpen mudar
+  useEffect(() => {
+    isOpenRef.current = isOpen
+  }, [isOpen])
+
+  // Inicializar valores apenas uma vez quando o modal abrir em modo edição
+  useEffect(() => {
+    if (isOpen && editMode && initialData && !initializedRef.current) {
+      setName(initialData.name)
+      setPriority(initialData.priority)
+      setDescription(initialData.description || '')
+      setSelectedIcon(initialData.icon || 'Building2')
+      setStep('custom')
+      initializedRef.current = true
+    }
+    
+    if (!isOpen) {
+      initializedRef.current = false
+    }
+  }, [isOpen, editMode, initialData])
+
+  // Resetar estados quando modal fecha (apenas se não for modo edição)
+  useEffect(() => {
+    if (!isOpen && !editMode) {
+      const timer = setTimeout(() => {
+        setName('')
+        setPriority('medium')
+        setDescription('')
+        setSelectedIcon('Building2')
+        setStep('template')
+      }, 300) // Aguardar animação de fechamento
+      
+      return () => clearTimeout(timer)
+    }
+  }, [isOpen, editMode])
 
   const selectedPriority = priorityOptions.find(p => p.value === priority)
-  const selectedIconData = availableIcons.find(i => i.name === selectedIcon)
+  const selectedIconData = availableIcons.find(icon => icon.name === selectedIcon)
 
-  const handleTemplateSelect = (template: typeof departmentTemplates[0]) => {
+  const handleTemplateSelect = useCallback((template: typeof departmentTemplates[0]) => {
     setName(template.name)
     setPriority(template.priority)
     setDescription(template.description)
     setSelectedIcon(template.icon)
     setStep('custom')
-  }
+  }, [])
 
-  const handleCustomStart = () => {
+  const handleCustomStart = useCallback(() => {
     setName('')
     setPriority('medium')
     setDescription('')
     setSelectedIcon('Building2')
     setStep('custom')
-  }
+  }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!name.trim()) {
+      alert('Por favor, insira um nome para o departamento')
+      return
+    }
     
     try {
       await onSubmit(name.trim(), priority, description.trim() || undefined, selectedIcon)
       
-      // Sucesso - fechar modal
-      handleClose()
+      // Sucesso - chamar callback de fechamento
+      onClose()
       
       // Feedback visual de sucesso
       console.log('✅ Departamento salvo com sucesso:', name.trim())
@@ -243,37 +287,36 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
       
       // Mostrar erro amigável ao usuário
       alert(`Erro ao salvar departamento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+    }
+  }, [name, priority, description, selectedIcon, onSubmit, onClose])
+
+  const handleClose = useCallback(() => {
+    // Forçar limpeza de overlays residuais
+    setTimeout(() => {
+      const overlays = document.querySelectorAll('[data-radix-dialog-overlay]')
+      if (overlays.length > 1) {
+        overlays.forEach((overlay, index) => {
+          if (index > 0) overlay.remove()
+        })
+      }
       
-      // Não fechar o modal em caso de erro para permitir correção
-      // O usuário pode tentar novamente
-    }
-  }
+      // Garantir que body não fique bloqueado
+      document.body.style.pointerEvents = ''
+      document.body.style.overflow = ''
+    }, 100)
+    
+    onClose()
+  }, [onClose])
 
-  const handleClose = () => {
-    // Limpar estados primeiro
-    if (editMode && initialData) {
-      setName(initialData.name)
-      setPriority(initialData.priority)
-      setDescription(initialData.description || '')
-      setSelectedIcon(initialData.icon || 'Building2')
-    } else {
-      setName('')
-      setPriority('medium')
-      setDescription('')
-      setSelectedIcon('Building2')
-      setStep('template')
-    }
-    onClose() // Chamar imediatamente
-  }
+  const isValid = name.trim().length >= 2 && priority
 
-  const isValid = name.trim().length >= 2
+  // Se não estiver aberto, não renderizar nada
+  if (!isOpen) {
+    return null
+  }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) {
-        handleClose()
-      }
-    }}>
+    <Dialog open={true} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
@@ -537,45 +580,31 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
             )}
 
             {/* Botões */}
-            <div className={cn(
-              "flex items-center pt-2",
-              editMode ? "justify-end" : "justify-between"
-            )}>
-              {!editMode && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setStep('template')}
-                  disabled={isLoading}
-                  className="text-sm"
-                >
-                  ← Voltar aos templates
-                </Button>
-              )}
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleClose}
-                  disabled={isLoading}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={!isValid || isLoading}
-                  className="min-w-[100px]"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      {editMode ? 'Salvando...' : 'Criando...'}
-                    </div>
-                  ) : (
-                    editMode ? 'Salvar Alterações' : 'Criar Departamento'
-                  )}
-                </Button>
-              </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={isLoading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={!isValid || isLoading}
+                className="min-w-[100px]"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : editMode ? (
+                  'Salvar Alterações'
+                ) : (
+                  'Criar Departamento'
+                )}
+              </Button>
             </div>
           </form>
         )}
