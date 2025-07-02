@@ -13,7 +13,48 @@ import {
   Loader2,
   Sparkles,
   Target,
-  MessageSquare
+  MessageSquare,
+  Users,
+  Phone,
+  Headphones,
+  DollarSign,
+  UserCheck,
+  Megaphone,
+  Settings,
+  Shield,
+  Zap,
+  Heart,
+  Star,
+  Briefcase,
+  Home,
+  Globe,
+  Mail,
+  Calendar,
+  FileText,
+  Database,
+  Server,
+  Wifi,
+  Camera,
+  ShoppingCart,
+  Truck,
+  CreditCard,
+  Lock,
+  Key,
+  Eye,
+  Search,
+  Filter,
+  Plus,
+  Minus,
+  Edit,
+  Trash2,
+  Archive,
+  Flag,
+  Bookmark,
+  ThumbsUp,
+  ThumbsDown,
+  Smile,
+  Frown,
+  Meh
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { Department } from '../../types/department'
@@ -21,13 +62,14 @@ import type { Department } from '../../types/department'
 interface DepartmentCreateModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (name: string, priority: Department['priority'], description?: string) => Promise<void>
+  onSubmit: (name: string, priority: Department['priority'], description?: string, icon?: string) => Promise<void>
   isLoading?: boolean
   editMode?: boolean
   initialData?: {
     name: string
     priority: Department['priority']
     description?: string
+    icon?: string
   }
 }
 
@@ -65,33 +107,89 @@ const departmentTemplates = [
   {
     name: 'Atendimento ao Cliente',
     priority: 'high' as const,
-    description: 'Suporte geral e resolução de problemas dos clientes'
+    description: 'Suporte geral e resolução de problemas dos clientes',
+    icon: 'Headphones'
   },
   {
     name: 'Vendas',
     priority: 'high' as const,
-    description: 'Captação de leads e fechamento de vendas'
+    description: 'Captação de leads e fechamento de vendas',
+    icon: 'DollarSign'
   },
   {
     name: 'Suporte Técnico',
     priority: 'medium' as const,
-    description: 'Assistência técnica especializada'
+    description: 'Assistência técnica especializada',
+    icon: 'Settings'
   },
   {
     name: 'Financeiro',
     priority: 'medium' as const,
-    description: 'Cobrança, pagamentos e questões financeiras'
+    description: 'Cobrança, pagamentos e questões financeiras',
+    icon: 'CreditCard'
   },
   {
     name: 'RH - Recursos Humanos',
     priority: 'low' as const,
-    description: 'Gestão de pessoas e processos internos'
+    description: 'Gestão de pessoas e processos internos',
+    icon: 'Users'
   },
   {
     name: 'Marketing',
     priority: 'low' as const,
-    description: 'Campanhas, promoções e relacionamento'
+    description: 'Campanhas, promoções e relacionamento',
+    icon: 'Megaphone'
   }
+]
+
+const availableIcons = [
+  { name: 'Building2', icon: Building2, category: 'Geral' },
+  { name: 'Users', icon: Users, category: 'Pessoas' },
+  { name: 'Headphones', icon: Headphones, category: 'Suporte' },
+  { name: 'Phone', icon: Phone, category: 'Comunicação' },
+  { name: 'DollarSign', icon: DollarSign, category: 'Financeiro' },
+  { name: 'UserCheck', icon: UserCheck, category: 'Pessoas' },
+  { name: 'Megaphone', icon: Megaphone, category: 'Marketing' },
+  { name: 'Settings', icon: Settings, category: 'Técnico' },
+  { name: 'Shield', icon: Shield, category: 'Segurança' },
+  { name: 'Zap', icon: Zap, category: 'Energia' },
+  { name: 'Heart', icon: Heart, category: 'Emoção' },
+  { name: 'Star', icon: Star, category: 'Destaque' },
+  { name: 'Briefcase', icon: Briefcase, category: 'Negócios' },
+  { name: 'Home', icon: Home, category: 'Local' },
+  { name: 'Globe', icon: Globe, category: 'Mundo' },
+  { name: 'Mail', icon: Mail, category: 'Comunicação' },
+  { name: 'Calendar', icon: Calendar, category: 'Tempo' },
+  { name: 'FileText', icon: FileText, category: 'Documentos' },
+  { name: 'Database', icon: Database, category: 'Técnico' },
+  { name: 'Server', icon: Server, category: 'Técnico' },
+  { name: 'Wifi', icon: Wifi, category: 'Técnico' },
+  { name: 'Camera', icon: Camera, category: 'Mídia' },
+  { name: 'ShoppingCart', icon: ShoppingCart, category: 'Comércio' },
+  { name: 'Truck', icon: Truck, category: 'Logística' },
+  { name: 'CreditCard', icon: CreditCard, category: 'Financeiro' },
+  { name: 'Lock', icon: Lock, category: 'Segurança' },
+  { name: 'Key', icon: Key, category: 'Segurança' },
+  { name: 'Eye', icon: Eye, category: 'Visual' },
+  { name: 'Search', icon: Search, category: 'Busca' },
+  { name: 'Filter', icon: Filter, category: 'Filtros' },
+  { name: 'Plus', icon: Plus, category: 'Ações' },
+  { name: 'Minus', icon: Minus, category: 'Ações' },
+  { name: 'Edit', icon: Edit, category: 'Ações' },
+  { name: 'Trash2', icon: Trash2, category: 'Ações' },
+  { name: 'Archive', icon: Archive, category: 'Ações' },
+  { name: 'Flag', icon: Flag, category: 'Marcadores' },
+  { name: 'Bookmark', icon: Bookmark, category: 'Marcadores' },
+  { name: 'ThumbsUp', icon: ThumbsUp, category: 'Feedback' },
+  { name: 'ThumbsDown', icon: ThumbsDown, category: 'Feedback' },
+  { name: 'Smile', icon: Smile, category: 'Emoção' },
+  { name: 'Frown', icon: Frown, category: 'Emoção' },
+  { name: 'Meh', icon: Meh, category: 'Emoção' },
+  { name: 'MessageSquare', icon: MessageSquare, category: 'Comunicação' },
+  { name: 'Target', icon: Target, category: 'Objetivos' },
+  { name: 'AlertCircle', icon: AlertCircle, category: 'Alertas' },
+  { name: 'Clock', icon: Clock, category: 'Tempo' },
+  { name: 'CheckCircle', icon: CheckCircle, category: 'Status' }
 ]
 
 export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
@@ -105,14 +203,17 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
   const [name, setName] = useState(initialData?.name || '')
   const [priority, setPriority] = useState<Department['priority']>(initialData?.priority || 'medium')
   const [description, setDescription] = useState(initialData?.description || '')
+  const [selectedIcon, setSelectedIcon] = useState(initialData?.icon || 'Building2')
   const [step, setStep] = useState<'template' | 'custom'>(editMode ? 'custom' : 'template')
 
   const selectedPriority = priorityOptions.find(p => p.value === priority)
+  const selectedIconData = availableIcons.find(i => i.name === selectedIcon)
 
   const handleTemplateSelect = (template: typeof departmentTemplates[0]) => {
     setName(template.name)
     setPriority(template.priority)
     setDescription(template.description)
+    setSelectedIcon(template.icon)
     setStep('custom')
   }
 
@@ -120,6 +221,7 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
     setName('')
     setPriority('medium')
     setDescription('')
+    setSelectedIcon('Building2')
     setStep('custom')
   }
 
@@ -128,7 +230,7 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
     if (!name.trim()) return
     
     try {
-      await onSubmit(name.trim(), priority, description.trim() || undefined)
+      await onSubmit(name.trim(), priority, description.trim() || undefined, selectedIcon)
       handleClose()
     } catch (error) {
       console.error('Erro ao criar departamento:', error)
@@ -141,11 +243,13 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
       setName(initialData.name)
       setPriority(initialData.priority)
       setDescription(initialData.description || '')
+      setSelectedIcon(initialData.icon || 'Building2')
     } else {
       // Em modo de criação, limpar tudo
       setName('')
       setPriority('medium')
       setDescription('')
+      setSelectedIcon('Building2')
       setStep('template')
     }
     onClose()
@@ -155,7 +259,7 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
@@ -315,6 +419,59 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
               </div>
             </div>
 
+            {/* Ícone do Departamento */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Ícone do Departamento</Label>
+              <div className="space-y-3">
+                {/* Ícone Selecionado */}
+                <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                    {selectedIconData && <selectedIconData.icon className="w-5 h-5 text-white" />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      Ícone Selecionado: {selectedIconData?.name}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Este ícone aparecerá no sidebar e nos tickets
+                    </p>
+                  </div>
+                </div>
+
+                {/* Grid de Ícones */}
+                <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                  <div className="grid grid-cols-8 gap-2">
+                    {availableIcons.map((iconData) => {
+                      const isSelected = selectedIcon === iconData.name
+                      const Icon = iconData.icon
+                      
+                      return (
+                        <button
+                          key={iconData.name}
+                          type="button"
+                          onClick={() => setSelectedIcon(iconData.name)}
+                          disabled={isLoading}
+                          className={cn(
+                            "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-105",
+                            isSelected
+                              ? "bg-blue-500 text-white shadow-lg"
+                              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                          )}
+                          title={`${iconData.name} (${iconData.category})`}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                
+                <p className="text-xs text-gray-500">
+                  Clique em um ícone para selecioná-lo. O ícone aparecerá no sidebar e nos tickets do departamento.
+                </p>
+              </div>
+            </div>
+
             {/* Descrição */}
             <div className="space-y-2">
               <Label htmlFor="description" className="text-sm font-medium">
@@ -345,7 +502,7 @@ export const DepartmentCreateModal: React.FC<DepartmentCreateModalProps> = ({
                     "w-8 h-8 rounded-lg flex items-center justify-center",
                     selectedPriority?.bgColor
                   )}>
-                    <Building2 className={cn("w-4 h-4", selectedPriority?.color)} />
+                    {selectedIconData && <selectedIconData.icon className={cn("w-4 h-4", selectedPriority?.color)} />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h5 className="text-sm font-medium text-gray-900 dark:text-gray-100">

@@ -18,7 +18,40 @@ import {
   BarChart3,
   Settings,
   Edit,
-  Trash2
+  Trash2,
+  Headphones,
+  Phone,
+  DollarSign,
+  UserCheck,
+  Megaphone,
+  Shield,
+  Zap,
+  Heart,
+  Briefcase,
+  Home,
+  Globe,
+  Mail,
+  Calendar,
+  FileText,
+  Database,
+  Server,
+  Wifi,
+  Camera,
+  ShoppingCart,
+  Truck,
+  CreditCard,
+  Lock,
+  Key,
+  Eye,
+  Archive,
+  Flag,
+  Bookmark,
+  ThumbsUp,
+  ThumbsDown,
+  Smile,
+  Frown,
+  Meh,
+  Target
 } from 'lucide-react'
 import { styles as sidebarStyles } from './Sidebar.styles'
 import { useDepartments } from '../../hooks/useDepartments'
@@ -53,6 +86,62 @@ const getStatusColor = (unreadTickets: number, totalTickets: number) => {
   if (unreadTickets === 0) return 'green'
   if (unreadTickets >= totalTickets * 0.7) return 'red'
   return 'yellow'
+}
+
+// Mapeamento de ícones por nome
+const iconMap: Record<string, React.ComponentType<any>> = {
+  Building2,
+  Users,
+  Headphones,
+  Phone,
+  DollarSign,
+  UserCheck,
+  Megaphone,
+  Settings,
+  Shield,
+  Zap,
+  Heart,
+  Star,
+  Briefcase,
+  Home,
+  Globe,
+  Mail,
+  Calendar,
+  FileText,
+  Database,
+  Server,
+  Wifi,
+  Camera,
+  ShoppingCart,
+  Truck,
+  CreditCard,
+  Lock,
+  Key,
+  Eye,
+  Search,
+  Filter,
+  Plus,
+  Edit,
+  Trash2,
+  Archive,
+  Flag,
+  Bookmark,
+  ThumbsUp,
+  ThumbsDown,
+  Smile,
+  Frown,
+  Meh,
+  MessageSquare,
+  Target,
+  AlertCircle,
+  Clock,
+  CheckCircle
+}
+
+// Função para renderizar o ícone do departamento
+const renderDepartmentIcon = (iconName?: string) => {
+  const IconComponent = iconName ? iconMap[iconName] : Building2
+  return IconComponent ? <IconComponent className="w-4 h-4" /> : <Building2 className="w-4 h-4" />
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -141,10 +230,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setShowCreateModal(true)
   }
 
-  const handleCreateDepartment = async (name: string, priority: Department['priority'], description?: string) => {
+  const handleCreateDepartment = async (name: string, priority: Department['priority'], description?: string, icon?: string) => {
     setIsCreating(true)
     try {
-      await addDepartment(name, priority)
+      await addDepartment(name, priority, description, icon)
       setShowCreateModal(false)
     } catch (error) {
       console.error('Erro ao criar departamento:', error)
@@ -154,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   }
 
-  const handleEditDepartment = async (name: string, priority: Department['priority'], description?: string) => {
+  const handleEditDepartment = async (name: string, priority: Department['priority'], description?: string, icon?: string) => {
     if (!editingDepartment) return
     
     setIsEditing(true)
@@ -162,7 +251,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       await updateDepartment(editingDepartment.id, { 
         name, 
         priority,
-        ...(description && { description })
+        ...(description && { description }),
+        ...(icon && { icon })
       })
       setShowEditModal(false)
       setEditingDepartment(null)
@@ -382,7 +472,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           sidebarStyles.departmentIcon({ type: statusColor }),
                           "relative"
                         )}>
-                          <Building2 className="w-4 h-4" />
+                          {renderDepartmentIcon(department.icon)}
                           {department.unreadTickets > 0 && (
                             <div className={sidebarStyles.countBadge({ 
                               variant: statusColor === 'red' ? 'danger' : 
@@ -445,7 +535,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     sidebarStyles.departmentIcon({ type: statusColor }),
                     "relative"
                   )}>
-                    <Building2 className="w-4 h-4" />
+                    {renderDepartmentIcon(department.icon)}
                     {/* Indicador de prioridade */}
                     <div className={cn(
                       "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-gray-900",

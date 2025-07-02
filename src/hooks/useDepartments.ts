@@ -154,11 +154,16 @@ export function useDepartments() {
   }, [loadDepartments]);
 
   // Adiciona um novo departamento
-  const addDepartment = async (name: string, priority: Department['priority'] = 'medium') => {
+  const addDepartment = async (name: string, priority: Department['priority'] = 'medium', description?: string, icon?: string) => {
     try {
       const { data, error } = await supabase
         .from('departments')
-        .insert([{ name, priority }])
+        .insert([{ 
+          name, 
+          priority,
+          ...(description && { description }),
+          ...(icon && { icon })
+        }])
         .select()
         .single();
 
