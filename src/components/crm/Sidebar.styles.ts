@@ -4,7 +4,8 @@ import type { VariantProps } from 'class-variance-authority'
 // Container principal do sidebar - design minimalista e moderno
 const container = cva(
   [
-    'fixed left-6 top-1/2 -translate-y-1/2',
+    'fixed left-6',
+    'top-[calc(50vh+38px)] -translate-y-1/2',
     'flex flex-col',
     'bg-white/90 dark:bg-gray-900/90',
     'border border-gray-200/50 dark:border-gray-700/50',
@@ -12,25 +13,25 @@ const container = cva(
     'backdrop-blur-xl backdrop-saturate-150',
     'shadow-xl shadow-black/5 dark:shadow-black/20',
     'rounded-2xl',
-    'z-50',
-    'max-h-[85vh]',
+    'z-40',
+    'max-h-[calc(100vh-100px)]',
     'overflow-hidden',
     'hover:shadow-2xl hover:shadow-black/10 dark:hover:shadow-black/30'
   ],
-    {
-      variants: {
+  {
+    variants: {
       collapsed: {
         true: 'w-14',
         false: 'w-64'
       },
-        active: {
+      active: {
         true: 'border-blue-400/60 dark:border-blue-500/60',
         false: ''
-        }
-      },
-      defaultVariants: {
+      }
+    },
+    defaultVariants: {
       collapsed: false,
-        active: false
+      active: false
     }
   }
 )
