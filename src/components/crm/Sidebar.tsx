@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import { 
   Building2,
@@ -51,7 +51,8 @@ import {
   Smile,
   Frown,
   Meh,
-  Target
+  Target,
+  Smartphone
 } from 'lucide-react'
 import { styles as sidebarStyles } from './Sidebar.styles'
 import { useDepartments } from '../../hooks/useDepartments'
@@ -62,6 +63,7 @@ import { Input } from '../ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu'
 import { cn } from '../../lib/utils'
 import DepartmentCreateModal from './DepartmentCreateModal'
+import WhatsAppConfigModal from './modals/WhatsAppConfigModal'
 
 interface SidebarProps {
   onDepartmentSelect?: (department: Department) => void
@@ -135,7 +137,8 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   Target,
   AlertCircle,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Smartphone
 }
 
 // Função para renderizar o ícone do departamento
@@ -157,13 +160,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null)
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   
   const { departments, loading, error, addDepartment, updateDepartment, archiveDepartment, refresh } = useDepartments()
   
-  // Debug log para verificar os departamentos carregados
-  console.log('🔍 [Sidebar] Departamentos carregados:', departments.length, departments)
+  // Debug: monitorar estado do modal WhatsApp apenas quando relevante
+  useEffect(() => {
+    if (showWhatsAppModal && selectedDepartment) {
+      console.log('🔍 [Sidebar] Modal WhatsApp aberto:', { 
+        departmentName: selectedDepartment?.name, 
+        departmentId: selectedDepartment?.id 
+      })
+    }
+  }, [showWhatsAppModal, selectedDepartment])
 
   // Filtrar departamentos baseado na busca e filtros
   const filteredDepartments = useMemo(() => {
@@ -283,11 +295,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   const handleDepartmentAction = async (action: string, department: Department) => {
+    console.log('🔍 [Sidebar] handleDepartmentAction chamado:', { action, department: department.name })
     try {
       switch (action) {
         case 'edit':
+          console.log('🔍 [Sidebar] Abrindo modal de edição')
           setEditingDepartment(department)
           setShowEditModal(true)
+          break
+        case 'whatsapp':
+          console.log('🔍 [Sidebar] Abrindo modal WhatsApp', { departmentId: department.id, showWhatsAppModal })
+          setSelectedDepartment(department)
+          setShowWhatsAppModal(true)
+          console.log('🔍 [Sidebar] Estado após setShowWhatsAppModal:', { showWhatsAppModal: true, selectedDepartment: department.name })
           break
         case 'delete':
           if (confirm(`Tem certeza que deseja remover o departamento "${department.name}"?\n\nEsta ação não pode ser desfeita.`)) {
@@ -589,6 +609,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               <Edit className="w-3 h-3 mr-2 text-blue-500" />
                               Editar departamento
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDepartmentAction('whatsapp', department)}>
+                              <Smartphone className="w-3 h-3 mr-2 text-green-500" />
+                              Configurar WhatsApp
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleDepartmentAction('priority-high', department)}>
                               <AlertCircle className="w-3 h-3 mr-2 text-red-500" />
@@ -699,8 +723,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             priority: editingDepartment.priority,
             description: editingDepartment.description || ''
           } : undefined}
-                />
-              </div>
+        />
+
+        {/* Modal de configuração WhatsApp */}
+        {selectedDepartment && (
+          <WhatsAppConfigModal
+            isOpen={showWhatsAppModal}
+            onClose={() => {
+              console.log('🔍 [Sidebar] Fechando modal WhatsApp')
+              setShowWhatsAppModal(false)
+              setSelectedDepartment(null)
+            }}
+            departmentId={selectedDepartment.id}
+            departmentName={selectedDepartment.name}
+          />
+        )}
+      </div>
     </TooltipProvider>
   )
 }

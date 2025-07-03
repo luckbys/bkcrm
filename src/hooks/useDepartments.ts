@@ -41,7 +41,7 @@ export function useDepartments() {
         try {
           const { data: ticketStats, error: ticketError } = await supabase
             .from('tickets')
-            .select('id, status, unread')
+            .select('id, status, is_read')
             .eq('department_id', dept.id);
 
           if (ticketError) {
@@ -55,7 +55,7 @@ export function useDepartments() {
           } else if (ticketStats) {
             departmentStats[dept.id] = {
               totalTickets: ticketStats.length,
-              unreadTickets: ticketStats.filter(t => t.unread).length,
+              unreadTickets: ticketStats.filter(t => !t.is_read).length,
               resolvedTickets: ticketStats.filter(t => t.status === 'resolved').length
             };
           }
