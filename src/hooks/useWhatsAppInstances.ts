@@ -21,6 +21,7 @@ interface UseWhatsAppInstancesReturn {
   updateInstanceConfig: (instanceId: string, config: Partial<DepartmentWhatsAppConfig>) => Promise<void>;
   checkInstanceHealth: (instanceName: string) => Promise<{ isHealthy: boolean; status: string }>;
   refreshInstances: () => Promise<void>;
+  syncInstancesStatus: () => Promise<void>;
 }
 
 export const useWhatsAppInstances = (): UseWhatsAppInstancesReturn => {
@@ -265,6 +266,60 @@ export const useWhatsAppInstances = (): UseWhatsAppInstancesReturn => {
     }
   }, []);
 
+  // Sincronizar status de todas as instâncias com a Evolution API
+  const syncInstancesStatus = useCallback(async (): Promise<void> => {
+    try {
+      setError(null);
+      
+      // Buscar todas as instâncias do banco
+      const { data: dbInstances } = await supabase
+        .from('whatsapp_instances')
+        .select('id, instance_name, status, last_connection')
+        .not('instance_name', 'is', null);
+
+      if (!dbInstances || dbInstances.length === 0) return;
+
+      // Verificar status de cada instância na Evolution API
+      const statusUpdates = await Promise.allSettled(
+        dbInstances.map(async (instance) => {
+          try {
+            const health = await evolutionAPI.checkInstanceHealth(instance.instance_name);
+            const apiStatus = health.isHealthy && health.status === 'open' ? 'active' : 
+                            health.status === 'connecting' ? 'connecting' :
+                            health.status === 'qrcode' ? 'qrcode' : 'inactive';
+            
+            // Atualizar no banco se o status mudou
+            if (instance.status !== apiStatus) {
+              await supabase
+                .from('whatsapp_instances')
+                .update({ 
+                  status: apiStatus,
+                  last_connection: apiStatus === 'active' ? new Date().toISOString() : instance.last_connection,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', instance.id);
+              
+              console.log(`📱 Status atualizado: ${instance.instance_name} -> ${apiStatus}`);
+            }
+            
+            return { instanceName: instance.instance_name, status: apiStatus };
+          } catch (err) {
+            console.warn(`⚠️ Erro ao verificar instância ${instance.instance_name}:`, err);
+            return { instanceName: instance.instance_name, status: 'error' };
+          }
+        })
+      );
+
+      // Recarregar instâncias após sincronização
+      await loadInstances();
+      
+      console.log('🔄 Sincronização de status concluída:', statusUpdates);
+    } catch (err) {
+      console.error('Erro na sincronização de status:', err);
+      setError('Erro ao sincronizar status das instâncias');
+    }
+  }, [loadInstances]);
+
   // Atualizar configurações da instância
   const updateInstanceConfig = useCallback(async (
     instanceId: string,
@@ -330,6 +385,17 @@ export const useWhatsAppInstances = (): UseWhatsAppInstancesReturn => {
     loadInstances();
   }, [loadInstances]);
 
+  // Sincronizar status automaticamente a cada 30 segundos quando há instâncias
+  useEffect(() => {
+    if (instances.length === 0) return;
+
+    const interval = setInterval(() => {
+      syncInstancesStatus();
+    }, 30000); // 30 segundos
+
+    return () => clearInterval(interval);
+  }, [instances.length, syncInstancesStatus]);
+
   return {
     instances,
     loading,
@@ -341,6 +407,7 @@ export const useWhatsAppInstances = (): UseWhatsAppInstancesReturn => {
     getQRCode,
     updateInstanceConfig,
     checkInstanceHealth,
-    refreshInstances
+    refreshInstances,
+    syncInstancesStatus
   };
 }; 

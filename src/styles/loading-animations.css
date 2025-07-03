@@ -116,6 +116,131 @@
   animation: bounce-soft 2s ease-in-out infinite;
 }
 
+/* QR Code Layout Fixes */
+.qr-code-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.qr-code-image-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-width: 280px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.qr-code-image {
+  width: 100%;
+  height: auto;
+  max-width: 250px;
+  max-height: 250px;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
+  margin: 0 auto;
+}
+
+.qr-code-instructions {
+  max-width: 100%;
+  width: 100%;
+  text-align: center;
+  padding: 0 16px;
+}
+
+.qr-code-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  text-align: left;
+  flex-wrap: wrap;
+}
+
+.qr-code-step-number {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: #22c55e;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.qr-code-step-text {
+  flex: 1;
+  min-width: 0;
+  word-wrap: break-word;
+}
+
+/* Modal layout improvements */
+.whatsapp-modal-content {
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.whatsapp-modal-scrollarea {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.whatsapp-modal-tab-content {
+  margin: 0;
+  padding-bottom: 16px;
+}
+
+/* Responsive QR Code */
+@media (max-width: 640px) {
+  .qr-code-image-wrapper {
+    max-width: 240px;
+    padding: 12px;
+  }
+  
+  .qr-code-image {
+    max-width: 200px;
+    max-height: 200px;
+  }
+  
+  .qr-code-step {
+    font-size: 13px;
+  }
+  
+  .qr-code-step-number {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .qr-code-image-wrapper {
+    max-width: 200px;
+    padding: 8px;
+  }
+  
+  .qr-code-image {
+    max-width: 180px;
+    max-height: 180px;
+  }
+}
+
 /* Efeitos de glassmorphism para loading */
 .loading-glass {
   background: rgba(255, 255, 255, 0.1);
@@ -204,23 +329,21 @@
   transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Efeitos de hover para elementos interativos */
 .loading-hover {
-  transition: all 0.2s ease;
+  transform: translateY(0);
 }
 
 .loading-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* Efeitos de foco */
 .loading-focus:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
 }
 
-/* Responsividade para animações */
+/* Reduzir animações para quem prefere */
 @media (prefers-reduced-motion: reduce) {
   .animate-shimmer,
   .animate-pulse-glow,
@@ -247,20 +370,26 @@
   }
 }
 
-/* Existing loading animations */
+/* Loading spinner específico */
 .loading-spinner {
-  @apply animate-spin rounded-full h-8 w-8 border-b-2 border-primary;
+  display: inline-block;
+  animation: spin 1s linear infinite;
 }
 
 .loading-dots {
-  @apply flex space-x-1;
+  display: inline-flex;
+  gap: 4px;
 }
 
 .loading-dots div {
-  @apply w-2 h-2 bg-primary rounded-full animate-pulse;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: loading-dots 1.4s ease-in-out infinite both;
 }
 
-/* Animações para o WhatsApp Config Modal */
+/* Animações específicas do WhatsApp Modal */
 .whatsapp-modal-enter {
   animation: whatsappModalEnter 0.3s ease-out;
 }
@@ -274,11 +403,11 @@
 }
 
 .connection-pulse {
-  animation: connectionPulse 2s infinite;
+  animation: connectionPulse 2s ease-in-out infinite;
 }
 
 .status-connecting {
-  animation: statusConnecting 1.5s infinite;
+  animation: statusConnecting 1.5s ease-in-out infinite;
 }
 
 .success-bounce {
@@ -286,33 +415,36 @@
 }
 
 @keyframes whatsappModalEnter {
-  from {
+  0% {
     opacity: 0;
-    transform: scale(0.9) translateY(-10px);
+    transform: scale(0.95) translateY(-10px);
   }
-  to {
+  100% {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
 }
 
 @keyframes whatsappModalExit {
-  from {
+  0% {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
-  to {
+  100% {
     opacity: 0;
-    transform: scale(0.9) translateY(-10px);
+    transform: scale(0.95) translateY(-10px);
   }
 }
 
 @keyframes qrCodeAppear {
-  from {
+  0% {
     opacity: 0;
-    transform: scale(0.8) rotateY(180deg);
+    transform: scale(0.8) rotateY(-15deg);
   }
-  to {
+  50% {
+    transform: scale(1.05) rotateY(0deg);
+  }
+  100% {
     opacity: 1;
     transform: scale(1) rotateY(0deg);
   }
@@ -329,54 +461,73 @@
 
 @keyframes statusConnecting {
   0%, 100% {
-    background-color: rgba(251, 191, 36, 0.1);
-    border-color: rgba(251, 191, 36, 0.3);
+    background-color: rgb(251, 191, 36);
   }
   50% {
-    background-color: rgba(251, 191, 36, 0.2);
-    border-color: rgba(251, 191, 36, 0.5);
+    background-color: rgb(245, 158, 11);
   }
 }
 
 @keyframes successBounce {
   0% {
-    transform: scale(0);
+    transform: scale(1);
   }
-  50% {
-    transform: scale(1.2);
+  20% {
+    transform: scale(1.1);
+  }
+  40% {
+    transform: scale(0.95);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  80% {
+    transform: scale(0.98);
   }
   100% {
     transform: scale(1);
   }
 }
 
-/* Gradiente animado para loading */
+/* Gradiente animado */
 .animated-gradient {
   background: linear-gradient(
     45deg,
     #3b82f6,
     #6366f1,
     #8b5cf6,
-    #a855f7,
     #ec4899,
-    #ef4444,
-    #f97316,
-    #eab308,
-    #22c55e,
+    #f59e0b,
     #10b981,
-    #06b6d4,
     #3b82f6
   );
-  background-size: 300% 300%;
-  animation: gradientShift 3s ease-in-out infinite;
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease infinite;
+}
+
+.animated-gradient::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: inherit;
+  border-radius: inherit;
+  filter: blur(10px);
+  opacity: 0.7;
+  z-index: -1;
 }
 
 @keyframes gradientShift {
-  0%, 100% {
+  0% {
     background-position: 0% 50%;
   }
   50% {
     background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
   }
 }
 
@@ -384,12 +535,12 @@
 .shimmer {
   background: linear-gradient(
     90deg,
-    transparent,
-    rgba(255, 255, 255, 0.2),
-    transparent
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  animation: shimmer 2s infinite;
 }
 
 @keyframes shimmer {
@@ -401,7 +552,7 @@
   }
 }
 
-/* Efeito de typing dots */
+/* Typing dots animation */
 .typing-dots {
   display: inline-flex;
   align-items: center;
@@ -409,11 +560,11 @@
 }
 
 .typing-dots span {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background-color: currentColor;
-  animation: typing 1.4s infinite;
+  animation: typing 1.4s infinite ease-in-out;
 }
 
 .typing-dots span:nth-child(2) {
@@ -435,7 +586,7 @@
   }
 }
 
-/* Responsividade melhorada */
+/* Responsive mobile improvements */
 @media (max-width: 640px) {
   .whatsapp-modal-enter {
     animation: whatsappModalEnterMobile 0.3s ease-out;
@@ -443,11 +594,11 @@
 }
 
 @keyframes whatsappModalEnterMobile {
-  from {
+  0% {
     opacity: 0;
-    transform: translateY(100vh);
+    transform: translateY(100%);
   }
-  to {
+  100% {
     opacity: 1;
     transform: translateY(0);
   }

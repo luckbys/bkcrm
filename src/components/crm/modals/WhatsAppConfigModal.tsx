@@ -62,7 +62,8 @@ import {
   Copy,
   Archive,
   Edit,
-  Scan
+  Scan,
+  RotateCcw
 } from 'lucide-react';
 import { useWhatsAppInstances } from '@/hooks/useWhatsAppInstances';
 import { 
@@ -88,15 +89,21 @@ interface WhatsAppConfigModalProps {
 
 const statusVariants = {
   'active': 'bg-green-100 text-green-800',
+  'open': 'bg-green-100 text-green-800',
   'connecting': 'bg-yellow-100 text-yellow-800',
+  'qrcode': 'bg-blue-100 text-blue-800',
   'inactive': 'bg-gray-100 text-gray-800',
+  'close': 'bg-gray-100 text-gray-800',
   'error': 'bg-red-100 text-red-800'
 };
 
 const statusIcons = {
   'active': CheckCircle,
+  'open': CheckCircle,
   'connecting': Loader2,
+  'qrcode': QrCode,
   'inactive': WifiOff,
+  'close': WifiOff,
   'error': AlertCircle
 };
 
@@ -132,6 +139,7 @@ export default function WhatsAppConfigModal({
   const [instanceStatus, setInstanceStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [hasInstance, setHasInstance] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
   // Configurações temporárias para edição
   const [tempConfig, setTempConfig] = useState<DepartmentWhatsAppConfig>({
@@ -174,6 +182,33 @@ export default function WhatsAppConfigModal({
 
   const { toast } = useToast();
 
+  // Verificar status real da instância via API
+  const checkRealInstanceStatus = useCallback(async (instanceName: string) => {
+    try {
+      setCheckingStatus(true);
+      const health = await checkInstanceHealth(instanceName);
+      
+      // Atualizar o status local baseado na resposta da API
+      const realStatus = health.isHealthy && health.status === 'open' ? 'connected' : 
+                        health.status === 'connecting' ? 'connecting' : 'disconnected';
+      
+      setInstanceStatus(realStatus);
+      
+      // Atualizar a instância no banco se necessário
+      if (currentInstance && currentInstance.status !== health.status) {
+        await updateInstanceConfig(currentInstance.id!, { status: health.status });
+        await refreshInstances();
+      }
+      
+      return realStatus;
+    } catch (err) {
+      console.warn('Erro ao verificar status da instância:', err);
+      return 'disconnected';
+    } finally {
+      setCheckingStatus(false);
+    }
+  }, [checkInstanceHealth, currentInstance, updateInstanceConfig, refreshInstances]);
+
   // Handler para fechar o modal
   const handleClose = useCallback(() => {
     // Forçar limpeza de overlays residuais
@@ -202,6 +237,7 @@ export default function WhatsAppConfigModal({
     setIsConnecting(false);
     setInstanceStatus("disconnected");
     setHasInstance(false);
+    setCheckingStatus(false);
     
     onClose();
   }, [onClose]);
@@ -214,7 +250,16 @@ export default function WhatsAppConfigModal({
     if (instance) {
       setCurrentInstance(instance);
       setHasInstance(true);
-      setInstanceStatus(instance.status === 'active' ? 'connected' : 'disconnected');
+      
+      // Verificar status real da instância
+      if (instance.instanceName) {
+        checkRealInstanceStatus(instance.instanceName);
+      } else {
+        // Fallback para status armazenado no banco
+        const status = instance.status === 'active' || instance.status === 'open' ? 'connected' : 
+                     instance.status === 'connecting' || instance.status === 'qrcode' ? 'connecting' : 'disconnected';
+        setInstanceStatus(status);
+      }
     } else {
       setCurrentInstance(null);
       setHasInstance(false);
@@ -223,7 +268,7 @@ export default function WhatsAppConfigModal({
     
     setShowQR(false);
     setQrCode(null);
-  }, [instances, departmentId, isOpen]);
+  }, [instances, departmentId, isOpen, checkRealInstanceStatus]);
 
   // Criar nova instância
   const handleCreateInstance = async () => {
@@ -263,8 +308,8 @@ export default function WhatsAppConfigModal({
     }
   };
 
-  // Conectar instância
-  const handleConnect = async () => {
+  // Conectar instância (também usado para reconectar)
+  const handleConnect = async (isReconnect = false) => {
     try {
       setIsConnecting(true);
       setInstanceStatus("connecting");
@@ -343,8 +388,8 @@ export default function WhatsAppConfigModal({
         setShowQR(true);
         
         toast({
-          title: "📱 QR Code Gerado!",
-          description: "Escaneie o QR Code com seu WhatsApp para conectar.",
+          title: isReconnect ? "🔄 Novo QR Code Gerado!" : "📱 QR Code Gerado!",
+          description: isReconnect ? "Novo QR Code gerado para reconexão. Escaneie com seu WhatsApp." : "Escaneie o QR Code com seu WhatsApp para conectar.",
           duration: 5000,
         });
       }
@@ -361,6 +406,11 @@ export default function WhatsAppConfigModal({
         duration: 5000,
       });
     }
+  };
+
+  // Função específica para reconectar
+  const handleReconnect = () => {
+    handleConnect(true);
   };
 
   // Simular sucesso da conexão (seria chamado via webhook ou polling)
@@ -402,7 +452,12 @@ export default function WhatsAppConfigModal({
     setShowQR(false);
     setQrCode(null);
     setIsConnecting(false);
-    setInstanceStatus("disconnected");
+    // Verificar status real ao fechar QR
+    if (currentInstance) {
+      checkRealInstanceStatus(currentInstance.instanceName);
+    } else {
+      setInstanceStatus("disconnected");
+    }
   };
 
   // Desconectar instância
@@ -431,7 +486,7 @@ export default function WhatsAppConfigModal({
     if (confirm('Tem certeza que deseja deletar esta instância? Esta ação não pode ser desfeita.')) {
       try {
         setDeleting(true);
-        await deleteInstance(currentInstance.id);
+        await deleteInstance(currentInstance.id!);
         setCurrentInstance(null);
         setQrCode(null);
         setShowQR(false);
@@ -538,7 +593,7 @@ export default function WhatsAppConfigModal({
   return (
     <TooltipProvider>
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Smartphone className="w-6 h-6" />
@@ -549,8 +604,8 @@ export default function WhatsAppConfigModal({
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
-            <TabsList className="grid w-full grid-cols-4 mb-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="grid w-full grid-cols-4 mb-4 flex-shrink-0">
               <TabsTrigger value="connection" className="flex items-center gap-2">
                 <QrCode className="w-4 h-4" />
                 Conexão
@@ -569,14 +624,15 @@ export default function WhatsAppConfigModal({
               </TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1">
-              <TabsContent value="connection" className="space-y-6">
+            <ScrollArea className="flex-1 overflow-auto">
+              <TabsContent value="connection" className="space-y-6 m-0">
                 {/* Status da Conexão */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Wifi className="w-5 h-5" />
                       Status da Conexão
+                      {checkingStatus && <Loader2 className="w-4 h-4 animate-spin" />}
                     </CardTitle>
                     <CardDescription>
                       Gerencie a conexão com o WhatsApp
@@ -622,7 +678,7 @@ export default function WhatsAppConfigModal({
                       <div className="flex gap-2">
                         {instanceStatus === "disconnected" && (
                           <Button
-                            onClick={handleConnect}
+                            onClick={() => handleConnect()}
                             disabled={isConnecting}
                             className="min-w-[120px]"
                           >
@@ -642,84 +698,98 @@ export default function WhatsAppConfigModal({
                         )}
                         
                         {instanceStatus === "connected" && (
-                          <Button
-                            variant="outline"
-                            onClick={handleDisconnect}
-                          >
-                            <PhoneOff className="w-4 h-4 mr-2" />
-                            Desconectar
-                          </Button>
+                          <>
+                            <Button
+                              variant="outline"
+                              onClick={handleReconnect}
+                              disabled={isConnecting}
+                            >
+                              {isConnecting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                              <RotateCcw className="w-4 h-4 mr-2" />
+                              Reconectar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={handleDisconnect}
+                            >
+                              <PhoneOff className="w-4 h-4 mr-2" />
+                              Desconectar
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
 
                     {/* QR Code */}
                     {(showQR && qrCode) && (
-                      <Card className="bg-gradient-to-br from-green-50 to-blue-50 border-2 border-dashed border-green-300">
-                        <CardContent className="p-6">
-                          <div className="flex flex-col items-center gap-6">
-                            <div className="flex items-center gap-2 text-xl font-semibold text-green-700">
-                              <QrCode className="w-6 h-6" />
-                              Escaneie o QR Code
-                            </div>
-                            
-                            <div className="relative p-4 bg-white rounded-xl shadow-lg">
-                              <img 
-                                src={qrCode.base64} 
-                                alt="QR Code" 
-                                className="w-64 h-64 rounded-lg"
-                              />
-                              {connectionSuccess && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
-                                  <CheckCircle2 className="w-16 h-16 text-green-500" />
-                                </div>
-                              )}
+                      <div className="w-full overflow-hidden">
+                        <Card className="bg-gradient-to-br from-green-50 to-blue-50 border-2 border-dashed border-green-300">
+                          <CardContent className="p-6">
+                            <div className="flex flex-col items-center gap-6 max-w-full">
+                              <div className="flex items-center gap-2 text-xl font-semibold text-green-700">
+                                <QrCode className="w-6 h-6" />
+                                Escaneie o QR Code
+                              </div>
                               
-                              {/* Pulse animation */}
-                              <div className="absolute -inset-1 bg-gradient-to-r from-green-400 to-blue-500 rounded-xl opacity-30 animate-pulse"></div>
-                            </div>
-                            
-                            <div className="text-center space-y-3 max-w-sm">
-                              <p className="text-base font-medium text-gray-700">
-                                📱 Como conectar:
-                              </p>
-                              <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
-                                <div className="flex items-center gap-2">
-                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                                  <span>Abra o WhatsApp no seu celular</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                                  <span>Vá em <strong>Menu ⋮</strong> → <strong>Dispositivos conectados</strong></span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                                  <span>Toque em <strong>"Conectar um dispositivo"</strong></span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                                  <span>Aponte a câmera para este QR Code</span>
+                              <div className="relative p-4 bg-white rounded-xl shadow-lg max-w-[280px] w-full">
+                                <img 
+                                  src={qrCode.base64} 
+                                  alt="QR Code" 
+                                  className="w-full h-auto max-w-[250px] max-h-[250px] rounded-lg mx-auto block"
+                                  style={{ aspectRatio: '1/1' }}
+                                />
+                                {connectionSuccess && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
+                                    <CheckCircle2 className="w-16 h-16 text-green-500" />
+                                  </div>
+                                )}
+                                
+                                {/* Pulse animation */}
+                                <div className="absolute -inset-1 bg-gradient-to-r from-green-400 to-blue-500 rounded-xl opacity-30 animate-pulse"></div>
+                              </div>
+                              
+                              <div className="text-center space-y-3 max-w-sm">
+                                <p className="text-base font-medium text-gray-700">
+                                  📱 Como conectar:
+                                </p>
+                                <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                                    <span>Abra o WhatsApp no seu celular</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                                    <span>Vá em <strong>Menu ⋮</strong> → <strong>Dispositivos conectados</strong></span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                                    <span>Toque em <strong>"Conectar um dispositivo"</strong></span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
+                                    <span>Aponte a câmera para este QR Code</span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
 
-                            <div className="flex gap-3">
-                              <Button variant="outline" onClick={handleConnect} className="bg-white/80 hover:bg-white">
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Novo QR Code
-                              </Button>
-                              <Button variant="outline" onClick={handleConnectionSuccess} className="bg-white/80 hover:bg-white">
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                                Simular Conexão
-                              </Button>
+                              <div className="flex gap-3">
+                                <Button variant="outline" onClick={() => handleConnect()} className="bg-white/80 hover:bg-white">
+                                  <RefreshCw className="w-4 h-4 mr-2" />
+                                  Novo QR Code
+                                </Button>
+                                <Button variant="outline" onClick={handleConnectionSuccess} className="bg-white/80 hover:bg-white">
+                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                  Simular Conexão
+                                </Button>
+                              </div>
+                              
+                              <div className="text-xs text-gray-500 text-center max-w-xs">
+                                ⚠️ O QR Code expira em poucos minutos. Se não funcionar, gere um novo.
+                              </div>
                             </div>
-                            
-                            <div className="text-xs text-gray-500 text-center max-w-xs">
-                              ⚠️ O QR Code expira em poucos minutos. Se não funcionar, gere um novo.
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+                          </CardContent>
+                        </Card>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -772,7 +842,7 @@ export default function WhatsAppConfigModal({
               </TabsContent>
 
               {/* Outras abas simplificadas */}
-              <TabsContent value="messages" className="space-y-6">
+              <TabsContent value="messages" className="space-y-6 m-0">
                 <Card>
                   <CardHeader>
                     <CardTitle>Mensagens Automáticas</CardTitle>
@@ -797,7 +867,7 @@ export default function WhatsAppConfigModal({
                 </Card>
               </TabsContent>
 
-              <TabsContent value="automation" className="space-y-6">
+              <TabsContent value="automation" className="space-y-6 m-0">
                 <Card>
                   <CardHeader>
                     <CardTitle>Horário Comercial</CardTitle>
@@ -822,7 +892,7 @@ export default function WhatsAppConfigModal({
                 </Card>
               </TabsContent>
 
-              <TabsContent value="advanced" className="space-y-6">
+              <TabsContent value="advanced" className="space-y-6 m-0">
                 <Card>
                   <CardHeader>
                     <CardTitle>Configurações Avançadas</CardTitle>
@@ -849,7 +919,7 @@ export default function WhatsAppConfigModal({
             </ScrollArea>
           </Tabs>
 
-          <div className="flex justify-end gap-2 mt-6">
+          <div className="flex justify-end gap-2 mt-6 flex-shrink-0">
             <Button variant="outline" onClick={handleClose}>
               Fechar
             </Button>
