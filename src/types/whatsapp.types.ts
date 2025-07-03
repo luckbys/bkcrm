@@ -22,16 +22,16 @@ export interface WhatsAppInstance {
 export interface CreateInstanceData {
   instanceName: string;
   token?: string;
-  qrcode?: boolean;
+  qrcode: boolean;
   number?: string;
-  integration?: 'WHATSAPP-BAILEYS' | 'WHATSAPP-BUSINESS';
-  reject_call?: boolean;
+  integration: string;
+  reject_call: boolean;
   msg_call?: string;
-  groups_ignore?: boolean;
-  always_online?: boolean;
-  read_messages?: boolean;
-  read_status?: boolean;
-  sync_full_history?: boolean;
+  groups_ignore: boolean;
+  always_online: boolean;
+  read_messages: boolean;
+  read_status: boolean;
+  sync_full_history: boolean;
   webhook_url?: string;
   webhook_by_events?: boolean;
   webhook_base64?: boolean;
@@ -81,8 +81,7 @@ export interface CreateInstanceData {
 
 export interface QRCodeResponse {
   base64: string;
-  code: string;
-  count: number;
+  expiration: number;
 }
 
 export interface ConnectionState {
@@ -103,38 +102,59 @@ export interface WebhookEvent {
 
 // Tipos específicos para departamentos com WhatsApp
 export interface DepartmentWhatsAppConfig {
-  id: string; // UUID - chave primária
-  instance_id: string; // ID da Evolution API (ex: wa_1751501378575)
-  departmentId: string;
+  id?: string;
+  instance_id?: string;
   instanceName: string;
-  integration: 'WHATSAPP-BAILEYS' | 'WHATSAPP-BUSINESS';
-  status: 'active' | 'inactive' | 'connecting' | 'error';
+  departmentId: string;
+  integration?: 'WHATSAPP-BAILEYS' | 'WHATSAPP-BUSINESS';
+  status: string;
   phoneNumber?: string;
   profileName?: string;
   profilePictureUrl?: string;
   lastConnection?: string;
-  autoReply: boolean;
-  businessHours: {
-    enabled: boolean;
-    start?: string;
-    end?: string;
-    days?: number[];
-    timezone?: string;
-  };
   welcomeMessage?: string;
   awayMessage?: string;
+  businessHours?: {
+    enabled: boolean;
+    start: string;
+    end: string;
+    days: number[];
+    timezone: string;
+    message: string;
+  };
+  autoReply?: {
+    enabled: boolean;
+    keywords: string;
+    response: string;
+  };
+  notifications?: {
+    newMessage: boolean;
+    statusChange: boolean;
+    sound: boolean;
+    desktop: boolean;
+  };
+  filters?: {
+    ignoreGroups?: boolean;
+    blockSpam?: boolean;
+    allowBroadcast?: boolean;
+    mediaAutoDownload?: boolean;
+    blockedWords?: string[];
+    mediaFilters?: MediaFilters;
+    timeFilter?: TimeFilter;
+  };
+  templates?: TemplateConfig;
   webhookUrl?: string;
-  settings: {
+  settings?: {
+    qrcode: boolean;
     reject_call: boolean;
-    msg_call?: string;
     groups_ignore: boolean;
     always_online: boolean;
     read_messages: boolean;
     read_status: boolean;
     sync_full_history: boolean;
   };
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WhatsAppMessage {
@@ -215,4 +235,30 @@ export interface EvolutionAPIResponse<T = any> {
   data?: T;
   error?: string;
   message?: string;
+}
+
+export interface Template {
+  id: number;
+  name: string;
+  content: string;
+  category?: 'saudacao' | 'vendas' | 'suporte' | 'finalizacao';
+  priority?: 'alta' | 'media' | 'baixa';
+}
+
+export interface TemplateConfig {
+  autoReplace?: boolean;
+  smartSuggestions?: boolean;
+  livePreview?: boolean;
+}
+
+export interface MediaFilters {
+  enabled?: boolean;
+  maxSize?: number;
+  allowedTypes?: string[];
+}
+
+export interface TimeFilter {
+  enabled?: boolean;
+  start?: string;
+  end?: string;
 } 

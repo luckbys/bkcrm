@@ -1,6 +1,7 @@
 /* === IMPORTS CSS - DEVEM VIR PRIMEIRO === */
 @import './styles/chat-animations.css';
 @import './styles/qr-modal-fixes.css';
+@import './styles/loading-animations.css';
 
 /* === CONFIGURAÇÕES TAILWIND CSS === */
 @tailwind base;

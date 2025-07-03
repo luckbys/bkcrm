@@ -61,6 +61,7 @@ import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu'
+import { SidebarLoading } from '../ui/loading-spinner'
 import { cn } from '../../lib/utils'
 import DepartmentCreateModal from './DepartmentCreateModal'
 import WhatsAppConfigModal from './modals/WhatsAppConfigModal'
@@ -338,10 +339,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   if (loading) {
     return (
       <div className={sidebarStyles.container({ collapsed: true })}>
-        <div className={sidebarStyles.loadingState()}>
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-          <span className="mt-2 text-xs">Carregando departamentos...</span>
-        </div>
+        <SidebarLoading 
+          text="Carregando departamentos..."
+          variant="primary"
+        />
       </div>
     )
   }
@@ -738,7 +739,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             departmentName={selectedDepartment.name}
           />
         )}
-      </div>
+              </div>
     </TooltipProvider>
   )
 }

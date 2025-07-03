@@ -5,15 +5,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription
-} from '../../ui/dialog';
-import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
-import { Textarea } from '../../ui/textarea';
-import { Switch } from '../../ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
-import { Badge } from '../../ui/badge';
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { 
   Smartphone, 
   QrCode, 
@@ -32,15 +32,52 @@ import {
   Webhook,
   Bot,
   Trash2,
-  XCircle
+  XCircle,
+  CheckCircle2,
+  RefreshCw,
+  Bell,
+  BellRing,
+  BellOff,
+  FileText,
+  BarChart,
+  Calendar,
+  Tag,
+  Filter,
+  Zap,
+  SmilePlus,
+  Activity,
+  BarChart3,
+  Timer,
+  Plus,
+  Eye,
+  User,
+  Building2,
+  ShieldAlert,
+  Megaphone,
+  Download,
+  ListFilter,
+  X,
+  Volume2,
+  Monitor,
+  Copy,
+  Archive,
+  Edit,
+  Scan
 } from 'lucide-react';
-import { useWhatsAppInstances } from '../../../hooks/useWhatsAppInstances';
+import { useWhatsAppInstances } from '@/hooks/useWhatsAppInstances';
 import { 
   DepartmentWhatsAppConfig, 
   CreateInstanceData,
-  QRCodeResponse 
-} from '../../../types/whatsapp.types';
-import { useToast } from '../../../hooks/use-toast';
+  QRCodeResponse,
+  Template
+} from '@/types/whatsapp.types';
+import { useToast } from '@/hooks/use-toast';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 
 interface WhatsAppConfigModalProps {
   isOpen: boolean;
@@ -87,14 +124,53 @@ export default function WhatsAppConfigModal({
   const [qrCode, setQrCode] = useState<QRCodeResponse | null>(null);
   const [showQR, setShowQR] = useState(false);
   const [creatingInstance, setCreatingInstance] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('connection');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [connectionSuccess, setConnectionSuccess] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [instanceStatus, setInstanceStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
+  const [hasInstance, setHasInstance] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
 
   // Configurações temporárias para edição
-  const [tempConfig, setTempConfig] = useState<Partial<DepartmentWhatsAppConfig>>({});
+  const [tempConfig, setTempConfig] = useState<DepartmentWhatsAppConfig>({
+    instanceName: "",
+    departmentId: "",
+    status: "inactive"
+  });
+
+  // Adicionar novos estados
+  const [metrics, setMetrics] = useState({
+    messagesPerDay: 0,
+    responseTime: 0,
+    satisfaction: 0,
+    activeChats: 0
+  });
+
+  const [templates, setTemplates] = useState<Template[]>([
+    { 
+      id: 1, 
+      name: 'Saudação', 
+      content: 'Olá {nome}! Como posso ajudar?',
+      category: 'saudacao',
+      priority: 'alta'
+    },
+    { 
+      id: 2, 
+      name: 'Agradecimento', 
+      content: 'Obrigado pelo contato, {nome}! A {empresa} agradece sua preferência.',
+      category: 'finalizacao',
+      priority: 'media'
+    },
+    { 
+      id: 3, 
+      name: 'Encerramento', 
+      content: 'Foi um prazer atendê-lo, {nome}! Tenha um ótimo dia!',
+      category: 'finalizacao',
+      priority: 'baixa'
+    }
+  ]);
 
   const { toast } = useToast();
 
@@ -119,34 +195,35 @@ export default function WhatsAppConfigModal({
     setQrCode(null);
     setShowQR(false);
     setCreatingInstance(false);
-    setActiveTab('overview');
+    setActiveTab('connection');
     setSaving(false);
     setDeleting(false);
     setConnectionSuccess(false);
     setIsConnecting(false);
-    setTempConfig({});
+    setInstanceStatus("disconnected");
+    setHasInstance(false);
     
     onClose();
   }, [onClose]);
 
   // Buscar instância atual do departamento
   useEffect(() => {
+    if (!isOpen) return;
+    
     const instance = instances.find(inst => inst.departmentId === departmentId);
-    setCurrentInstance(instance || null);
     if (instance) {
-      setTempConfig({
-        autoReply: instance.autoReply,
-        businessHours: instance.businessHours,
-        welcomeMessage: instance.welcomeMessage,
-        awayMessage: instance.awayMessage,
-        settings: instance.settings
-      });
+      setCurrentInstance(instance);
+      setHasInstance(true);
+      setInstanceStatus(instance.status === 'active' ? 'connected' : 'disconnected');
     } else {
-      setTempConfig({});
+      setCurrentInstance(null);
+      setHasInstance(false);
+      setInstanceStatus("disconnected");
     }
+    
     setShowQR(false);
     setQrCode(null);
-  }, [instances, departmentId]);
+  }, [instances, departmentId, isOpen]);
 
   // Criar nova instância
   const handleCreateInstance = async () => {
@@ -162,11 +239,25 @@ export default function WhatsAppConfigModal({
         read_status: false,
         sync_full_history: false
       };
+      
       await createInstance(departmentId, config);
-      setActiveTab('connection');
       await refreshInstances();
+      
+      toast({
+        title: "✅ Instância Criada!",
+        description: "Instância WhatsApp criada com sucesso. Agora você pode conectar.",
+        duration: 3000,
+      });
+      
+      setActiveTab('connection');
     } catch (err) {
       console.error('Erro ao criar instância:', err);
+      toast({
+        title: "❌ Erro",
+        description: "Erro ao criar instância. Tente novamente.",
+        variant: "destructive",
+        duration: 5000,
+      });
     } finally {
       setCreatingInstance(false);
     }
@@ -174,17 +265,101 @@ export default function WhatsAppConfigModal({
 
   // Conectar instância
   const handleConnect = async () => {
-    if (!currentInstance) return;
     try {
       setIsConnecting(true);
+      setInstanceStatus("connecting");
+      
+      // Se não há instância, criar uma primeiro
+      if (!currentInstance) {
+        const config: Partial<CreateInstanceData> = {
+          integration: 'WHATSAPP-BAILEYS',
+          qrcode: true,
+          reject_call: false,
+          groups_ignore: false,
+          always_online: true,
+          read_messages: true,
+          read_status: false,
+          sync_full_history: false
+        };
+        
+        await createInstance(departmentId, config);
+        await refreshInstances();
+        
+        // Aguardar um pouco para que a instância seja criada e então continuar conexão
+        setTimeout(async () => {
+          try {
+            await refreshInstances();
+            
+            // Buscar a nova instância criada
+            const newInstance = instances.find(inst => inst.departmentId === departmentId);
+            
+            if (newInstance) {
+              await connectInstance(newInstance.instanceName);
+              const qrResponse = await getQRCode(newInstance.instanceName);
+              
+              if (qrResponse) {
+                setQrCode(qrResponse);
+                setShowQR(true);
+                
+                toast({
+                  title: "📱 QR Code Gerado!",
+                  description: "Instância criada e QR Code gerado! Escaneie com seu WhatsApp para conectar.",
+                  duration: 5000,
+                });
+              }
+            } else {
+              // Se não encontrou a instância, tentar novamente em mais 2 segundos
+              setTimeout(() => {
+                setIsConnecting(false);
+                setInstanceStatus("disconnected");
+                toast({
+                  title: "⚠️ Instância Criada",
+                  description: "Instância criada com sucesso! Clique em 'Conectar' novamente para gerar o QR Code.",
+                  duration: 5000,
+                });
+              }, 2000);
+            }
+          } catch (connectErr) {
+            console.error('Erro ao conectar nova instância:', connectErr);
+            setIsConnecting(false);
+            setInstanceStatus("disconnected");
+            
+            toast({
+              title: "⚠️ Instância Criada", 
+              description: "Instância criada com sucesso! Clique em 'Conectar' novamente para gerar o QR Code.",
+              duration: 5000,
+            });
+          }
+        }, 1500);
+        
+        return;
+      }
+      
       await connectInstance(currentInstance.instanceName);
       const qrResponse = await getQRCode(currentInstance.instanceName);
-      setQrCode(qrResponse);
-      setShowQR(true);
-      setActiveTab('connection');
+      
+      if (qrResponse) {
+        setQrCode(qrResponse);
+        setShowQR(true);
+        
+        toast({
+          title: "📱 QR Code Gerado!",
+          description: "Escaneie o QR Code com seu WhatsApp para conectar.",
+          duration: 5000,
+        });
+      }
+      
     } catch (err) {
       console.error('Erro ao conectar:', err);
       setIsConnecting(false);
+      setInstanceStatus("disconnected");
+      
+      toast({
+        title: "❌ Erro de Conexão",
+        description: "Não foi possível conectar. Verifique sua conexão e tente novamente.",
+        variant: "destructive",
+        duration: 5000,
+      });
     }
   };
 
@@ -194,6 +369,7 @@ export default function WhatsAppConfigModal({
     setShowQR(false);
     setQrCode(null);
     setIsConnecting(false);
+    setInstanceStatus("connected");
     
     // Som de sucesso (se suportado)
     try {
@@ -226,6 +402,7 @@ export default function WhatsAppConfigModal({
     setShowQR(false);
     setQrCode(null);
     setIsConnecting(false);
+    setInstanceStatus("disconnected");
   };
 
   // Desconectar instância
@@ -235,7 +412,14 @@ export default function WhatsAppConfigModal({
       await disconnectInstance(currentInstance.instanceName);
       setQrCode(null);
       setShowQR(false);
+      setInstanceStatus("disconnected");
       await refreshInstances();
+      
+      toast({
+        title: "🔌 Desconectado",
+        description: "WhatsApp foi desconectado com sucesso.",
+        duration: 3000,
+      });
     } catch (err) {
       console.error('Erro ao desconectar:', err);
     }
@@ -251,39 +435,28 @@ export default function WhatsAppConfigModal({
         setCurrentInstance(null);
         setQrCode(null);
         setShowQR(false);
-        setActiveTab('overview');
+        setHasInstance(false);
+        setInstanceStatus("disconnected");
+        setActiveTab('connection');
         await refreshInstances();
+        
+        toast({
+          title: "🗑️ Instância Removida",
+          description: "A instância foi deletada com sucesso.",
+          duration: 3000,
+        });
       } catch (err) {
         console.error('Erro ao deletar instância:', err);
+        toast({
+          title: "❌ Erro",
+          description: "Erro ao deletar instância. Tente novamente.",
+          variant: "destructive",
+          duration: 5000,
+        });
       } finally {
         setDeleting(false);
       }
     }
-  };
-
-  // Salvar configurações
-  const handleSaveConfig = async () => {
-    if (!currentInstance) return;
-    try {
-      setSaving(true);
-      await updateInstanceConfig(currentInstance.id, tempConfig);
-      await refreshInstances();
-    } catch (err) {
-      console.error('Erro ao salvar configurações:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Renderizar badge de status
-  const getStatusBadge = (status: string) => {
-    const Icon = statusIcons[status as keyof typeof statusIcons] || AlertCircle;
-    return (
-      <Badge className={statusVariants[status as keyof typeof statusVariants] || statusVariants.error}>
-        <Icon className="w-3 h-3 mr-1" />
-        {status}
-      </Badge>
-    );
   };
 
   // Se não estiver aberto, não renderizar nada
@@ -291,318 +464,402 @@ export default function WhatsAppConfigModal({
     return null;
   }
 
+  // Renderizar estado inicial quando não há instância
+  if (!hasInstance) {
+    return (
+      <TooltipProvider>
+        <Dialog open={isOpen} onOpenChange={handleClose}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <Smartphone className="w-6 h-6" />
+                Configuração do WhatsApp
+              </DialogTitle>
+              <DialogDescription>
+                Departamento: <span className="font-medium">{departmentName}</span>
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col items-center justify-center py-12 space-y-6">
+              {creatingInstance ? (
+                <>
+                  <div className="p-8 rounded-full bg-blue-100 animate-pulse">
+                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin" />
+                  </div>
+                  
+                  <div className="text-center space-y-2">
+                    <h3 className="text-lg font-semibold">Criando instância...</h3>
+                    <p className="text-muted-foreground max-w-md">
+                      Aguarde enquanto configuramos sua instância do WhatsApp. Isso pode levar alguns segundos.
+                    </p>
+                  </div>
+                  
+                  <div className="w-full max-w-xs bg-gray-200 rounded-full h-2">
+                    <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="p-8 rounded-full bg-gradient-to-br from-green-100 to-blue-100">
+                    <Smartphone className="w-16 h-16 text-green-600" />
+                  </div>
+                  
+                  <div className="text-center space-y-2">
+                    <h3 className="text-lg font-semibold">Nenhuma instância configurada</h3>
+                    <p className="text-muted-foreground max-w-md">
+                      Para começar a usar o WhatsApp neste departamento, você precisa criar e configurar uma instância.
+                    </p>
+                  </div>
+
+                  <Button 
+                    onClick={handleCreateInstance}
+                    disabled={creatingInstance}
+                    size="lg"
+                    className="min-w-[200px] bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Instância WhatsApp
+                  </Button>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={handleClose} disabled={creatingInstance}>
+                {creatingInstance ? 'Aguarde...' : 'Fechar'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </TooltipProvider>
+    );
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Smartphone className="w-5 h-5 text-green-600" />
-            WhatsApp - {departmentName}
-          </DialogTitle>
-          <DialogDescription>
-            Configure a instância WhatsApp para este departamento
-          </DialogDescription>
-        </DialogHeader>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
-          <TabsList className="mb-4">
-            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-            <TabsTrigger value="connection">Conexão</TabsTrigger>
-            <TabsTrigger value="messages">Mensagens</TabsTrigger>
-            <TabsTrigger value="settings">Configurações</TabsTrigger>
-          </TabsList>
-          {/* Visão Geral */}
-          <TabsContent value="overview">
-            <Card>
-              <CardHeader>
-                <CardTitle>Status da Instância</CardTitle>
-                <CardDescription>
-                  Gerencie a instância WhatsApp deste departamento.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {currentInstance ? (
-                  <div className="space-y-4">
-                    {/* Status e informações principais */}
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                          <Smartphone className="w-6 h-6 text-green-600" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            {getStatusBadge(currentInstance.status || 'inactive')}
-                            <span className="font-medium text-gray-900">{currentInstance.instanceName}</span>
-                          </div>
-                          <p className="text-sm text-gray-500">Instância WhatsApp do {departmentName}</p>
-                        </div>
-                      </div>
-                      {currentInstance.status === 'active' && (
-                        <div className="flex items-center gap-2 text-green-600">
-                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                          <span className="text-sm font-medium">Online</span>
-                        </div>
-                      )}
-                    </div>
+    <TooltipProvider>
+      <Dialog open={isOpen} onOpenChange={handleClose}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Smartphone className="w-6 h-6" />
+              Configuração do WhatsApp
+            </DialogTitle>
+            <DialogDescription>
+              Departamento: <span className="font-medium">{departmentName}</span>
+            </DialogDescription>
+          </DialogHeader>
 
-                    {/* Estatísticas rápidas */}
-                    {currentInstance.status === 'active' && (
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="text-center p-3 bg-blue-50 rounded-lg">
-                          <MessageSquare className="w-5 h-5 text-blue-600 mx-auto mb-1" />
-                          <p className="text-lg font-semibold text-blue-700">0</p>
-                          <p className="text-xs text-blue-600">Mensagens hoje</p>
-                        </div>
-                        <div className="text-center p-3 bg-green-50 rounded-lg">
-                          <Users className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                          <p className="text-lg font-semibold text-green-700">0</p>
-                          <p className="text-xs text-green-600">Contatos ativos</p>
-                        </div>
-                        <div className="text-center p-3 bg-purple-50 rounded-lg">
-                          <Clock className="w-5 h-5 text-purple-600 mx-auto mb-1" />
-                          <p className="text-lg font-semibold text-purple-700">-</p>
-                          <p className="text-xs text-purple-600">Último contato</p>
-                        </div>
-                      </div>
-                    )}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
+            <TabsList className="grid w-full grid-cols-4 mb-4">
+              <TabsTrigger value="connection" className="flex items-center gap-2">
+                <QrCode className="w-4 h-4" />
+                Conexão
+              </TabsTrigger>
+              <TabsTrigger value="messages" className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" />
+                Mensagens
+              </TabsTrigger>
+              <TabsTrigger value="automation" className="flex items-center gap-2">
+                <Bot className="w-4 h-4" />
+                Automação
+              </TabsTrigger>
+              <TabsTrigger value="advanced" className="flex items-center gap-2">
+                <Settings className="w-4 h-4" />
+                Avançado
+              </TabsTrigger>
+            </TabsList>
 
-                    {/* Botões de ação */}
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={handleConnect} disabled={loading || creatingInstance || currentInstance.status === 'active'}>
-                        <Wifi className="w-4 h-4 mr-1" /> 
-                        {currentInstance.status === 'active' ? 'Conectado' : 'Conectar'}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={handleDisconnect} disabled={loading || creatingInstance || currentInstance.status !== 'active'}>
-                        <WifiOff className="w-4 h-4 mr-1" /> Desconectar
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={handleDeleteInstance} disabled={deleting}>
-                        <Trash2 className="w-4 h-4 mr-1" /> Deletar
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <p className="text-gray-500">Nenhuma instância criada para este departamento.</p>
-                    <Button onClick={handleCreateInstance} disabled={creatingInstance}>
-                      {creatingInstance && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}<QrCode className="w-4 h-4 mr-1" /> Criar Instância WhatsApp
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          {/* Conexão */}
-          <TabsContent value="connection">
-            <Card>
-              <CardHeader>
-                <CardTitle>Conexão WhatsApp</CardTitle>
-                <CardDescription>Conecte a instância via QR Code.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {currentInstance ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(currentInstance.status || 'inactive')}
-                      <span className="text-xs text-gray-500">{currentInstance.instanceName}</span>
-                    </div>
-                    {showQR && qrCode?.base64 ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <img src={qrCode.base64} alt="QR Code" className="w-56 h-56 border rounded shadow" />
-                        <span className="text-xs text-gray-500">Escaneie o QR Code no WhatsApp</span>
-                        
-                        {/* Indicador de carregamento */}
-                        {isConnecting && (
-                          <div className="flex items-center gap-2 text-blue-600">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                            <span className="text-sm">Aguardando conexão...</span>
-                          </div>
+            <ScrollArea className="flex-1">
+              <TabsContent value="connection" className="space-y-6">
+                {/* Status da Conexão */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Wifi className="w-5 h-5" />
+                      Status da Conexão
+                    </CardTitle>
+                    <CardDescription>
+                      Gerencie a conexão com o WhatsApp
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "p-4 rounded-lg flex items-center gap-3 transition-colors flex-1",
+                        instanceStatus === "connected" ? "bg-green-50 text-green-700 border border-green-200" :
+                        instanceStatus === "connecting" ? "bg-yellow-50 text-yellow-700 border border-yellow-200" :
+                        "bg-red-50 text-red-700 border border-red-200"
+                      )}>
+                        {instanceStatus === "connected" && (
+                          <>
+                            <CheckCircle2 className="w-5 h-5" />
+                            <div>
+                              <p className="font-medium">Conectado</p>
+                              <p className="text-sm opacity-90">WhatsApp está ativo e funcionando</p>
+                            </div>
+                          </>
+                        )}
+                        {instanceStatus === "connecting" && (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <div>
+                              <p className="font-medium">Conectando</p>
+                              <p className="text-sm opacity-90">Aguardando leitura do QR Code</p>
+                            </div>
+                          </>
+                        )}
+                        {instanceStatus === "disconnected" && (
+                          <>
+                            <XCircle className="w-5 h-5" />
+                            <div>
+                              <p className="font-medium">Desconectado</p>
+                              <p className="text-sm opacity-90">WhatsApp não está conectado</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        {instanceStatus === "disconnected" && (
+                          <Button
+                            onClick={handleConnect}
+                            disabled={isConnecting}
+                            className="min-w-[120px]"
+                          >
+                            {isConnecting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            <Scan className="w-4 h-4 mr-2" />
+                            Conectar
+                          </Button>
                         )}
                         
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={handleCloseQR} variant="outline">
-                            Fechar QR Code
+                        {instanceStatus === "connecting" && (
+                          <Button
+                            variant="outline"
+                            onClick={handleCloseQR}
+                          >
+                            Cancelar
                           </Button>
-                          <Button size="sm" onClick={handleConnectionSuccess} variant="default">
-                            Simular Sucesso
+                        )}
+                        
+                        {instanceStatus === "connected" && (
+                          <Button
+                            variant="outline"
+                            onClick={handleDisconnect}
+                          >
+                            <PhoneOff className="w-4 h-4 mr-2" />
+                            Desconectar
                           </Button>
-                        </div>
+                        )}
                       </div>
-                    ) : connectionSuccess ? (
-                      <div className="flex flex-col items-center gap-4 py-8">
-                        {/* Animação de sucesso */}
-                        <div className="relative">
-                          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center animate-pulse">
-                            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center animate-bounce">
-                              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
-                              </svg>
+                    </div>
+
+                    {/* QR Code */}
+                    {(showQR && qrCode) && (
+                      <Card className="bg-gradient-to-br from-green-50 to-blue-50 border-2 border-dashed border-green-300">
+                        <CardContent className="p-6">
+                          <div className="flex flex-col items-center gap-6">
+                            <div className="flex items-center gap-2 text-xl font-semibold text-green-700">
+                              <QrCode className="w-6 h-6" />
+                              Escaneie o QR Code
+                            </div>
+                            
+                            <div className="relative p-4 bg-white rounded-xl shadow-lg">
+                              <img 
+                                src={qrCode.base64} 
+                                alt="QR Code" 
+                                className="w-64 h-64 rounded-lg"
+                              />
+                              {connectionSuccess && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
+                                  <CheckCircle2 className="w-16 h-16 text-green-500" />
+                                </div>
+                              )}
+                              
+                              {/* Pulse animation */}
+                              <div className="absolute -inset-1 bg-gradient-to-r from-green-400 to-blue-500 rounded-xl opacity-30 animate-pulse"></div>
+                            </div>
+                            
+                            <div className="text-center space-y-3 max-w-sm">
+                              <p className="text-base font-medium text-gray-700">
+                                📱 Como conectar:
+                              </p>
+                              <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                                  <span>Abra o WhatsApp no seu celular</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                                  <span>Vá em <strong>Menu ⋮</strong> → <strong>Dispositivos conectados</strong></span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                                  <span>Toque em <strong>"Conectar um dispositivo"</strong></span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
+                                  <span>Aponte a câmera para este QR Code</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                              <Button variant="outline" onClick={handleConnect} className="bg-white/80 hover:bg-white">
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Novo QR Code
+                              </Button>
+                              <Button variant="outline" onClick={handleConnectionSuccess} className="bg-white/80 hover:bg-white">
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Simular Conexão
+                              </Button>
+                            </div>
+                            
+                            <div className="text-xs text-gray-500 text-center max-w-xs">
+                              ⚠️ O QR Code expira em poucos minutos. Se não funcionar, gere um novo.
                             </div>
                           </div>
-                          
-                          {/* Ondas de sucesso */}
-                          <div className="absolute inset-0 rounded-full border-4 border-green-300 animate-ping opacity-30"></div>
-                          <div className="absolute inset-0 rounded-full border-4 border-green-200 animate-ping opacity-20" style={{animationDelay: '0.5s'}}></div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Informações da Instância */}
+                {currentInstance && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Settings className="w-5 h-5" />
+                        Informações da Instância
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium">Nome da Instância</Label>
+                          <p className="text-sm text-muted-foreground">{currentInstance.instanceName}</p>
                         </div>
-                        
-                        <div className="text-center">
-                          <h3 className="text-xl font-bold text-green-700 mb-2">
-                            🎉 Conectado com sucesso!
-                          </h3>
-                          <p className="text-green-600 mb-1">WhatsApp foi conectado ao departamento</p>
-                          <p className="text-sm text-gray-500">Você já pode receber e enviar mensagens</p>
-                        </div>
-                        
-                        {/* Barra de progresso animada */}
-                        <div className="w-full max-w-xs">
-                          <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
-                            <div className="bg-gradient-to-r from-green-400 to-green-600 h-2 rounded-full animate-pulse"></div>
+                        <div>
+                          <Label className="text-sm font-medium">Status</Label>
+                          <div className="mt-1">
+                            <Badge className={statusVariants[currentInstance.status as keyof typeof statusVariants] || statusVariants.error}>
+                              {currentInstance.status}
+                            </Badge>
                           </div>
                         </div>
-                        
-                        {/* Confetes animados */}
-                        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                          {[...Array(20)].map((_, i) => (
-                            <div
-                              key={i}
-                              className="absolute w-2 h-2 bg-gradient-to-r from-yellow-400 to-pink-500 rounded-full animate-bounce opacity-70"
-                              style={{
-                                left: `${Math.random() * 100}%`,
-                                top: `${Math.random() * 100}%`,
-                                animationDelay: `${Math.random() * 2}s`,
-                                animationDuration: `${1 + Math.random() * 2}s`
-                              }}
-                            />
-                          ))}
-                        </div>
                       </div>
-                    ) : (
-                      <Button size="sm" onClick={handleConnect} disabled={isConnecting}>
-                        {isConnecting ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Conectando...
-                          </>
-                        ) : (
-                          <>
-                            <QrCode className="w-4 h-4 mr-1" /> Gerar QR Code
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-gray-500">Crie uma instância primeiro.</div>
+
+                      <Separator />
+
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <Label className="text-sm font-medium text-red-600">Zona de Perigo</Label>
+                          <p className="text-sm text-muted-foreground">Remover completamente esta instância</p>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          onClick={handleDeleteInstance}
+                          disabled={deleting}
+                        >
+                          {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          {deleting ? 'Removendo...' : 'Remover Instância'}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          {/* Mensagens */}
-          <TabsContent value="messages">
-            <Card>
-              <CardHeader>
-                <CardTitle>Mensagens Automáticas</CardTitle>
-                <CardDescription>Configure mensagens de boas-vindas, ausência e respostas automáticas.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Mensagem de Boas-vindas</Label>
-                  <Textarea
-                    value={typeof tempConfig.welcomeMessage === 'string' ? tempConfig.welcomeMessage : ''}
-                    onChange={e => setTempConfig(tc => ({ ...tc, welcomeMessage: e.target.value as any }))}
-                    placeholder="Olá! Seja bem-vindo ao nosso atendimento."
-                  />
-                </div>
-                <div>
-                  <Label>Mensagem de Ausência</Label>
-                  <Textarea
-                    value={typeof tempConfig.awayMessage === 'string' ? tempConfig.awayMessage : ''}
-                    onChange={e => setTempConfig(tc => ({ ...tc, awayMessage: e.target.value as any }))}
-                    placeholder="Estamos fora do horário de atendimento. Responderemos em breve."
-                  />
-                </div>
-                <div>
-                  <Label>Resposta Automática</Label>
-                  <Textarea
-                    value={typeof tempConfig.autoReply === 'string' ? tempConfig.autoReply : ''}
-                    onChange={e => setTempConfig(tc => ({ ...tc, autoReply: e.target.value as any }))}
-                    placeholder="Obrigado por entrar em contato!"
-                  />
-                </div>
-                <div>
-                  <Label>Horário Comercial</Label>
-                  <Input
-                    type="text"
-                    value={typeof tempConfig.businessHours === 'string' ? tempConfig.businessHours : ''}
-                    onChange={e => setTempConfig(tc => ({ ...tc, businessHours: e.target.value as any }))}
-                    placeholder="Ex: Seg-Sex 08:00-18:00"
-                  />
-                </div>
-                <Button onClick={handleSaveConfig} disabled={saving}>
-                  {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Salvar Mensagens
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          {/* Configurações Avançadas */}
-          <TabsContent value="settings">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configurações Avançadas</CardTitle>
-                <CardDescription>Personalize o comportamento da instância.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={!!tempConfig.settings?.reject_call}
-                    onCheckedChange={v => setTempConfig(tc => ({ ...tc, settings: { ...tc.settings, reject_call: v } }))}
-                  />
-                  <Label>Rejeitar chamadas</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={!!tempConfig.settings?.groups_ignore}
-                    onCheckedChange={v => setTempConfig(tc => ({ ...tc, settings: { ...tc.settings, groups_ignore: v } }))}
-                  />
-                  <Label>Ignorar mensagens de grupos</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={!!tempConfig.settings?.always_online}
-                    onCheckedChange={v => setTempConfig(tc => ({ ...tc, settings: { ...tc.settings, always_online: v } }))}
-                  />
-                  <Label>Sempre online</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={!!tempConfig.settings?.read_messages}
-                    onCheckedChange={v => setTempConfig(tc => ({ ...tc, settings: { ...tc.settings, read_messages: v } }))}
-                  />
-                  <Label>Marcar mensagens como lidas automaticamente</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={!!tempConfig.settings?.sync_full_history}
-                    onCheckedChange={v => setTempConfig(tc => ({ ...tc, settings: { ...tc.settings, sync_full_history: v } }))}
-                  />
-                  <Label>Sincronizar histórico completo</Label>
-                </div>
-                <Button onClick={handleSaveConfig} disabled={saving}>
-                  {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Salvar Configurações
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={handleClose}>
-            Fechar
-          </Button>
-        </div>
-        {error && (
-          <div className="bg-red-100 border border-red-300 rounded p-3 mt-4">
-            <p className="text-red-700">Erro: {error}</p>
+              </TabsContent>
+
+              {/* Outras abas simplificadas */}
+              <TabsContent value="messages" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Mensagens Automáticas</CardTitle>
+                    <CardDescription>Configure mensagens de boas-vindas e ausência</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Mensagem de Boas-vindas</Label>
+                      <Textarea 
+                        placeholder="Ex: Olá! Bem-vindo ao nosso atendimento. Como posso ajudá-lo hoje?"
+                        className="min-h-[100px]"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Mensagem de Ausência</Label>
+                      <Textarea 
+                        placeholder="Ex: No momento estamos ausentes. Retornaremos em breve!"
+                        className="min-h-[100px]"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="automation" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Horário Comercial</CardTitle>
+                    <CardDescription>Configure o horário de funcionamento</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Switch id="business-hours" />
+                      <Label htmlFor="business-hours">Ativar horário comercial</Label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Início</Label>
+                        <Input type="time" defaultValue="09:00" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Fim</Label>
+                        <Input type="time" defaultValue="18:00" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="advanced" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Configurações Avançadas</CardTitle>
+                    <CardDescription>Configurações técnicas da instância</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Ignorar grupos</Label>
+                        <p className="text-sm text-muted-foreground">Não processar mensagens de grupos</p>
+                      </div>
+                      <Switch defaultChecked />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Confirmação de leitura</Label>
+                        <p className="text-sm text-muted-foreground">Marcar mensagens como lidas</p>
+                      </div>
+                      <Switch defaultChecked />
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button variant="outline" onClick={handleClose}>
+              Fechar
+            </Button>
+            <Button disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {saving ? 'Salvando...' : 'Salvar Configurações'}
+            </Button>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </TooltipProvider>
   );
 } 

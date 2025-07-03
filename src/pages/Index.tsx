@@ -7,6 +7,8 @@ import { AddTicketModal } from '@/components/crm/AddTicketModal';
 import { useDepartments, Department } from '@/hooks/useDepartments';
 import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { toast } from '@/hooks/use-toast';
+import { FullScreenLoading } from '@/components/ui/loading-spinner';
+import { useDepartmentsLoading } from '@/hooks/useLoadingProgress';
 import '@/utils/consoleDiagnostic';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +23,9 @@ const Index = () => {
   
   // Hook para gerenciamento de tickets
   const { createTicket } = useTicketsDB();
+  
+  // Hook para loading progressivo de departamentos
+  const { progress, isLoading: departmentsProgressLoading, startLoading: startDepartmentsLoading } = useDepartmentsLoading();
   
   // Estado local para setor selecionado
   const [selectedSector, setSelectedSector] = useState<Department | null>(null);
@@ -132,6 +137,13 @@ const Index = () => {
     sessionStorage.setItem('soundEnabled', soundEnabled.toString());
   }, [soundEnabled]);
 
+  // Iniciar loading progressivo quando departamentos estão carregando
+  useEffect(() => {
+    if (departmentsLoading && !departmentsProgressLoading) {
+      startDepartmentsLoading();
+    }
+  }, [departmentsLoading, departmentsProgressLoading, startDepartmentsLoading]);
+
   const handleSectorChange = (sector: Department) => {
     console.log('🏢 [Index] handleSectorChange chamado com:', sector)
     
@@ -202,12 +214,12 @@ const Index = () => {
   // Se não há setor selecionado e não está carregando, mostrar loading
   if (departmentsLoading || (!selectedSector && departments.length > 0)) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando departamentos...</p>
-        </div>
-      </div>
+      <FullScreenLoading 
+        text="Carregando departamentos..."
+        variant="primary"
+        showProgress={true}
+        progress={departmentsProgressLoading ? progress : (departmentsLoading ? 75 : 90)}
+      />
     );
   }
 
