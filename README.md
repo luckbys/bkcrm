@@ -1,4 +1,6 @@
-# BKCRM - Sistema de CRM com Integração WhatsApp
+# BK CRM
+
+Sistema de CRM com integração WhatsApp.
 
 ## 🚀 Deploy Status
 - ✅ **Build Fixed**: Problemas de dependências e ES modules resolvidos
@@ -13,6 +15,11 @@
 - **Backend**: Supabase 2.50.0
 - **Real-time**: Socket.IO Client 4.8.1
 - **Notificações**: Sonner 1.4.0
+- **Node.js**: 18.x (especificado no engines)
+- **Express**: 5.x
+- **Prisma**: 4.x
+- **PostgreSQL**: 15.x
+- **Evolution API**: WhatsApp
 
 ## 🛠️ Scripts Disponíveis
 
@@ -29,6 +36,15 @@ npm run preview         # Preview da build na porta 3000
 # Deploy (usado pelo EasyPanel)
 npm run start          # Servidor de produção na porta 3000
 npm run heroku-postbuild # Build automático no deploy
+
+# Iniciar servidor backend em modo de desenvolvimento
+npm run server:dev
+
+# Compilar servidor backend para produção
+npm run server:build
+
+# Iniciar servidor backend em produção
+npm run server:start
 ```
 
 ## 🚀 Deploy no EasyPanel
@@ -59,6 +75,10 @@ src/
 ├── stores/            # Estado global (Zustand)
 ├── types/             # Tipos TypeScript
 └── utils/             # Utilitários
+├── lib/               # Bibliotecas e configurações
+├── routes/            # Rotas da API
+├── controllers/       # Controladores da API
+└── app.ts             # Configuração do servidor
 ```
 
 ## 🔧 Correções Implementadas
@@ -101,7 +121,6 @@ src/
 
 ## 🛡️ Compatibilidade
 
-- ✅ **Node.js**: 18.x (especificado no engines)
 - ✅ **Browsers**: Modernos com ES2020+ support
 - ✅ **Mobile**: Responsivo completo
 - ✅ **Desktop**: Layout otimizado
@@ -112,6 +131,38 @@ Para problemas de deploy:
 1. Verificar logs do EasyPanel
 2. Confirmar variáveis de ambiente
 3. Testar build local: `npm run build && npm run start`
+
+## Configuração
+
+1. Clone o repositório
+2. Instale as dependências:
+```bash
+npm install
+```
+
+3. Configure as variáveis de ambiente:
+```bash
+cp .env.example .env
+```
+
+4. Configure o banco de dados:
+```bash
+npx prisma migrate dev
+```
+
+5. Inicie o servidor de desenvolvimento:
+```bash
+npm run server:dev
+```
+
+6. Em outro terminal, inicie o frontend:
+```bash
+npm run dev
+```
+
+## Licença
+
+MIT
 
 ---
 

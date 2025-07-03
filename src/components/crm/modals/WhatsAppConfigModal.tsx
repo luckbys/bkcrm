@@ -1,84 +1,115 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription
-} from '@/components/ui/dialog';
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Smartphone, 
-  QrCode, 
-  Wifi, 
-  WifiOff, 
-  Settings,
-  MessageSquare,
-  Clock,
-  AlertCircle,
-  CheckCircle,
-  Loader2,
-  Phone,
-  PhoneOff,
-  Users,
-  Shield,
-  Webhook,
-  Bot,
-  Trash2,
-  XCircle,
-  CheckCircle2,
-  RefreshCw,
-  Bell,
-  BellRing,
-  BellOff,
-  FileText,
-  BarChart,
-  Calendar,
-  Tag,
-  Filter,
-  Zap,
-  SmilePlus,
-  Activity,
-  BarChart3,
-  Timer,
-  Plus,
-  Eye,
-  User,
-  Building2,
-  ShieldAlert,
-  Megaphone,
-  Download,
-  ListFilter,
-  X,
-  Volume2,
-  Monitor,
-  Copy,
-  Archive,
-  Edit,
-  Scan,
-  RotateCcw
-} from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
 import { useWhatsAppInstances } from '@/hooks/useWhatsAppInstances';
 import { 
-  DepartmentWhatsAppConfig, 
-  CreateInstanceData,
-  QRCodeResponse,
-  Template
-} from '@/types/whatsapp.types';
-import { useToast } from '@/hooks/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
+  Loader2, 
+  Smartphone, 
+  CheckCircle, 
+  XCircle, 
+  AlertCircle, 
+  Wifi, 
+  WifiOff, 
+  Settings2, 
+  Trash2,
+  Plus,
+  MessageCircle,
+  Users,
+  PhoneCall,
+  Bell
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
+import WhatsAppSettingsModal from './WhatsAppSettingsModal';
+
+// Bento Grid Item Component
+const BentoItem = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <div className={cn(
+    "group relative col-span-1 row-span-1 flex flex-col justify-between overflow-hidden rounded-xl bg-white shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
+    "border border-transparent",
+    className
+  )}>
+    {children}
+  </div>
+);
+
+// Border Beam Component
+const BorderBeam = ({ children, className, intensity = 'normal' }: { 
+  children: React.ReactNode; 
+  className?: string;
+  intensity?: 'light' | 'normal' | 'intense';
+}) => {
+  const intensityClass = {
+    light: 'border-beam-light',
+    normal: '',
+    intense: 'border-beam-intense'
+  }[intensity];
+
+  return (
+    <div className={cn(
+      "border-beam-container",
+      intensityClass,
+      className
+    )}>
+      <div className="p-4">
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// Status badge minimalista
+const StatusBadge = ({ status, className }: { status: string; className?: string }) => {
+  const getStatusConfig = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'open': 
+      case 'connected': 
+        return {
+          color: 'bg-green-500/10 text-green-600 border-green-500/20',
+          icon: <CheckCircle className="w-3 h-3" />,
+          label: 'Conectado'
+        };
+      case 'connecting':
+      case 'qrcode':
+        return {
+          color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+          icon: <AlertCircle className="w-3 h-3" />,
+          label: 'Conectando'
+        };
+      case 'close':
+      case 'disconnected':
+        return {
+          color: 'bg-red-500/10 text-red-600 border-red-500/20',
+          icon: <XCircle className="w-3 h-3" />,
+          label: 'Desconectado'
+        };
+      default:
+        return {
+          color: 'bg-gray-500/10 text-gray-600 border-gray-500/20',
+          icon: <WifiOff className="w-3 h-3" />,
+          label: 'Inativo'
+        };
+    }
+  };
+
+  const config = getStatusConfig(status);
+
+  return (
+    <Badge 
+      className={cn(
+        "h-6 px-2 text-xs font-medium border",
+        config.color,
+        className
+      )}
+    >
+      {config.icon}
+      <span className="ml-1">{config.label}</span>
+    </Badge>
+  );
+};
 
 interface WhatsAppConfigModalProps {
   isOpen: boolean;
@@ -87,131 +118,127 @@ interface WhatsAppConfigModalProps {
   departmentName: string;
 }
 
-const statusVariants = {
-  'active': 'bg-green-100 text-green-800',
-  'open': 'bg-green-100 text-green-800',
-  'connecting': 'bg-yellow-100 text-yellow-800',
-  'qrcode': 'bg-blue-100 text-blue-800',
-  'inactive': 'bg-gray-100 text-gray-800',
-  'close': 'bg-gray-100 text-gray-800',
-  'error': 'bg-red-100 text-red-800'
-};
-
-const statusIcons = {
-  'active': CheckCircle,
-  'open': CheckCircle,
-  'connecting': Loader2,
-  'qrcode': QrCode,
-  'inactive': WifiOff,
-  'close': WifiOff,
-  'error': AlertCircle
-};
-
-export default function WhatsAppConfigModal({
+const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
   isOpen,
   onClose,
   departmentId,
   departmentName
-}: WhatsAppConfigModalProps) {
-  const {
-    instances,
-    loading,
-    error,
-    createInstance,
-    deleteInstance,
-    connectInstance,
-    disconnectInstance,
+}) => {
+  const { toast } = useToast();
+  const { 
+    instances, 
+    loading, 
+    createInstance, 
+    deleteInstance, 
+    connectInstance, 
     getQRCode,
-    updateInstanceConfig,
-    checkInstanceHealth,
-    refreshInstances
+    refreshInstances 
   } = useWhatsAppInstances();
 
-  const [currentInstance, setCurrentInstance] = useState<DepartmentWhatsAppConfig | null>(null);
-  const [qrCode, setQrCode] = useState<QRCodeResponse | null>(null);
-  const [showQR, setShowQR] = useState(false);
-  const [creatingInstance, setCreatingInstance] = useState(false);
-  const [activeTab, setActiveTab] = useState('connection');
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [connectionSuccess, setConnectionSuccess] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [instanceStatus, setInstanceStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
-  const [hasInstance, setHasInstance] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState(false);
+  // Estados
+  const [isCreating, setIsCreating] = useState(false);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
-  // Configurações temporárias para edição
-  const [tempConfig, setTempConfig] = useState<DepartmentWhatsAppConfig>({
-    instanceName: "",
-    departmentId: "",
-    status: "inactive"
-  });
+  // Configurações padrão
+  const defaultSettings = {
+    always_online: true,
+    groups_ignore: true,
+    read_messages: true,
+    read_status: true,
+    reject_call: true,
+    sync_full_history: false
+  };
 
-  // Adicionar novos estados
-  const [metrics, setMetrics] = useState({
-    messagesPerDay: 0,
-    responseTime: 0,
-    satisfaction: 0,
-    activeChats: 0
-  });
-
-  const [templates, setTemplates] = useState<Template[]>([
-    { 
-      id: 1, 
-      name: 'Saudação', 
-      content: 'Olá {nome}! Como posso ajudar?',
-      category: 'saudacao',
-      priority: 'alta'
-    },
-    { 
-      id: 2, 
-      name: 'Agradecimento', 
-      content: 'Obrigado pelo contato, {nome}! A {empresa} agradece sua preferência.',
-      category: 'finalizacao',
-      priority: 'media'
-    },
-    { 
-      id: 3, 
-      name: 'Encerramento', 
-      content: 'Foi um prazer atendê-lo, {nome}! Tenha um ótimo dia!',
-      category: 'finalizacao',
-      priority: 'baixa'
+  // Buscar instância do departamento
+  useEffect(() => {
+    if (isOpen && departmentId) {
+      refreshInstances();
     }
-  ]);
+  }, [isOpen, departmentId, refreshInstances]);
 
-  const { toast } = useToast();
+  // Filtrar instância do departamento atual
+  const departmentInstance = instances.find(
+    instance => instance.departmentId === departmentId
+  );
 
-  // Verificar status real da instância via API
-  const checkRealInstanceStatus = useCallback(async (instanceName: string) => {
+  // Criar nova instância
+  const handleCreateInstance = async () => {
+    if (!departmentId) return;
+
+    setIsCreating(true);
     try {
-      setCheckingStatus(true);
-      const health = await checkInstanceHealth(instanceName);
-      
-      // Atualizar o status local baseado na resposta da API
-      const realStatus = health.isHealthy && health.status === 'open' ? 'connected' : 
-                        health.status === 'connecting' ? 'connecting' : 'disconnected';
-      
-      setInstanceStatus(realStatus);
-      
-      // Atualizar a instância no banco se necessário
-      if (currentInstance && currentInstance.status !== health.status) {
-        await updateInstanceConfig(currentInstance.id!, { status: health.status });
-        await refreshInstances();
-      }
-      
-      return realStatus;
-    } catch (err) {
-      console.warn('Erro ao verificar status da instância:', err);
-      return 'disconnected';
-    } finally {
-      setCheckingStatus(false);
-    }
-  }, [checkInstanceHealth, currentInstance, updateInstanceConfig, refreshInstances]);
+      await createInstance(departmentId, {
+        instanceName: `whatsapp-dep-${departmentId}`,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+        ...defaultSettings
+      });
 
-  // Handler para fechar o modal
-  const handleClose = useCallback(() => {
-    // Forçar limpeza de overlays residuais
+      toast({
+        title: "Integração criada",
+        description: "WhatsApp configurado para este departamento",
+      });
+
+      await refreshInstances();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao criar integração",
+        description: error.message || "Ocorreu um erro inesperado",
+        variant: "destructive"
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // Conectar instância (gerar QR)
+  const handleConnectInstance = async (instanceName: string) => {
+    try {
+      await connectInstance(instanceName);
+      
+      const qrResponse = await getQRCode(instanceName);
+      if (qrResponse.base64) {
+        setQrCode(qrResponse.base64);
+        toast({
+          title: "QR Code gerado",
+          description: "Escaneie o código com seu WhatsApp",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro ao conectar",
+        description: error.message || "Falha na conexão",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Remover instância
+  const handleDeleteInstance = async (instanceId: string | undefined) => {
+    if (!instanceId) return;
+    if (!confirm('Tem certeza que deseja remover a integração do WhatsApp deste departamento?')) return;
+    
+    try {
+      await deleteInstance(instanceId);
+      toast({
+        title: "Integração removida",
+        description: "WhatsApp desvinculado deste departamento",
+      });
+      
+      await refreshInstances();
+      setQrCode(null);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao remover",
+        description: error.message || "Falha ao remover integração",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Handler customizado para fechar o modal (solução do DepartmentCreateModal)
+  const handleClose = React.useCallback(() => {
     setTimeout(() => {
       const overlays = document.querySelectorAll('[data-radix-dialog-overlay]');
       if (overlays.length > 1) {
@@ -219,717 +246,214 @@ export default function WhatsAppConfigModal({
           if (index > 0) overlay.remove();
         });
       }
-      
-      // Garantir que body não fique bloqueado
       document.body.style.pointerEvents = '';
       document.body.style.overflow = '';
     }, 100);
-    
-    // Limpar todos os estados do modal
-    setCurrentInstance(null);
-    setQrCode(null);
-    setShowQR(false);
-    setCreatingInstance(false);
-    setActiveTab('connection');
-    setSaving(false);
-    setDeleting(false);
-    setConnectionSuccess(false);
-    setIsConnecting(false);
-    setInstanceStatus("disconnected");
-    setHasInstance(false);
-    setCheckingStatus(false);
-    
     onClose();
   }, [onClose]);
 
-  // Buscar instância atual do departamento
-  useEffect(() => {
-    if (!isOpen) return;
-    
-    const instance = instances.find(inst => inst.departmentId === departmentId);
-    if (instance) {
-      setCurrentInstance(instance);
-      setHasInstance(true);
-      
-      // Verificar status real da instância
-      if (instance.instanceName) {
-        checkRealInstanceStatus(instance.instanceName);
-      } else {
-        // Fallback para status armazenado no banco
-        const status = instance.status === 'active' || instance.status === 'open' ? 'connected' : 
-                     instance.status === 'connecting' || instance.status === 'qrcode' ? 'connecting' : 'disconnected';
-        setInstanceStatus(status);
-      }
-    } else {
-      setCurrentInstance(null);
-      setHasInstance(false);
-      setInstanceStatus("disconnected");
-    }
-    
-    setShowQR(false);
-    setQrCode(null);
-  }, [instances, departmentId, isOpen, checkRealInstanceStatus]);
-
-  // Criar nova instância
-  const handleCreateInstance = async () => {
-    try {
-      setCreatingInstance(true);
-      const config: Partial<CreateInstanceData> = {
-        integration: 'WHATSAPP-BAILEYS',
-        qrcode: true,
-        reject_call: false,
-        groups_ignore: false,
-        always_online: true,
-        read_messages: true,
-        read_status: false,
-        sync_full_history: false
-      };
-      
-      await createInstance(departmentId, config);
-      await refreshInstances();
-      
-      toast({
-        title: "✅ Instância Criada!",
-        description: "Instância WhatsApp criada com sucesso. Agora você pode conectar.",
-        duration: 3000,
-      });
-      
-      setActiveTab('connection');
-    } catch (err) {
-      console.error('Erro ao criar instância:', err);
-      toast({
-        title: "❌ Erro",
-        description: "Erro ao criar instância. Tente novamente.",
-        variant: "destructive",
-        duration: 5000,
-      });
-    } finally {
-      setCreatingInstance(false);
-    }
-  };
-
-  // Conectar instância (também usado para reconectar)
-  const handleConnect = async (isReconnect = false) => {
-    try {
-      setIsConnecting(true);
-      setInstanceStatus("connecting");
-      
-      // Se não há instância, criar uma primeiro
-      if (!currentInstance) {
-        const config: Partial<CreateInstanceData> = {
-          integration: 'WHATSAPP-BAILEYS',
-          qrcode: true,
-          reject_call: false,
-          groups_ignore: false,
-          always_online: true,
-          read_messages: true,
-          read_status: false,
-          sync_full_history: false
-        };
-        
-        await createInstance(departmentId, config);
-        await refreshInstances();
-        
-        // Aguardar um pouco para que a instância seja criada e então continuar conexão
-        setTimeout(async () => {
-          try {
-            await refreshInstances();
-            
-            // Buscar a nova instância criada
-            const newInstance = instances.find(inst => inst.departmentId === departmentId);
-            
-            if (newInstance) {
-              await connectInstance(newInstance.instanceName);
-              const qrResponse = await getQRCode(newInstance.instanceName);
-              
-              if (qrResponse) {
-                setQrCode(qrResponse);
-                setShowQR(true);
-                
-                toast({
-                  title: "📱 QR Code Gerado!",
-                  description: "Instância criada e QR Code gerado! Escaneie com seu WhatsApp para conectar.",
-                  duration: 5000,
-                });
-              }
-            } else {
-              // Se não encontrou a instância, tentar novamente em mais 2 segundos
-              setTimeout(() => {
-                setIsConnecting(false);
-                setInstanceStatus("disconnected");
-                toast({
-                  title: "⚠️ Instância Criada",
-                  description: "Instância criada com sucesso! Clique em 'Conectar' novamente para gerar o QR Code.",
-                  duration: 5000,
-                });
-              }, 2000);
-            }
-          } catch (connectErr) {
-            console.error('Erro ao conectar nova instância:', connectErr);
-            setIsConnecting(false);
-            setInstanceStatus("disconnected");
-            
-            toast({
-              title: "⚠️ Instância Criada", 
-              description: "Instância criada com sucesso! Clique em 'Conectar' novamente para gerar o QR Code.",
-              duration: 5000,
-            });
-          }
-        }, 1500);
-        
-        return;
-      }
-      
-      await connectInstance(currentInstance.instanceName);
-      const qrResponse = await getQRCode(currentInstance.instanceName);
-      
-      if (qrResponse) {
-        setQrCode(qrResponse);
-        setShowQR(true);
-        
-        toast({
-          title: isReconnect ? "🔄 Novo QR Code Gerado!" : "📱 QR Code Gerado!",
-          description: isReconnect ? "Novo QR Code gerado para reconexão. Escaneie com seu WhatsApp." : "Escaneie o QR Code com seu WhatsApp para conectar.",
-          duration: 5000,
-        });
-      }
-      
-    } catch (err) {
-      console.error('Erro ao conectar:', err);
-      setIsConnecting(false);
-      setInstanceStatus("disconnected");
-      
-      toast({
-        title: "❌ Erro de Conexão",
-        description: "Não foi possível conectar. Verifique sua conexão e tente novamente.",
-        variant: "destructive",
-        duration: 5000,
-      });
-    }
-  };
-
-  // Função específica para reconectar
-  const handleReconnect = () => {
-    handleConnect(true);
-  };
-
-  // Simular sucesso da conexão (seria chamado via webhook ou polling)
-  const handleConnectionSuccess = () => {
-    setConnectionSuccess(true);
-    setShowQR(false);
-    setQrCode(null);
-    setIsConnecting(false);
-    setInstanceStatus("connected");
-    
-    // Som de sucesso (se suportado)
-    try {
-      const audio = new Audio('data:audio/wav;base64,UklGRnEAAABXQVZFZm10IBAAAAABAAEAK...');
-      audio.volume = 0.3;
-      audio.play().catch(() => {});
-    } catch (e) {}
-    
-    // Vibração (se suportado)
-    if ('vibrate' in navigator) {
-      navigator.vibrate([100, 50, 100]);
-    }
-    
-    // Toast de sucesso
-    toast({
-      title: "🎉 WhatsApp Conectado!",
-      description: "A instância foi conectada com sucesso e está pronta para uso.",
-      duration: 5000,
-    });
-    
-    // Feedback visual por 3 segundos
-    setTimeout(() => {
-      setConnectionSuccess(false);
-      refreshInstances();
-    }, 3000);
-  };
-
-  // Fechar QR Code
-  const handleCloseQR = () => {
-    setShowQR(false);
-    setQrCode(null);
-    setIsConnecting(false);
-    // Verificar status real ao fechar QR
-    if (currentInstance) {
-      checkRealInstanceStatus(currentInstance.instanceName);
-    } else {
-      setInstanceStatus("disconnected");
-    }
-  };
-
-  // Desconectar instância
-  const handleDisconnect = async () => {
-    if (!currentInstance) return;
-    try {
-      await disconnectInstance(currentInstance.instanceName);
-      setQrCode(null);
-      setShowQR(false);
-      setInstanceStatus("disconnected");
-      await refreshInstances();
-      
-      toast({
-        title: "🔌 Desconectado",
-        description: "WhatsApp foi desconectado com sucesso.",
-        duration: 3000,
-      });
-    } catch (err) {
-      console.error('Erro ao desconectar:', err);
-    }
-  };
-
-  // Deletar instância
-  const handleDeleteInstance = async () => {
-    if (!currentInstance) return;
-    if (confirm('Tem certeza que deseja deletar esta instância? Esta ação não pode ser desfeita.')) {
-      try {
-        setDeleting(true);
-        await deleteInstance(currentInstance.id!);
-        setCurrentInstance(null);
-        setQrCode(null);
-        setShowQR(false);
-        setHasInstance(false);
-        setInstanceStatus("disconnected");
-        setActiveTab('connection');
-        await refreshInstances();
-        
-        toast({
-          title: "🗑️ Instância Removida",
-          description: "A instância foi deletada com sucesso.",
-          duration: 3000,
-        });
-      } catch (err) {
-        console.error('Erro ao deletar instância:', err);
-        toast({
-          title: "❌ Erro",
-          description: "Erro ao deletar instância. Tente novamente.",
-          variant: "destructive",
-          duration: 5000,
-        });
-      } finally {
-        setDeleting(false);
-      }
-    }
-  };
-
-  // Se não estiver aberto, não renderizar nada
-  if (!isOpen) {
-    return null;
-  }
-
-  // Renderizar estado inicial quando não há instância
-  if (!hasInstance) {
-    return (
-      <TooltipProvider>
-        <Dialog open={isOpen} onOpenChange={handleClose}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-xl">
-                <Smartphone className="w-6 h-6" />
-                Configuração do WhatsApp
-              </DialogTitle>
-              <DialogDescription>
-                Departamento: <span className="font-medium">{departmentName}</span>
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="flex flex-col items-center justify-center py-12 space-y-6">
-              {creatingInstance ? (
-                <>
-                  <div className="p-8 rounded-full bg-blue-100 animate-pulse">
-                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin" />
-                  </div>
-                  
-                  <div className="text-center space-y-2">
-                    <h3 className="text-lg font-semibold">Criando instância...</h3>
-                    <p className="text-muted-foreground max-w-md">
-                      Aguarde enquanto configuramos sua instância do WhatsApp. Isso pode levar alguns segundos.
-                    </p>
-                  </div>
-                  
-                  <div className="w-full max-w-xs bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="p-8 rounded-full bg-gradient-to-br from-green-100 to-blue-100">
-                    <Smartphone className="w-16 h-16 text-green-600" />
-                  </div>
-                  
-                  <div className="text-center space-y-2">
-                    <h3 className="text-lg font-semibold">Nenhuma instância configurada</h3>
-                    <p className="text-muted-foreground max-w-md">
-                      Para começar a usar o WhatsApp neste departamento, você precisa criar e configurar uma instância.
-                    </p>
-                  </div>
-
-                  <Button 
-                    onClick={handleCreateInstance}
-                    disabled={creatingInstance}
-                    size="lg"
-                    className="min-w-[200px] bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Criar Instância WhatsApp
-                  </Button>
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={handleClose} disabled={creatingInstance}>
-                {creatingInstance ? 'Aguarde...' : 'Fechar'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </TooltipProvider>
-    );
-  }
-
   return (
-    <TooltipProvider>
+    <>
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <Smartphone className="w-6 h-6" />
-              Configuração do WhatsApp
+        <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-lg">
+                <Smartphone className="w-5 h-5 text-primary" />
+                <span>WhatsApp - {departmentName}</span>
+              </div>
+              {departmentInstance && (
+                <StatusBadge status={departmentInstance.status || 'disconnected'} />
+              )}
             </DialogTitle>
-            <DialogDescription>
-              Departamento: <span className="font-medium">{departmentName}</span>
-            </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="grid w-full grid-cols-4 mb-4 flex-shrink-0">
-              <TabsTrigger value="connection" className="flex items-center gap-2">
-                <QrCode className="w-4 h-4" />
-                Conexão
-              </TabsTrigger>
-              <TabsTrigger value="messages" className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                Mensagens
-              </TabsTrigger>
-              <TabsTrigger value="automation" className="flex items-center gap-2">
-                <Bot className="w-4 h-4" />
-                Automação
-              </TabsTrigger>
-              <TabsTrigger value="advanced" className="flex items-center gap-2">
-                <Settings className="w-4 h-4" />
-                Avançado
-              </TabsTrigger>
-            </TabsList>
-
-            <ScrollArea className="flex-1 overflow-auto">
-              <TabsContent value="connection" className="space-y-6 m-0">
-                {/* Status da Conexão */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Wifi className="w-5 h-5" />
-                      Status da Conexão
-                      {checkingStatus && <Loader2 className="w-4 h-4 animate-spin" />}
-                    </CardTitle>
-                    <CardDescription>
-                      Gerencie a conexão com o WhatsApp
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className={cn(
-                        "p-4 rounded-lg flex items-center gap-3 transition-colors flex-1",
-                        instanceStatus === "connected" ? "bg-green-50 text-green-700 border border-green-200" :
-                        instanceStatus === "connecting" ? "bg-yellow-50 text-yellow-700 border border-yellow-200" :
-                        "bg-red-50 text-red-700 border border-red-200"
-                      )}>
-                        {instanceStatus === "connected" && (
-                          <>
-                            <CheckCircle2 className="w-5 h-5" />
-                            <div>
-                              <p className="font-medium">Conectado</p>
-                              <p className="text-sm opacity-90">WhatsApp está ativo e funcionando</p>
-                            </div>
-                          </>
-                        )}
-                        {instanceStatus === "connecting" && (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <div>
-                              <p className="font-medium">Conectando</p>
-                              <p className="text-sm opacity-90">Aguardando leitura do QR Code</p>
-                            </div>
-                          </>
-                        )}
-                        {instanceStatus === "disconnected" && (
-                          <>
-                            <XCircle className="w-5 h-5" />
-                            <div>
-                              <p className="font-medium">Desconectado</p>
-                              <p className="text-sm opacity-90">WhatsApp não está conectado</p>
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2">
-                        {instanceStatus === "disconnected" && (
-                          <Button
-                            onClick={() => handleConnect()}
-                            disabled={isConnecting}
-                            className="min-w-[120px]"
-                          >
-                            {isConnecting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                            <Scan className="w-4 h-4 mr-2" />
-                            Conectar
-                          </Button>
-                        )}
-                        
-                        {instanceStatus === "connecting" && (
-                          <Button
-                            variant="outline"
-                            onClick={handleCloseQR}
-                          >
-                            Cancelar
-                          </Button>
-                        )}
-                        
-                        {instanceStatus === "connected" && (
-                          <>
-                            <Button
-                              variant="outline"
-                              onClick={handleReconnect}
-                              disabled={isConnecting}
-                            >
-                              {isConnecting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                              <RotateCcw className="w-4 h-4 mr-2" />
-                              Reconectar
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={handleDisconnect}
-                            >
-                              <PhoneOff className="w-4 h-4 mr-2" />
-                              Desconectar
-                            </Button>
-                          </>
-                        )}
-                      </div>
+          <div className="p-6 space-y-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : !departmentInstance ? (
+              <BorderBeam intensity="normal">
+                <div className="text-center space-y-4 py-2">
+                  <div className="flex flex-col items-center gap-3">
+                    <Smartphone className="w-12 h-12 text-muted-foreground/50" />
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Nenhuma integração configurada
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        Configure o WhatsApp para este departamento
+                      </p>
                     </div>
+                  </div>
 
-                    {/* QR Code */}
-                    {(showQR && qrCode) && (
-                      <div className="w-full overflow-hidden">
-                        <Card className="bg-gradient-to-br from-green-50 to-blue-50 border-2 border-dashed border-green-300">
-                          <CardContent className="p-6">
-                            <div className="flex flex-col items-center gap-6 max-w-full">
-                              <div className="flex items-center gap-2 text-xl font-semibold text-green-700">
-                                <QrCode className="w-6 h-6" />
-                                Escaneie o QR Code
-                              </div>
-                              
-                              <div className="relative p-4 bg-white rounded-xl shadow-lg max-w-[280px] w-full">
-                                <img 
-                                  src={qrCode.base64} 
-                                  alt="QR Code" 
-                                  className="w-full h-auto max-w-[250px] max-h-[250px] rounded-lg mx-auto block"
-                                  style={{ aspectRatio: '1/1' }}
-                                />
-                                {connectionSuccess && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
-                                    <CheckCircle2 className="w-16 h-16 text-green-500" />
-                                  </div>
-                                )}
-                                
-                                {/* Pulse animation */}
-                                <div className="absolute -inset-1 bg-gradient-to-r from-green-400 to-blue-500 rounded-xl opacity-30 animate-pulse"></div>
-                              </div>
-                              
-                              <div className="text-center space-y-3 max-w-sm">
-                                <p className="text-base font-medium text-gray-700">
-                                  📱 Como conectar:
-                                </p>
-                                <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
-                                  <div className="flex items-center gap-2">
-                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                                    <span>Abra o WhatsApp no seu celular</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                                    <span>Vá em <strong>Menu ⋮</strong> → <strong>Dispositivos conectados</strong></span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                                    <span>Toque em <strong>"Conectar um dispositivo"</strong></span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                                    <span>Aponte a câmera para este QR Code</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex gap-3">
-                                <Button variant="outline" onClick={() => handleConnect()} className="bg-white/80 hover:bg-white">
-                                  <RefreshCw className="w-4 h-4 mr-2" />
-                                  Novo QR Code
-                                </Button>
-                                <Button variant="outline" onClick={handleConnectionSuccess} className="bg-white/80 hover:bg-white">
-                                  <CheckCircle className="w-4 h-4 mr-2" />
-                                  Simular Conexão
-                                </Button>
-                              </div>
-                              
-                              <div className="text-xs text-gray-500 text-center max-w-xs">
-                                ⚠️ O QR Code expira em poucos minutos. Se não funcionar, gere um novo.
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
+                  <Button
+                    onClick={handleCreateInstance}
+                    disabled={isCreating}
+                    className="w-full max-w-sm mx-auto bg-green-600 hover:bg-green-700"
+                  >
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Configurando...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Criar Integração WhatsApp
+                      </>
                     )}
-                  </CardContent>
-                </Card>
-
-                {/* Informações da Instância */}
-                {currentInstance && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Settings className="w-5 h-5" />
-                        Informações da Instância
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-sm font-medium">Nome da Instância</Label>
-                          <p className="text-sm text-muted-foreground">{currentInstance.instanceName}</p>
+                  </Button>
+                </div>
+              </BorderBeam>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <BentoItem>
+                  <BorderBeam intensity="light">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="h-8 w-8 rounded-lg bg-green-50 flex items-center justify-center">
+                          <MessageCircle className="w-5 h-5 text-green-600" />
                         </div>
-                        <div>
-                          <Label className="text-sm font-medium">Status</Label>
-                          <div className="mt-1">
-                            <Badge className={statusVariants[currentInstance.status as keyof typeof statusVariants] || statusVariants.error}>
-                              {currentInstance.status}
-                            </Badge>
-                          </div>
-                        </div>
+                        <Badge variant="outline" className="text-xs font-medium bg-green-50 text-green-600 border-green-200">
+                          Status
+                        </Badge>
                       </div>
-
-                      <Separator />
-
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <Label className="text-sm font-medium text-red-600">Zona de Perigo</Label>
-                          <p className="text-sm text-muted-foreground">Remover completamente esta instância</p>
-                        </div>
-                        <Button
-                          variant="destructive"
-                          onClick={handleDeleteInstance}
-                          disabled={deleting}
-                        >
-                          {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          {deleting ? 'Removendo...' : 'Remover Instância'}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-
-              {/* Outras abas simplificadas */}
-              <TabsContent value="messages" className="space-y-6 m-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Mensagens Automáticas</CardTitle>
-                    <CardDescription>Configure mensagens de boas-vindas e ausência</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Mensagem de Boas-vindas</Label>
-                      <Textarea 
-                        placeholder="Ex: Olá! Bem-vindo ao nosso atendimento. Como posso ajudá-lo hoje?"
-                        className="min-h-[100px]"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Mensagem de Ausência</Label>
-                      <Textarea 
-                        placeholder="Ex: No momento estamos ausentes. Retornaremos em breve!"
-                        className="min-h-[100px]"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="automation" className="space-y-6 m-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Horário Comercial</CardTitle>
-                    <CardDescription>Configure o horário de funcionamento</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Switch id="business-hours" />
-                      <Label htmlFor="business-hours">Ativar horário comercial</Label>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Início</Label>
-                        <Input type="time" defaultValue="09:00" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Fim</Label>
-                        <Input type="time" defaultValue="18:00" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="advanced" className="space-y-6 m-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Configurações Avançadas</CardTitle>
-                    <CardDescription>Configurações técnicas da instância</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
                       <div>
-                        <Label>Ignorar grupos</Label>
-                        <p className="text-sm text-muted-foreground">Não processar mensagens de grupos</p>
+                        <h3 className="text-sm font-medium text-gray-900">Mensagens</h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Leitura automática: {departmentInstance.read_messages ? 'Ativada' : 'Desativada'}
+                        </p>
                       </div>
-                      <Switch defaultChecked />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Confirmação de leitura</Label>
-                        <p className="text-sm text-muted-foreground">Marcar mensagens como lidas</p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </ScrollArea>
-          </Tabs>
+                  </BorderBeam>
+                </BentoItem>
 
-          <div className="flex justify-end gap-2 mt-6 flex-shrink-0">
-            <Button variant="outline" onClick={handleClose}>
-              Fechar
-            </Button>
-            <Button disabled={saving}>
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {saving ? 'Salvando...' : 'Salvar Configurações'}
-            </Button>
+                <BentoItem>
+                  <BorderBeam intensity="light">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="h-8 w-8 rounded-lg bg-green-50 flex items-center justify-center">
+                          <Users className="w-5 h-5 text-green-600" />
+                        </div>
+                        <Badge variant="outline" className="text-xs font-medium bg-green-50 text-green-600 border-green-200">
+                          Grupos
+                        </Badge>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">Grupos</h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Ignorar grupos: {departmentInstance.groups_ignore ? 'Sim' : 'Não'}
+                        </p>
+                      </div>
+                    </div>
+                  </BorderBeam>
+                </BentoItem>
+
+                <BentoItem>
+                  <BorderBeam intensity="light">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="h-8 w-8 rounded-lg bg-green-50 flex items-center justify-center">
+                          <PhoneCall className="w-5 h-5 text-green-600" />
+                        </div>
+                        <Badge variant="outline" className="text-xs font-medium bg-green-50 text-green-600 border-green-200">
+                          Chamadas
+                        </Badge>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">Chamadas</h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Rejeitar chamadas: {departmentInstance.reject_call ? 'Sim' : 'Não'}
+                        </p>
+                      </div>
+                    </div>
+                  </BorderBeam>
+                </BentoItem>
+
+                <BentoItem>
+                  <BorderBeam intensity="light">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="h-8 w-8 rounded-lg bg-green-50 flex items-center justify-center">
+                          <Bell className="w-5 h-5 text-green-600" />
+                        </div>
+                        <Badge variant="outline" className="text-xs font-medium bg-green-50 text-green-600 border-green-200">
+                          Online
+                        </Badge>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">Status Online</h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Sempre online: {departmentInstance.always_online ? 'Sim' : 'Não'}
+                        </p>
+                      </div>
+                    </div>
+                  </BorderBeam>
+                </BentoItem>
+              </div>
+            )}
+
+            {departmentInstance && (
+              <div className="flex items-center justify-end gap-2 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => handleDeleteInstance(departmentInstance.id)}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remover Integração
+                </Button>
+
+                <Button
+                  onClick={() => handleConnectInstance(departmentInstance.instanceName)}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Wifi className="w-4 h-4 mr-2" />
+                  Reconectar
+                </Button>
+
+                <Button
+                  onClick={() => setShowSettings(true)}
+                  variant="outline"
+                  className="border-green-200"
+                >
+                  <Settings2 className="w-4 h-4 mr-2" />
+                  Configurações
+                </Button>
+              </div>
+            )}
+
+            {qrCode && (
+              <BorderBeam intensity="intense" className="max-w-sm mx-auto mt-8">
+                <div className="flex flex-col items-center gap-4 py-2">
+                  <div className="bg-white p-4 rounded-lg shadow-inner">
+                    <img 
+                      src={`data:image/png;base64,${qrCode}`}
+                      alt="QR Code WhatsApp"
+                      className="w-48 h-48"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600 font-medium">
+                    Escaneie o QR Code com seu WhatsApp
+                  </p>
+                </div>
+              </BorderBeam>
+            )}
           </div>
         </DialogContent>
       </Dialog>
-    </TooltipProvider>
+
+      {showSettings && departmentInstance && (
+        <WhatsAppSettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          instance={departmentInstance}
+        />
+      )}
+    </>
   );
-} 
+};
+
+export default WhatsAppConfigModal; 

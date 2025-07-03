@@ -18,6 +18,12 @@ import { debugTicketAssignment, debugCurrentTicket, forceTicketReload } from './
 // Importar teste de validação de telefone
 import './utils/testeValidacaoTelefoneCompleto'
 
+// 🔧 Importar debug de instâncias WhatsApp
+import { setupWhatsAppDebug } from './utils/debug-whatsapp-instance'
+
+// 🧪 Importar teste rápido de criação de instância
+import './utils/test-create-instance'
+
 // Configurar endpoint global para receber respostas de webhook (mencionado nas memórias)
 import webhookResponseService from './services/webhook-response-service'
 
@@ -294,3 +300,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </React.StrictMode>
 )
+
+// Configurar debug de WhatsApp após inicialização
+setupWhatsAppDebug();

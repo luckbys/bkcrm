@@ -6,82 +6,62 @@ export interface EvolutionAPIConfig {
 }
 
 export interface WhatsAppInstance {
+  id?: string;
   instanceName: string;
-  status: 'open' | 'close' | 'connecting' | 'qrcode';
-  qrcode?: string;
-  connectionState: string;
-  profilePictureUrl?: string;
-  profileName?: string;
-  owner: string;
-  serverUrl: string;
-  apikey: string;
-  createdAt: string;
-  updatedAt: string;
+  departmentId: string;
+  status?: string;
+  webhookUrl?: string;
+  serverUrl?: string;
+  integration?: {
+    integration: string;
+    webhook_wa_business?: string;
+  };
+  read_messages?: boolean;
+  groups_ignore?: boolean;
+  reject_call?: boolean;
+  always_online?: boolean;
+  read_status?: boolean;
+  sync_full_history?: boolean;
 }
 
-export interface CreateInstanceData {
-  instanceName: string;
-  token?: string;
-  qrcode: boolean;
-  number?: string;
-  integration: string;
-  reject_call: boolean;
-  msg_call?: string;
-  groups_ignore: boolean;
+export interface WhatsAppSettings {
   always_online: boolean;
+  groups_ignore: boolean;
   read_messages: boolean;
   read_status: boolean;
+  reject_call: boolean;
   sync_full_history: boolean;
-  webhook_url?: string;
-  webhook_by_events?: boolean;
-  webhook_base64?: boolean;
-  proxy?: {
-    enabled: boolean;
-    host?: string;
-    port?: number;
-    protocol?: 'http' | 'https';
-    username?: string;
-    password?: string;
-  };
-  rabbitmq?: {
-    enabled: boolean;
-    events: string[];
-  };
-  sqs?: {
-    enabled: boolean;
-    access_key_id?: string;
-    secret_access_key?: string;
-    account_id?: string;
-    region?: string;
-  };
-  websocket?: {
-    enabled: boolean;
-    events: string[];
-  };
-  chatwoot?: {
-    enabled: boolean;
-    account_id?: string;
-    token?: string;
-    url?: string;
-    sign_msg?: boolean;
-    reopen_conversation?: boolean;
-    conversation_pending?: boolean;
-  };
-  typebot?: {
-    enabled: boolean;
-    url?: string;
-    typebot?: string;
-    expire?: number;
-    keyword_finish?: string;
-    delay_message?: number;
-    unknown_message?: string;
-    listening_from_me?: boolean;
-  };
+}
+
+export interface CreateInstanceParams {
+  instanceName: string;
+  token?: string;
+  qrcode?: boolean;
+  integration?: string;
+  always_online?: boolean;
+  groups_ignore?: boolean;
+  read_messages?: boolean;
+  read_status?: boolean;
+  reject_call?: boolean;
+  sync_full_history?: boolean;
 }
 
 export interface QRCodeResponse {
-  base64: string;
-  expiration: number;
+  base64?: string;
+  error?: string;
+}
+
+export interface UseWhatsAppInstancesReturn {
+  instances: WhatsAppInstance[];
+  loading: boolean;
+  error: string | null;
+  refreshInstances: () => Promise<void>;
+  createInstance: (departmentId: string, params: CreateInstanceParams) => Promise<WhatsAppInstance>;
+  connectInstance: (instanceName: string) => Promise<void>;
+  getQRCode: (instanceName: string) => Promise<QRCodeResponse>;
+  updateSettings: (instanceName: string, settings: Partial<WhatsAppSettings>) => Promise<void>;
+  deleteInstance: (instanceId: string) => Promise<void>;
+  getInstanceByDepartment: (departmentId: string) => WhatsAppInstance | undefined;
 }
 
 export interface ConnectionState {

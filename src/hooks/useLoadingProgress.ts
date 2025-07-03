@@ -1,117 +1,93 @@
 import { useState, useEffect, useCallback } from 'react';
 
-interface LoadingState {
-  isLoading: boolean;
-  progress: number;
-  stage: string;
-  error: string | null;
+interface UseLoadingProgressOptions {
+  duration?: number;
+  steps?: number;
+  initialProgress?: number;
+  autoComplete?: boolean;
 }
 
-export type LoadingStage = 
-  | 'idle'
-  | 'creating-instance'
-  | 'connecting'
-  | 'generating-qr'
-  | 'waiting-scan'
-  | 'verifying'
-  | 'connected'
-  | 'error';
+interface UseLoadingProgressReturn {
+  progress: number;
+  isLoading: boolean;
+  startLoading: () => void;
+  completeLoading: () => void;
+  resetLoading: () => void;
+  setProgress: (progress: number) => void;
+}
 
-const stageMessages: Record<LoadingStage, string> = {
-  idle: 'Aguardando...',
-  'creating-instance': 'Criando instância WhatsApp...',
-  connecting: 'Estabelecendo conexão...',
-  'generating-qr': 'Gerando QR Code...',
-  'waiting-scan': 'Aguardando leitura do QR Code...',
-  verifying: 'Verificando conexão...',
-  connected: 'Conectado com sucesso!',
-  error: 'Erro na conexão'
-};
+export const useLoadingProgress = ({
+  duration = 2000,
+  steps = 100,
+  initialProgress = 0,
+  autoComplete = true
+}: UseLoadingProgressOptions = {}): UseLoadingProgressReturn => {
+  const [progress, setProgress] = useState(initialProgress);
+  const [isLoading, setIsLoading] = useState(false);
+  const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
 
-const stageProgress: Record<LoadingStage, number> = {
-  idle: 0,
-  'creating-instance': 20,
-  connecting: 40,
-  'generating-qr': 60,
-  'waiting-scan': 80,
-  verifying: 95,
-  connected: 100,
-  error: 0
-};
+  const startLoading = useCallback(() => {
+    setIsLoading(true);
+    setProgress(0);
+    
+    if (autoComplete) {
+      const stepDuration = duration / steps;
+      const stepIncrement = 100 / steps;
+      
+      const id = setInterval(() => {
+        setProgress(prev => {
+          const newProgress = prev + stepIncrement;
+          if (newProgress >= 100) {
+            clearInterval(id);
+            setIsLoading(false);
+            return 100;
+          }
+          return newProgress;
+        });
+      }, stepDuration);
+      
+      setIntervalId(id);
+    }
+  }, [duration, steps, autoComplete]);
 
-export const useLoadingProgress = () => {
-  const [state, setState] = useState<LoadingState>({
-    isLoading: false,
-    progress: 0,
-    stage: 'Aguardando...',
-    error: null
-  });
+  const completeLoading = useCallback(() => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      setIntervalId(null);
+    }
+    setProgress(100);
+    setIsLoading(false);
+  }, [intervalId]);
 
-  const [currentStage, setCurrentStage] = useState<LoadingStage>('idle');
+  const resetLoading = useCallback(() => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      setIntervalId(null);
+    }
+    setProgress(initialProgress);
+    setIsLoading(false);
+  }, [intervalId, initialProgress]);
 
-  // Atualizar estado baseado no stage atual
+  const setProgressManually = useCallback((newProgress: number) => {
+    setProgress(Math.max(0, Math.min(100, newProgress)));
+  }, []);
+
+  // Cleanup on unmount
   useEffect(() => {
-    setState(prev => ({
-      ...prev,
-      progress: stageProgress[currentStage],
-      stage: stageMessages[currentStage],
-      isLoading: currentStage !== 'idle' && currentStage !== 'connected' && currentStage !== 'error'
-    }));
-  }, [currentStage]);
-
-  const setStage = useCallback((stage: LoadingStage, error?: string) => {
-    setCurrentStage(stage);
-    if (error) {
-      setState(prev => ({ ...prev, error }));
-    } else {
-      setState(prev => ({ ...prev, error: null }));
-    }
-  }, []);
-
-  const startLoading = useCallback((initialStage: LoadingStage = 'creating-instance') => {
-    setCurrentStage(initialStage);
-    setState(prev => ({ ...prev, error: null }));
-  }, []);
-
-  const stopLoading = useCallback(() => {
-    setCurrentStage('idle');
-  }, []);
-
-  const setError = useCallback((error: string) => {
-    setCurrentStage('error');
-    setState(prev => ({ ...prev, error }));
-  }, []);
-
-  const resetProgress = useCallback(() => {
-    setCurrentStage('idle');
-    setState({
-      isLoading: false,
-      progress: 0,
-      stage: stageMessages.idle,
-      error: null
-    });
-  }, []);
-
-  // Simular progresso automático entre stages
-  const simulateProgress = useCallback(async (stages: LoadingStage[], delayMs = 1000) => {
-    for (const stage of stages) {
-      setStage(stage);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-  }, [setStage]);
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [intervalId]);
 
   return {
-    ...state,
-    currentStage,
-    setStage,
+    progress,
+    isLoading,
     startLoading,
-    stopLoading,
-    setError,
-    resetProgress,
-    simulateProgress,
-    isIdle: currentStage === 'idle',
-    isConnected: currentStage === 'connected',
-    hasError: currentStage === 'error'
+    completeLoading,
+    resetLoading,
+    setProgress: setProgressManually
   };
 };
 
