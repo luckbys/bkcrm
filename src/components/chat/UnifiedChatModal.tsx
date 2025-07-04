@@ -115,7 +115,7 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
 
   // 📝 Estados da UI
   const [messageText, setMessageText] = useState('');
-  const [activeMode, setActiveMode] = useState<'message' | 'internal'>('message');
+  const [activeMode, setActiveMode] = useState<'message' | 'internal' | 'evolution'>('message');
   const [replyingTo, setReplyingTo] = useState<LocalChatMessage | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -592,6 +592,12 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
         setActiveMode(prev => prev === 'internal' ? 'message' : 'internal');
       }
 
+      // Ctrl+W para alternar modo WhatsApp (Evolution API)
+      if (e.ctrlKey && e.key === 'w' && clientPhone) {
+        e.preventDefault();
+        setActiveMode(prev => prev === 'evolution' ? 'message' : 'evolution');
+      }
+
       // ESC para fechar
       if (e.key === 'Escape') {
         onClose();
@@ -1044,6 +1050,15 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                 onSend={handleSendMessage}
                 isLoading={isSending}
                 ref={textareaRef}
+                recipientNumber={clientPhone}
+                onEvolutionMessageSent={(result) => {
+                  console.log('📱 Mensagem Evolution enviada:', result);
+                  showSuccess('Mensagem WhatsApp enviada com sucesso!');
+                  // Opcional: adicionar mensagem ao chat local
+                  if (result?.message) {
+                    // Aqui podemos integrar com o store para mostrar a mensagem enviada
+                  }
+                }}
               />
               
               {/* 🎛️ Controles do Input */}
@@ -1187,6 +1202,11 @@ export const UnifiedChatModal: React.FC<UnifiedChatModalProps> = ({
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded">Enter</kbd> para enviar • 
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Shift+Enter</kbd> nova linha • 
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Ctrl+I</kbd> nota interna • 
+                {clientPhone && (
+                  <>
+                    <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">Ctrl+W</kbd> WhatsApp • 
+                  </>
+                )}
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded mx-1">F5</kbd> atualizar
               </div>
             </div>
