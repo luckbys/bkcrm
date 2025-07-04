@@ -1,19 +1,21 @@
-﻿FROM node:18-slim
+﻿FROM node:18-alpine
 
 WORKDIR /app
 
-# Copiar arquivos de dependências
+# Copiar arquivos de dependência
 COPY package*.json ./
 
 # Instalar dependências
-RUN npm ci --only=production
+RUN npm install
 
-# Copiar o código do servidor
+# Copiar código fonte
 COPY . .
 
-# Expor porta (Heroku define a porta via $PORT)
-ENV PORT=4000
-EXPOSE $PORT
+# Construir a aplicação
+RUN npm run build
 
-# Iniciar servidor
+# Expor a porta (será substituída pela variável PORT do EasyPanel)
+EXPOSE 3000
+
+# Comando para iniciar a aplicação
 CMD ["npm", "start"]
