@@ -1,1 +1,1 @@
-web: node webhook-evolution-websocket.js 
+web: npm start 
