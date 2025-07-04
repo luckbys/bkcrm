@@ -269,26 +269,23 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
   const testEvolutionConnectivity = async () => {
     setIsCreating(true);
     try {
-      console.log('🧪 Testando conectividade Evolution API...');
+      console.log('🧪 Testando conectividade Evolution API via proxy...');
       
-      // URLs para testar
+      // URLs para testar (agora usando proxy interno)
       const testUrls = [
-        'https://press-evolution-api.jhkbgs.easypanel.host',
-        'https://webhook.bkcrm.devsible.com.br/api',
-        'http://localhost:4000'
+        window.location.hostname === 'localhost' 
+          ? 'http://localhost:4000/api'  // Proxy local
+          : 'https://webhook.bkcrm.devsible.com.br/api'  // Proxy produção
       ];
-
-      const apiKey = '429683C4C977415CAAFCCE10F7D57E11';
 
       for (const url of testUrls) {
         try {
-          console.log(`🔍 Testando: ${url}`);
+          console.log(`🔍 Testando proxy: ${url}`);
           
           const response = await fetch(`${url}/health`, {
             method: 'GET',
             headers: {
-              'Content-Type': 'application/json',
-              'apikey': apiKey
+              'Content-Type': 'application/json'
             }
           });
 
@@ -297,27 +294,32 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
             console.log(`✅ ${url} funcionando!`, data);
             
             toast({
-              title: "✅ API Funcionando!",
-              description: `Conectado com sucesso em: ${url}`,
+              title: "✅ Proxy API Funcionando!",
+              description: `Conectado via proxy: ${url}`,
               variant: "default"
             });
             
-            // Testar listar instâncias
+            // Testar listar instâncias via proxy
             try {
               const instancesResponse = await fetch(`${url}/instance/fetchInstances`, {
                 method: 'GET',
                 headers: {
-                  'Content-Type': 'application/json',
-                  'apikey': apiKey
+                  'Content-Type': 'application/json'
                 }
               });
               
               if (instancesResponse.ok) {
                 const instances = await instancesResponse.json();
-                console.log('📋 Instâncias encontradas:', instances);
+                console.log('📋 Instâncias encontradas via proxy:', instances);
+                
+                toast({
+                  title: "✅ Instâncias Carregadas!",
+                  description: `Encontradas ${Array.isArray(instances) ? instances.length : 'N/A'} instâncias`,
+                  variant: "default"
+                });
               }
             } catch (e) {
-              console.log('⚠️ Não foi possível listar instâncias');
+              console.log('⚠️ Não foi possível listar instâncias:', e.message);
             }
             
             return true;
@@ -328,8 +330,8 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
       }
 
       toast({
-        title: "❌ Nenhuma API Encontrada",
-        description: "Verifique se o servidor Evolution API está rodando",
+        title: "❌ Proxy Não Encontrado",
+        description: "Verifique se o servidor webhook está rodando na porta 4000",
         variant: "destructive"
       });
       

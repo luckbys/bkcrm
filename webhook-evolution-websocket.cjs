@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
+const axios = require('axios');
 
 // Configurar Express e HTTP Server
 const app = express();
@@ -1209,6 +1210,109 @@ app.post('/connection-update', async (req, res) => {
     });
   }
 });
+
+// === PROXY ENDPOINTS PARA EVOLUTION API (SOLUÇÃO CORS) ===
+
+// Helper para fazer requisições à Evolution API
+async function proxyToEvolutionAPI(endpoint, method = 'GET', data = null) {
+  try {
+    const config = {
+      method: method.toLowerCase(),
+      url: `${EVOLUTION_API_URL}${endpoint}`,
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY
+      }
+    };
+
+    if (data && (method === 'POST' || method === 'PUT')) {
+      config.data = data;
+    }
+
+    console.log(`🔄 [PROXY] ${method} ${EVOLUTION_API_URL}${endpoint}`);
+    if (data) {
+      console.log('📤 [PROXY] Request data:', data);
+    }
+
+    const response = await axios(config);
+    console.log(`✅ [PROXY] Success ${response.status}`);
+    return { success: true, data: response.data, status: response.status };
+    
+  } catch (error) {
+    console.error(`❌ [PROXY] Error ${endpoint}:`, error.response?.data || error.message);
+    return { 
+      success: false, 
+      error: error.response?.data || error.message, 
+      status: error.response?.status || 500 
+    };
+  }
+}
+
+// Proxy para health check da Evolution API
+app.get('/api/health', async (req, res) => {
+  const result = await proxyToEvolutionAPI('/health');
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy para listar instâncias
+app.get('/api/instance/fetchInstances', async (req, res) => {
+  const result = await proxyToEvolutionAPI('/instance/fetchInstances');
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy para criar instância
+app.post('/api/instance/create', async (req, res) => {
+  const result = await proxyToEvolutionAPI('/instance/create', 'POST', req.body);
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy para status da instância
+app.get('/api/instance/:instanceName/status', async (req, res) => {
+  const result = await proxyToEvolutionAPI(`/instance/${req.params.instanceName}/status`);
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy para QR Code da instância
+app.get('/api/instance/:instanceName/qrcode', async (req, res) => {
+  const result = await proxyToEvolutionAPI(`/instance/${req.params.instanceName}/qrcode`);
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy para deletar instância
+app.delete('/api/instance/:instanceName/delete', async (req, res) => {
+  const result = await proxyToEvolutionAPI(`/instance/${req.params.instanceName}/delete`, 'DELETE');
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy para logout da instância
+app.post('/api/instance/:instanceName/logout', async (req, res) => {
+  const result = await proxyToEvolutionAPI(`/instance/${req.params.instanceName}/logout`, 'POST');
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy para envio de mensagens
+app.post('/api/send-message', async (req, res) => {
+  const result = await proxyToEvolutionAPI('/send-message', 'POST', req.body);
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+// Proxy genérico para outros endpoints
+app.all('/api/*', async (req, res) => {
+  const endpoint = req.path.replace('/api', '');
+  const result = await proxyToEvolutionAPI(endpoint, req.method, req.body);
+  res.status(result.status || (result.success ? 200 : 500)).json(result.success ? result.data : { error: result.error });
+});
+
+console.log('🔄 [PROXY] Endpoints de proxy configurados:');
+console.log('   📊 GET /api/health - Health check');
+console.log('   📋 GET /api/instance/fetchInstances - Listar instâncias');
+console.log('   ➕ POST /api/instance/create - Criar instância');
+console.log('   📊 GET /api/instance/:name/status - Status da instância');
+console.log('   📱 GET /api/instance/:name/qrcode - QR Code');
+console.log('   🗑️ DELETE /api/instance/:name/delete - Deletar instância');
+console.log('   👋 POST /api/instance/:name/logout - Logout');
+console.log('   📨 POST /api/send-message - Enviar mensagem');
+console.log('   🔄 ALL /api/* - Proxy genérico');
 
 // Endpoint de health check
 app.get('/webhook/health', (req, res) => {
