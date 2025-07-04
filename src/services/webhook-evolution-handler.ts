@@ -276,22 +276,22 @@ const processMessageUpsert = async (payload: EvolutionWebhookPayload) => {
   // Processar diferentes tipos de mensagem
   if (data.message) {
     if (data.message.conversation) {
-      messageContent = data.message.conversation;
+    messageContent = data.message.conversation;
     } else if (data.message.extendedTextMessage?.text) {
-      messageContent = data.message.extendedTextMessage.text;
+    messageContent = data.message.extendedTextMessage.text;
     } else if (data.message.imageMessage) {
-      messageContent = data.message.imageMessage.caption || '[Imagem]';
-      messageType = 'image';
+    messageContent = data.message.imageMessage.caption || '[Imagem]';
+    messageType = 'image';
       // TODO: Processar mídia
     } else if (data.message.videoMessage) {
-      messageContent = data.message.videoMessage.caption || '[Vídeo]';
-      messageType = 'video';
+    messageContent = data.message.videoMessage.caption || '[Vídeo]';
+    messageType = 'video';
     } else if (data.message.audioMessage) {
-      messageContent = '[Áudio]';
-      messageType = 'audio';
+    messageContent = '[Áudio]';
+    messageType = 'audio';
     } else if (data.message.documentMessage) {
-      messageContent = data.message.documentMessage.caption || `[Documento: ${data.message.documentMessage.fileName}]`;
-      messageType = 'document';
+    messageContent = data.message.documentMessage.caption || `[Documento: ${data.message.documentMessage.fileName}]`;
+    messageType = 'document';
       fileName = data.message.documentMessage.fileName || '';
     } else if (data.message.stickerMessage) {
       messageContent = '[Sticker]';
@@ -855,33 +855,33 @@ const findOrCreateTicket = async (
   isGroup: boolean = false
 ): Promise<string | null> => {
   try {
-    // Buscar instância no banco para obter departamento
-    const { data: evolutionInstance } = await supabase
-      .from('evolution_instances')
-      .select('department_id, department_name')
-      .eq('instance_name', instance)
-      .single();
-    
-    if (!evolutionInstance) {
+  // Buscar instância no banco para obter departamento
+  const { data: evolutionInstance } = await supabase
+    .from('evolution_instances')
+    .select('department_id, department_name')
+    .eq('instance_name', instance)
+    .single();
+  
+  if (!evolutionInstance) {
       console.warn(`⚠️ [EVOLUTION-WEBHOOK] Instância não encontrada no banco: ${instance}`);
       return null;
-    }
-    
-    // Verificar se já existe ticket ativo para este número
-    const { data: existingTickets } = await supabase
-      .from('tickets')
-      .select('id, status')
-      .eq('metadata->>client_phone', phoneNumber)
-      .eq('department_id', evolutionInstance.department_id)
-      .in('status', ['pendente', 'atendimento'])
-      .order('created_at', { ascending: false })
-      .limit(1);
-    
+  }
+  
+  // Verificar se já existe ticket ativo para este número
+  const { data: existingTickets } = await supabase
+    .from('tickets')
+    .select('id, status')
+    .eq('metadata->>client_phone', phoneNumber)
+    .eq('department_id', evolutionInstance.department_id)
+    .in('status', ['pendente', 'atendimento'])
+    .order('created_at', { ascending: false })
+    .limit(1);
+  
     if (existingTickets && existingTickets.length > 0) {
       console.log(`🎯 [EVOLUTION-WEBHOOK] Usando ticket existente: ${existingTickets[0].id}`);
       return existingTickets[0].id;
     }
-    
+  
     // Criar novo ticket
     const newTicket = {
       title: `${isGroup ? 'Grupo' : 'WhatsApp'} - ${contactName}`,

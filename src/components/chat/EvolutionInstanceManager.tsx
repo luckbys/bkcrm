@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 import { 
   Smartphone, 
   QrCode, 
@@ -28,9 +29,21 @@ import {
   Phone,
   MessageSquare,
   Wifi,
-  WifiOff
+  WifiOff,
+  TestTube,
+  Zap,
+  Shield,
+  Activity,
+  PlayCircle,
+  StopCircle,
+  FileBarChart,
+  Wrench,
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { WhatsAppSetupWizard } from './WhatsAppSetupWizard';
+import { useInstanceTesting } from '@/hooks/useInstanceTesting';
 
 // Interfaces da Evolution API
 interface EvolutionInstance {
@@ -84,11 +97,30 @@ export const EvolutionInstanceManager: React.FC<EvolutionInstanceManagerProps> =
   const [newInstanceName, setNewInstanceName] = useState('');
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [refreshingInstances, setRefreshingInstances] = useState<Set<string>>(new Set());
   const [showQrCode, setShowQrCode] = useState<Map<string, boolean>>(new Map());
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [activeTab, setActiveTab] = useState('instances');
+  const [testingInstance, setTestingInstance] = useState<string | null>(null);
+  const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<string | null>(null);
   
   const { toast } = useToast();
+
+  // Hook de testes
+  const {
+    isRunning: isTestRunning,
+    currentSuite,
+    testHistory,
+    runFullTestSuite,
+    runQuickHealthCheck,
+    stopTesting,
+    getTestRecommendations,
+    getTroubleshootingSteps,
+    isMonitoring,
+    startContinuousMonitoring,
+    stopContinuousMonitoring
+  } = useInstanceTesting();
 
   // URL base da Evolution API
   const EVOLUTION_API_URL = process.env.REACT_APP_EVOLUTION_API_URL || 'https://press-evolution-api.jhkbgs.easypanel.host';
@@ -406,6 +438,100 @@ export const EvolutionInstanceManager: React.FC<EvolutionInstanceManagerProps> =
     }
   }, [toast]);
 
+  // Executar testes em uma instância
+  const runInstanceTests = useCallback(async (instanceName: string) => {
+    const instance = instances.get(instanceName);
+    if (!instance) return;
+
+    setTestingInstance(instanceName);
+
+    const testConfig = {
+      instanceName,
+      apiUrl: EVOLUTION_API_URL,
+      apiKey: API_KEY,
+      webhookUrl: `${window.location.origin}/api/webhook/evolution`,
+      enableDestructiveTests: false, // Não enviar mensagens de teste por padrão
+      timeout: 30000
+    };
+
+    try {
+      const suite = await runFullTestSuite(testConfig);
+      
+      toast({
+        title: suite.status === 'success' ? "✅ Testes aprovados" : "⚠️ Problemas encontrados",
+        description: `${suite.successCount} sucessos, ${suite.errorCount} erros`,
+        variant: suite.status === 'error' ? 'destructive' : 'default'
+      });
+
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro nos testes",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setTestingInstance(null);
+    }
+  }, [instances, EVOLUTION_API_URL, API_KEY, runFullTestSuite, toast]);
+
+  // Executar verificação rápida
+  const runQuickCheck = useCallback(async (instanceName: string) => {
+    const testConfig = {
+      instanceName,
+      apiUrl: EVOLUTION_API_URL,
+      apiKey: API_KEY,
+      webhookUrl: `${window.location.origin}/api/webhook/evolution`,
+      enableDestructiveTests: false,
+      timeout: 10000
+    };
+
+    try {
+      const results = await runQuickHealthCheck(testConfig);
+      const hasErrors = results.some(r => r.status === 'error');
+      
+      toast({
+        title: hasErrors ? "⚠️ Problemas detectados" : "✅ Instância saudável",
+        description: `Verificação rápida concluída`,
+        variant: hasErrors ? 'destructive' : 'default'
+      });
+
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro na verificação",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  }, [EVOLUTION_API_URL, API_KEY, runQuickHealthCheck, toast]);
+
+  // Obter recomendações para uma instância
+  const getInstanceRecommendations = useCallback((instanceName: string) => {
+    const instance = instances.get(instanceName);
+    if (!instance) return [];
+
+    // Recomendações baseadas no status
+    const recommendations: string[] = [];
+
+    if (instance.status === 'close') {
+      recommendations.push('📱 Conecte a instância escaneando o QR Code');
+      recommendations.push('🔄 Verifique se o WhatsApp no telefone está funcionando');
+    } else if (instance.status === 'connecting') {
+      recommendations.push('⏳ Aguarde a conexão ser estabelecida');
+    } else if (instance.status === 'open') {
+      recommendations.push('✅ Instância funcionando corretamente');
+      
+      if (!instance.phone) {
+        recommendations.push('📞 Número do telefone não detectado - verifique a conexão');
+      }
+      
+      if (instance.batteryLevel && instance.batteryLevel < 20) {
+        recommendations.push('🔋 Bateria baixa - conecte o carregador');
+      }
+    }
+
+    return recommendations;
+  }, [instances]);
+
   // Auto-refresh das instâncias
   useEffect(() => {
     if (autoRefresh) {
@@ -423,69 +549,66 @@ export const EvolutionInstanceManager: React.FC<EvolutionInstanceManagerProps> =
   }, [fetchInstances]);
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Smartphone className="h-5 w-5" />
-            Gerenciador de Instâncias WhatsApp
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={autoRefresh ? "text-green-600" : "text-gray-600"}
-            >
-              {autoRefresh ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchInstances}
-              disabled={isLoading}
-            >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
-            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nova Instância
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Criar Nova Instância WhatsApp</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="instanceName">Nome da Instância</Label>
-                    <Input
-                      id="instanceName"
-                      placeholder="ex: atendimento-vendas"
-                      value={newInstanceName}
-                      onChange={(e) => setNewInstanceName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && createInstance()}
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                      Cancelar
-                    </Button>
-                    <Button onClick={createInstance} disabled={isCreating}>
-                      {isCreating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                      Criar
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardTitle>
-      </CardHeader>
-      
-      <CardContent>
+    <>
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5" />
+              Gerenciador de Instâncias WhatsApp
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className={autoRefresh ? "text-green-600" : "text-gray-600"}
+                title={autoRefresh ? "Auto-refresh ativo" : "Auto-refresh inativo"}
+              >
+                {autoRefresh ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchInstances}
+                disabled={isLoading}
+                title="Atualizar instâncias"
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowWizard(true)}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Nova Instância
+              </Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="instances" className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4" />
+                Instâncias ({instances.size})
+              </TabsTrigger>
+              <TabsTrigger value="tests" className="flex items-center gap-2">
+                <TestTube className="h-4 w-4" />
+                Testes
+                {isTestRunning && <Loader2 className="h-3 w-3 animate-spin" />}
+              </TabsTrigger>
+              <TabsTrigger value="monitoring" className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Monitoramento
+                {isMonitoring && <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Aba de Instâncias */}
+            <TabsContent value="instances" className="mt-4">
         {instances.size === 0 && !isLoading ? (
           <div className="text-center py-8 text-muted-foreground">
             <Smartphone className="h-8 w-8 mx-auto mb-2 opacity-50" />
