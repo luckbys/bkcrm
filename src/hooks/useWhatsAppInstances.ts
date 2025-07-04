@@ -8,6 +8,7 @@ import {
   QRCodeResponse,
   UseWhatsAppInstancesReturn
 } from '../types/whatsapp.types';
+import { createEvolutionInstance } from '../utils/evolutionApi';
 
 export function useWhatsAppInstances(): UseWhatsAppInstancesReturn {
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
@@ -48,6 +49,13 @@ export function useWhatsAppInstances(): UseWhatsAppInstancesReturn {
       console.error('Erro ao criar instância:', error);
       throw new Error(error.response?.data?.message || 'Falha ao criar instância');
     }
+  }, []);
+
+  // Criar nova instância Evolution API
+  const createInstanceEvolutionAPI = useCallback(async (instanceData: any) => {
+    const apiKey = import.meta.env.VITE_EVOLUTION_API_KEY;
+    if (!apiKey) throw new Error('API Key não configurada');
+    return createEvolutionInstance(instanceData, apiKey);
   }, []);
 
   // Conectar instância (gerar QR)
@@ -106,6 +114,7 @@ export function useWhatsAppInstances(): UseWhatsAppInstancesReturn {
     getQRCode,
     updateSettings,
     deleteInstance,
-    getInstanceByDepartment
+    getInstanceByDepartment,
+    createInstanceEvolutionAPI
   };
 } 

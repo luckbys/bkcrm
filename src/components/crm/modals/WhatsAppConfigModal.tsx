@@ -132,7 +132,8 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
     deleteInstance, 
     connectInstance, 
     getQRCode,
-    refreshInstances 
+    refreshInstances,
+    createInstanceEvolutionAPI
   } = useWhatsAppInstances();
 
   // Estados
@@ -168,11 +169,18 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
 
     setIsCreating(true);
     try {
-      await createInstance(departmentId, {
+      await createInstanceEvolutionAPI({
         instanceName: `whatsapp-dep-${departmentId}`,
+        token: '', // preencha se necessário
         qrcode: true,
         integration: 'WHATSAPP-BAILEYS',
-        ...defaultSettings
+        alwaysOnline: true,
+        groupsIgnore: true,
+        readMessages: true,
+        readStatus: true,
+        rejectCall: true,
+        syncFullHistory: false,
+        // ...adicione outros campos obrigatórios conforme necessário
       });
 
       toast({
