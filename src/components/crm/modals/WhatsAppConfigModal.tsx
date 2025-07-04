@@ -20,7 +20,8 @@ import {
   MessageCircle,
   Users,
   PhoneCall,
-  Bell
+  Bell,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import WhatsAppSettingsModal from './WhatsAppSettingsModal';
@@ -264,6 +265,88 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
     }
   };
 
+  // Testar conectividade Evolution API
+  const testEvolutionConnectivity = async () => {
+    setIsCreating(true);
+    try {
+      console.log('🧪 Testando conectividade Evolution API...');
+      
+      // URLs para testar
+      const testUrls = [
+        'https://press-evolution-api.jhkbgs.easypanel.host',
+        'https://webhook.bkcrm.devsible.com.br/api',
+        'http://localhost:4000'
+      ];
+
+      const apiKey = '429683C4C977415CAAFCCE10F7D57E11';
+
+      for (const url of testUrls) {
+        try {
+          console.log(`🔍 Testando: ${url}`);
+          
+          const response = await fetch(`${url}/health`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': apiKey
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log(`✅ ${url} funcionando!`, data);
+            
+            toast({
+              title: "✅ API Funcionando!",
+              description: `Conectado com sucesso em: ${url}`,
+              variant: "default"
+            });
+            
+            // Testar listar instâncias
+            try {
+              const instancesResponse = await fetch(`${url}/instance/fetchInstances`, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': apiKey
+                }
+              });
+              
+              if (instancesResponse.ok) {
+                const instances = await instancesResponse.json();
+                console.log('📋 Instâncias encontradas:', instances);
+              }
+            } catch (e) {
+              console.log('⚠️ Não foi possível listar instâncias');
+            }
+            
+            return true;
+          }
+        } catch (error) {
+          console.log(`❌ ${url} não responde:`, error.message);
+        }
+      }
+
+      toast({
+        title: "❌ Nenhuma API Encontrada",
+        description: "Verifique se o servidor Evolution API está rodando",
+        variant: "destructive"
+      });
+      
+      return false;
+    } catch (error) {
+      console.error('❌ Erro no teste:', error);
+      toast({
+        title: "❌ Erro no teste",
+        description: error.message,
+        variant: "destructive"
+      });
+      return false;
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   // Handler customizado para fechar o modal (solução do DepartmentCreateModal)
   const handleClose = React.useCallback(() => {
     setTimeout(() => {
@@ -328,34 +411,23 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
                     </Button>
                     
                     <Button
-                      onClick={async () => {
-                        console.log('🧪 Testando conectividade...');
-                        try {
-                          if (window.quickTestEvolution) {
-                            const result = await window.quickTestEvolution();
-                            toast({
-                              title: result ? "✅ Conectividade OK" : "❌ Problema de conectividade",
-                              description: result ? "Evolution API está respondendo" : "Verifique o console para detalhes",
-                              variant: result ? "default" : "destructive"
-                            });
-                          } else {
-                            console.log('⚠️ Função de teste não carregada. Execute: debugEvolutionAPI()');
-                          }
-                        } catch (error) {
-                          console.error('❌ Erro no teste:', error);
-                          toast({
-                            title: "Erro no teste",
-                            description: "Verifique o console para detalhes",
-                            variant: "destructive"
-                          });
-                        }
-                      }}
+                      onClick={testEvolutionConnectivity}
+                      disabled={isCreating}
                       variant="outline"
                       className="w-full"
-                      size="sm"
+                      size="lg"
                     >
-                      <Settings2 className="w-4 h-4 mr-2" />
-                      Testar Conectividade
+                      {isCreating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Testando...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4 mr-2" />
+                          Testar Conectividade
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>

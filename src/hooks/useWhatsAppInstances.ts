@@ -73,10 +73,16 @@ export function useWhatsAppInstances(): UseWhatsAppInstancesReturn {
       
       console.log('🚀 Criando instância:', instanceName);
       
-      // Verificar se já existe
-      const exists = await evolutionApi.instanceExists(instanceName);
-      if (exists) {
-        throw new Error(`Instância ${instanceName} já existe`);
+      // Verificar se já existe (versão simplificada)
+      try {
+        const existingInstances = await evolutionApi.fetchInstances();
+        const exists = existingInstances.some(inst => inst.instanceName === instanceName);
+        if (exists) {
+          throw new Error(`Instância ${instanceName} já existe`);
+        }
+      } catch (checkError: any) {
+        console.warn('⚠️ Não foi possível verificar instâncias existentes:', checkError.message);
+        // Continuar mesmo assim, pois a API da Evolution vai dar erro se já existir
       }
 
       // Criar instância na Evolution API
