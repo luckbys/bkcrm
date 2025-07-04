@@ -1,0 +1,2 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+export const StatCard = ({ title, value, description, icon }) => (_jsxs("div", { className: "p-4 bg-card rounded-lg border space-y-2", children: [_jsxs("div", { className: "flex items-center gap-2", children: [icon, _jsx("h4", { className: "font-medium", children: title })] }), _jsxs("div", { children: [_jsx("p", { className: "text-2xl font-bold", children: value }), _jsx("p", { className: "text-sm text-muted-foreground", children: description })] })] }));

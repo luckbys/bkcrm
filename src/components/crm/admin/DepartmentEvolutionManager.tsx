@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,8 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { evolutionApi } from '@/services/evolutionApi.';
-import { useToast } from '@/hooks/use-toast';
+import { evolutionApi, EvolutionInstanceStatus, QRCode, QRCodeResponse } from '@/services/evolutionApi';
+import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { WebhookConfigModal } from './WebhookConfigModal';
@@ -93,456 +93,225 @@ export const DepartmentEvolutionManager = ({
   const [isWebhookLoading, setIsWebhookLoading] = useState(false);
   
   // Carregamento inicial
-  useEffect(() => {
+  const loadDepartmentInstances = useCallback(async () => {
     if (!departmentId) return;
 
-    const loadDepartmentInstances = async () => {
-      try {
-        console.log('🏢 Carregando instâncias do departamento:', departmentName);
-        setIsLoading(true);
+    try {
+      console.log('🏢 Carregando instâncias do departamento:', departmentName);
+      setIsLoading(true);
 
-        // Buscar instâncias do departamento no banco
-        const { data: dbInstances, error } = await supabase
-          .from('evolution_instances')
-          .select('*')
-          .eq('department_id', departmentId)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false });
+      // Buscar instâncias do departamento no banco
+      const { data: dbInstances, error } = await supabase
+        .from('evolution_instances')
+        .select('*')
+        .eq('department_id', departmentId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('❌ Erro ao carregar instâncias do banco:', error);
-          throw error;
-        }
-
-        console.log('📋 Instâncias do banco:', dbInstances?.length || 0);
-
-                 // Mapear instâncias com status padrão
-         const instancesWithStatus = await Promise.allSettled((dbInstances || []).map(async (instance) => {
-           let evolutionStatus: 'open' | 'close' | 'connecting' | 'unknown' = 'close';
-           let isConnected = false;
-           
-           try {
-             // Tentar verificar status na Evolution API (com timeout)
-             const statusPromise = evolutionApiService.getInstanceStatus(instance.instance_name);
-             const timeoutPromise = new Promise<never>((_, reject) => 
-               setTimeout(() => reject(new Error('Timeout after 5s')), 5000)
-             );
-             
-             const status = await Promise.race([statusPromise, timeoutPromise]);
-             if (status?.instance?.state) {
-               evolutionStatus = status.instance.state === 'open' ? 'open' : 'close';
-               isConnected = status.instance.state === 'open';
-             }
-             
-           } catch (error: any) {
-             console.warn(`⚠️ Evolution API indisponível para ${instance.instance_name}:`, error.message);
-             // Manter status como close se Evolution API não estiver disponível
-             evolutionStatus = 'unknown';
-           }
-
-           // Mapear para o formato esperado pelo componente
-           const mappedInstance: DepartmentInstance = {
-             id: instance.id,
-             instanceName: instance.instance_name,
-             status: evolutionStatus,
-             departmentId: instance.department_id,
-             departmentName: instance.department_name,
-             phone: instance.phone || undefined,
-             connected: isConnected,
-             lastUpdate: instance.updated_at ? new Date(instance.updated_at) : new Date(),
-             isDefault: instance.is_default || false,
-             createdBy: instance.created_by || undefined
-           };
-
-           return mappedInstance;
-         }));
-
-        // Filtrar apenas os resultados bem-sucedidos
-        const successfulInstances = instancesWithStatus
-          .filter((result): result is PromiseFulfilledResult<DepartmentInstance> => result.status === 'fulfilled')
-          .map(result => result.value);
-
-        // Log de falhas para debug
-        const failedInstances = instancesWithStatus
-          .filter((result): result is PromiseRejectedResult => result.status === 'rejected');
-        
-        if (failedInstances.length > 0) {
-          console.warn(`⚠️ ${failedInstances.length} instâncias falharam ao carregar:`, 
-            failedInstances.map(f => f.reason));
-        }
-
-        setInstances(successfulInstances);
-        console.log(`✅ ${successfulInstances.length} instâncias carregadas para ${departmentName}`);
-        
-      } catch (error: any) {
-        console.error('❌ Erro ao carregar instâncias:', error);
-        setInstances([]);
-        toast({
-          title: "⚠️ Erro ao carregar instâncias",
-          description: "Usando modo offline. Evolution API pode estar indisponível.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
+      if (error) {
+        console.error('❌ Erro ao carregar instâncias do banco:', error);
+        throw error;
       }
-    };
 
+      console.log('📋 Instâncias do banco:', dbInstances?.length || 0);
+
+      // Mapear instâncias com status padrão
+      const instancesWithStatus = await Promise.allSettled((dbInstances || []).map(async (instance) => {
+        let evolutionStatus: 'open' | 'close' | 'connecting' | 'unknown' = 'close';
+        let isConnected = false;
+        
+        try {
+          // Tentar verificar status na Evolution API (com timeout)
+          const statusPromise = evolutionApi.getInstanceStatus(instance.instance_name);
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout after 5s')), 5000)
+          );
+          
+          const status = await Promise.race([statusPromise, timeoutPromise]) as EvolutionInstanceStatus;
+          if (status?.instance?.state) {
+            evolutionStatus = status.instance.state;
+            isConnected = status.instance.state === 'open';
+          }
+          
+        } catch (error: any) {
+          console.warn(`⚠️ Evolution API indisponível para ${instance.instance_name}:`, error.message);
+          evolutionStatus = 'unknown';
+        }
+
+        // Mapear para o formato esperado pelo componente
+        const mappedInstance: DepartmentInstance = {
+          id: instance.id,
+          instanceName: instance.instance_name,
+          status: evolutionStatus,
+          departmentId: instance.department_id,
+          departmentName: instance.department_name,
+          phone: instance.phone || undefined,
+          connected: isConnected,
+          lastUpdate: instance.updated_at ? new Date(instance.updated_at) : new Date(),
+          isDefault: instance.is_default || false,
+          createdBy: instance.created_by || undefined
+        };
+
+        return mappedInstance;
+      }));
+
+      // Filtrar resultados bem sucedidos
+      const validInstances = instancesWithStatus
+        .filter((result): result is PromiseFulfilledResult<DepartmentInstance> => result.status === 'fulfilled')
+        .map(result => result.value);
+
+      setInstances(validInstances);
+
+    } catch (error: any) {
+      console.error('❌ Erro ao carregar instâncias:', error);
+      setInstances([]);
+      toast({
+        title: "⚠️ Erro ao carregar instâncias",
+        description: "Usando modo offline. Evolution API pode estar indisponível.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [departmentId, departmentName, toast]);
+
+  useEffect(() => {
     loadDepartmentInstances();
 
     // Auto-refresh a cada 45 segundos (somente se Evolution API estiver disponível)
     const interval = setInterval(async () => {
       try {
         // Teste rápido se Evolution API está disponível
-        const connectionTest = await evolutionApiService.testConnection();
-        if (connectionTest.success) {
+        const health = await evolutionApi.checkHealth();
+        if (health.status === 'ok') {
           loadDepartmentInstances();
-        } else {
-          throw new Error('API offline');
         }
-      } catch {
-        // Se Evolution API não estiver disponível, apenas recarregar dados do banco
-        console.log('⚠️ Evolution API offline - recarregando apenas dados do banco');
-        const { data: dbInstances } = await supabase
-          .from('evolution_instances')
-          .select('*')
-          .eq('department_id', departmentId)
-          .eq('is_active', true);
-        
-                 setInstances((dbInstances || []).map(instance => ({
-           id: instance.id,
-           instanceName: instance.instance_name,
-           status: 'unknown' as const,
-           departmentId: instance.department_id,
-           departmentName: instance.department_name,
-           phone: instance.phone || undefined,
-           connected: false,
-           lastUpdate: instance.updated_at ? new Date(instance.updated_at) : new Date(),
-           isDefault: instance.is_default || false,
-           createdBy: instance.created_by || undefined
-         })));
+      } catch (error) {
+        console.warn('⚠️ Evolution API indisponível para auto-refresh');
       }
     }, 45000);
 
     return () => clearInterval(interval);
-  }, [departmentId, toast]);
+  }, [departmentId, departmentName, loadDepartmentInstances]);
 
   const createNewInstance = async () => {
-    if (!newInstanceName.trim()) {
-      toast({
-        title: "⚠️ Nome obrigatório",
-        description: "Digite um nome para a instância",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Gerar nome único baseado no departamento
-    const fullInstanceName = `${departmentName.toLowerCase().replace(/\s+/g, '-')}-${newInstanceName.trim().toLowerCase().replace(/\s+/g, '-')}`;
-
-    setIsCreating(true);
     try {
-      console.log(`🚀 Criando instância para ${departmentName}: ${fullInstanceName}`);
-      
-      // Verificar se Evolution API está configurada
-      const evolutionApiUrl = import.meta.env.VITE_EVOLUTION_API_URL;
-      let evolutionApiCreated = false;
-      
-      if (evolutionApiUrl && evolutionApiUrl !== 'http://localhost:8080') {
-        try {
-          const response = await evolutionApiService.createInstance(
-            fullInstanceName,
-            { webhookUrl: `${window.location.origin}/api/webhooks/evolution` }
-          );
-          console.log('✅ Instância criada na Evolution API:', response);
-          evolutionApiCreated = true;
-        } catch (apiError: any) {
-          console.warn('⚠️ Erro na Evolution API, continuando apenas local:', apiError.message);
-        }
-      } else {
-        console.log('📱 Modo offline - criando apenas localmente');
+      if (!newInstanceName) {
+        throw new Error('Nome da instância é obrigatório');
       }
-      
-      // Salvar no banco de dados
-      try {
-        const { data: savedInstance, error: dbError } = await supabase
-          .from('evolution_instances')
-          .insert([{
-            instance_name: fullInstanceName,
-            department_id: departmentId,
-            department_name: departmentName,
-            is_default: setAsDefault || instances.length === 0,
-            created_by: user?.id,
-            status: 'close',
-            metadata: {
-              creation_source: 'department_manager',
-              department_color: departmentColor
-            }
-          }])
-          .select()
-          .single();
 
-        if (dbError) {
-          console.warn('⚠️ Erro ao salvar no banco, mas instância criada:', dbError);
-        } else {
-          console.log('✅ Instância salva no banco:', savedInstance);
-        }
-      } catch (dbError) {
-        console.warn('⚠️ Banco pode não ter tabela evolution_instances, continuando...');
+      setIsLoading(true);
+
+      // Verificar se instância já existe
+      const exists = await evolutionApi.instanceExists(newInstanceName);
+      if (exists) {
+        throw new Error('Instância já existe');
       }
-      
-      // Adicionar à lista local
-      const newInstance: DepartmentInstance = {
-        instanceName: fullInstanceName,
-        status: 'close',
-        departmentId,
-        departmentName,
-        connected: false,
-        lastUpdate: new Date(),
-        isDefault: setAsDefault || instances.length === 0,
-        createdBy: user?.id
-      };
-      
-      setInstances(prev => [...prev, newInstance]);
+
+      // Criar instância na Evolution API
+      await evolutionApi.createInstance({
+        instanceName: newInstanceName,
+        qrcode: true,
+        webhook: `${window.location.origin}/webhook/evolution`
+      });
+
+      // Salvar no banco
+      const { error } = await supabase
+        .from('evolution_instances')
+        .insert({
+          instance_name: newInstanceName,
+          department_id: departmentId,
+          department_name: departmentName,
+          is_active: true,
+          created_by: 'system'
+        });
+
+      if (error) throw error;
+
+      // Recarregar dados
+      await loadDepartmentInstances();
+
       setShowCreateModal(false);
       setNewInstanceName('');
-      setSetAsDefault(false);
-      
+
       toast({
-        title: "✅ Instância criada!",
-        description: evolutionApiCreated 
-          ? `Instância "${fullInstanceName}" criada para ${departmentName}. Conecte via QR Code.`
-          : `Instância "${fullInstanceName}" criada localmente para ${departmentName}. Configure Evolution API para WhatsApp real.`,
+        title: "✅ Instância criada",
+        description: "A instância foi criada com sucesso. Aguarde o QR Code.",
       });
-      
-      // Abrir automaticamente o QR Code apenas se Evolution API estiver configurada
-      if (evolutionApiCreated) {
-        setTimeout(() => {
-          connectInstance(fullInstanceName);
-        }, 1000);
-      }
-      
+
     } catch (error: any) {
       console.error('❌ Erro ao criar instância:', error);
       toast({
-        title: "❌ Erro ao criar instância",
-        description: error.message || "Falha na criação da instância",
+        title: "⚠️ Erro ao criar instância",
+        description: error.message,
         variant: "destructive"
       });
     } finally {
-      setIsCreating(false);
+      setIsLoading(false);
     }
   };
 
-  const connectInstance = async (instanceName: string) => {
-    // Verificar se Evolution API está configurada
-    const evolutionApiUrl = import.meta.env.VITE_EVOLUTION_API_URL;
-    
-    if (!evolutionApiUrl || evolutionApiUrl === 'http://localhost:8080') {
-      toast({
-        title: "📱 Modo Offline",
-        description: `Instância "${instanceName}" está disponível apenas localmente. Configure Evolution API para WhatsApp real.`,
-        variant: "default"
-      });
-      
-      // Simular conexão bem-sucedida no modo offline
-      setInstances(prev => prev.map(instance => 
-        instance.instanceName === instanceName 
-          ? { ...instance, status: 'open', connected: true, lastUpdate: new Date() }
-          : instance
-      ));
-      
-      return;
-    }
-
-    setIsQRLoading(true);
-    setQrInstance(instanceName);
-    setShowQRModal(true);
-    setQrRefreshCount(0);
-    setCurrentQRCode('');
-    
+  // Função para obter QR Code
+  const getQRCode = async (instanceName: string): Promise<string | null> => {
     try {
-      console.log(`📱 Iniciando conexão para: ${instanceName}`);
-      
-      // Verificar se a instância existe
-      const exists = await evolutionApiService.instanceExists(instanceName);
-      
-      if (!exists) {
-        console.log(`⚠️ Instância "${instanceName}" não encontrada. Tentando criar...`);
-        
-        toast({
-          title: "⚠️ Instância não encontrada",
-          description: "Criando instância automaticamente...",
-        });
-        
-        try {
-          const createResult = await evolutionApiService.testCreateInstance(instanceName);
-          
-          if (!createResult.success) {
-            throw new Error(createResult.error);
-          }
-          
-          console.log('✅ Instância criada automaticamente');
-          toast({
-            title: "✅ Instância criada",
-            description: `Instância "${instanceName}" foi criada. Aguarde o QR Code...`,
-          });
-          
-          // Aguardar um pouco para a instância se estabilizar
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          
-        } catch (createError: any) {
-          console.error('❌ Erro ao criar instância automaticamente:', createError);
-          setIsQRLoading(false);
-          toast({
-            title: "❌ Erro ao criar instância",
-            description: createError.message || "Não foi possível criar a instância automaticamente",
-            variant: "destructive"
-          });
-          return;
-        }
+      const qrResponse = await evolutionApi.getInstanceQRCode(instanceName);
+      if (qrResponse && qrResponse.success && qrResponse.qrcode) {
+        return qrResponse.qrcode.base64;
       }
-      
-      // Tentar obter QR Code
-      const qrResponse = await evolutionApiService.getInstanceQRCode(instanceName);
-      
-      if (qrResponse && qrResponse.base64) {
-        setCurrentQRCode(qrResponse.base64);
-        
-        toast({
-          title: "📱 QR Code gerado",
-          description: "Escaneie com seu WhatsApp para conectar",
-        });
-        
-        // Iniciar monitoramento do status da conexão
-        startConnectionMonitoring(instanceName);
-        
-      } else {
-        throw new Error('QR Code não foi gerado pela API');
+      return null;
+    } catch (error: any) {
+      console.error('❌ Erro ao obter QR Code:', error);
+      return null;
+    }
+  };
+
+  // Função para monitorar conexão
+  const startConnectionMonitoring = async (instanceName: string) => {
+    try {
+      const status = await evolutionApi.getInstanceStatus(instanceName);
+      if (status.instance.state === 'open') {
+        // Instância já conectada
+        await loadDepartmentInstances();
+        return true;
       }
+      return false;
+    } catch (error) {
+      console.error('❌ Erro ao monitorar conexão:', error);
+      return false;
+    }
+  };
+
+  // Função para conectar instância
+  const connectInstance = async (instanceName: string) => {
+    try {
+      setIsLoading(true);
       
+      // Obter QR Code
+      const qrCode = await getQRCode(instanceName);
+      if (!qrCode) {
+        throw new Error('QR Code não disponível');
+      }
+
+      // Iniciar monitoramento
+      const isConnected = await startConnectionMonitoring(instanceName);
+      if (!isConnected) {
+        throw new Error('Falha ao conectar instância');
+      }
+
+      toast({
+        title: "✅ Instância conectada",
+        description: "A instância foi conectada com sucesso.",
+      });
     } catch (error: any) {
       console.error('❌ Erro ao conectar instância:', error);
-      setCurrentQRCode('');
-      
-      let errorMessage = error.message;
-      let showRetryOption = false;
-      let diagnosticInfo = '';
-      
-      // Diagnóstico detalhado do erro
-      if (error.message.includes('não existe') || error.message.includes('404')) {
-        errorMessage = `Instância "${instanceName}" não encontrada`;
-        diagnosticInfo = 'A instância pode não ter sido criada na Evolution API ou foi removida.';
-        showRetryOption = true;
-      } else if (error.message.includes('já está conectada')) {
-        errorMessage = 'Instância já conectada';
-        diagnosticInfo = 'Desconecte primeiro ou verifique se o WhatsApp já está vinculado.';
-      } else if (error.message.includes('estado inválido')) {
-        errorMessage = 'Estado da instância inválido';
-        diagnosticInfo = 'A instância pode estar em estado inconsistente. Tente reiniciar.';
-        showRetryOption = true;
-      } else if (error.message.includes('timeout') || error.message.includes('ECONNREFUSED')) {
-        errorMessage = 'Falha na conexão com Evolution API';
-        diagnosticInfo = 'Verifique se a Evolution API está online e acessível.';
-        showRetryOption = true;
-      } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-        errorMessage = 'Credenciais inválidas';
-        diagnosticInfo = 'Verifique se a API Key está correta nas configurações.';
-      } else if (error.message.includes('429')) {
-        errorMessage = 'Muitas tentativas';
-        diagnosticInfo = 'Aguarde alguns momentos antes de tentar novamente.';
-        showRetryOption = true;
-      }
-      
-      console.group('🔍 DIAGNÓSTICO DO ERRO QR CODE');
-      console.log('📊 Instância:', instanceName);
-      console.log('❌ Erro original:', error.message);
-      console.log('📝 Diagnóstico:', diagnosticInfo);
-      console.log('🔧 Retry disponível:', showRetryOption);
-      console.log('🌐 Evolution API URL:', import.meta.env.VITE_EVOLUTION_API_URL);
-      console.log('🔑 API Key configurada:', !!import.meta.env.VITE_EVOLUTION_API_KEY);
-      console.groupEnd();
-      
       toast({
-        title: "❌ Erro ao gerar QR Code",
-        description: `${errorMessage}. ${diagnosticInfo}`,
-        variant: "destructive",
-        duration: showRetryOption ? 8000 : 5000,
-        action: showRetryOption ? (
-          <Button 
-            size="sm" 
-            onClick={() => handleInstanceRecovery(instanceName)}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            Tentar Corrigir
-          </Button>
-        ) : undefined
+        title: "⚠️ Erro ao conectar instância",
+        description: error.message,
+        variant: "destructive"
       });
     } finally {
-      setIsQRLoading(false);
+      setIsLoading(false);
     }
-  };
-
-  // Função para monitorar o status da conexão após gerar QR Code
-  const startConnectionMonitoring = (instanceName: string) => {
-    console.log(`🔍 Iniciando monitoramento de conexão para: ${instanceName}`);
-    
-    const monitoringInterval = setInterval(async () => {
-      try {
-        const status = await evolutionApiService.getInstanceStatus(instanceName, false);
-        
-        if (status?.instance?.state === 'open') {
-          // Conexão estabelecida com sucesso!
-          console.log(`✅ Instância ${instanceName} conectada com sucesso!`);
-          
-          // Atualizar lista local
-          setInstances(prev => prev.map(instance => 
-            instance.instanceName === instanceName 
-              ? { ...instance, status: 'open', connected: true, lastUpdate: new Date() }
-              : instance
-          ));
-          
-          // Fechar modal do QR Code
-          setShowQRModal(false);
-          setCurrentQRCode('');
-          
-          // Mostrar mensagem de sucesso
-          toast({
-            title: "🎉 Conectado com sucesso!",
-            description: `A instância "${instanceName}" foi conectada ao WhatsApp. Você já pode enviar e receber mensagens!`,
-            className: "border-green-200 bg-green-50 text-green-800",
-            duration: 5000
-          });
-          
-          // Parar monitoramento
-          clearInterval(monitoringInterval);
-          
-          // Opcional: Fazer uma chamada para atualizar a lista completa
-          setTimeout(() => {
-            console.log('🔄 Atualizando lista completa de instâncias...');
-            loadDepartmentInstances();
-          }, 2000);
-          
-        } else if (status?.instance?.state === 'connecting') {
-          console.log(`🔄 Instância ${instanceName} ainda conectando...`);
-          
-          // Atualizar status local para connecting
-          setInstances(prev => prev.map(instance => 
-            instance.instanceName === instanceName 
-              ? { ...instance, status: 'connecting', connected: false, lastUpdate: new Date() }
-              : instance
-          ));
-        }
-        
-      } catch (error: any) {
-        console.warn(`⚠️ Erro no monitoramento de ${instanceName}:`, error.message);
-      }
-    }, 3000); // Verificar a cada 3 segundos
-    
-    // Parar monitoramento após 5 minutos para evitar polling infinito
-    setTimeout(() => {
-      clearInterval(monitoringInterval);
-      console.log(`⏱️ Timeout no monitoramento de ${instanceName}`);
-    }, 5 * 60 * 1000);
   };
 
   const refreshQRCode = async () => {
@@ -550,7 +319,7 @@ export const DepartmentEvolutionManager = ({
     setQrRefreshCount(prev => prev + 1);
     
     try {
-      const qrResponse = await evolutionApiService.getInstanceQRCode(qrInstance);
+      const qrResponse = await evolutionApi.getInstanceQRCode(qrInstance);
       
       if (qrResponse && qrResponse.base64) {
         // O serviço já retorna com o prefixo correto
@@ -573,96 +342,57 @@ export const DepartmentEvolutionManager = ({
 
   const disconnectInstance = async (instanceName: string) => {
     try {
-      await logoutInstance(instanceName);
-      
-      // Atualizar lista local
-      setInstances(prev => prev.map(instance => 
-        instance.instanceName === instanceName 
-          ? { ...instance, status: 'close', connected: false, lastUpdate: new Date() }
-          : instance
-      ));
+      setIsLoading(true);
+      await evolutionApi.logoutInstance(instanceName);
+      await loadDepartmentInstances();
       
       toast({
-        title: "👋 Instância desconectada",
-        description: `"${instanceName}" foi desconectada do WhatsApp`,
+        title: "✅ Instância desconectada",
+        description: "A instância foi desconectada com sucesso.",
       });
     } catch (error: any) {
+      console.error('❌ Erro ao desconectar instância:', error);
       toast({
-        title: "❌ Erro ao desconectar",
+        title: "⚠️ Erro ao desconectar instância",
         description: error.message,
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const deleteInstance = async (instanceName: string) => {
     try {
-      let deletedFromApi = false;
-      
-      // Tentar deletar da Evolution API primeiro
-      try {
-        await evolutionApiService.deleteInstance(instanceName);
-        deletedFromApi = true;
-        console.log('✅ Instância deletada da Evolution API:', instanceName);
-      } catch (apiError: any) {
-        if (apiError.response?.status === 404) {
-          console.log('ℹ️ Instância não existe na Evolution API (404) - apenas removendo do banco:', instanceName);
-        } else {
-          console.warn('⚠️ Erro ao deletar da Evolution API:', apiError.message);
-          // Para outros erros além de 404, ainda vamos tentar continuar
-        }
-      }
-      
-      // Sempre tentar remover do banco de dados local
-      try {
-        const { error: dbError } = await supabase
-          .from('evolution_instances')
-          .delete()
-          .eq('instance_name', instanceName)
-          .eq('department_id', departmentId);
-          
-        if (dbError) {
-          console.error('❌ Erro ao remover do banco:', dbError);
-          throw new Error(`Erro no banco de dados: ${dbError.message}`);
-        }
-        
-        console.log('✅ Instância removida do banco:', instanceName);
-      } catch (dbError: any) {
-        console.error('❌ Erro crítico ao remover do banco:', dbError);
-        
-        // Se não conseguiu remover do banco, mas removeu da API, alertar
-        if (deletedFromApi) {
-          toast({
-            title: "⚠️ Remoção parcial",
-            description: `Instância removida da Evolution API, mas erro no banco: ${dbError.message}`,
-            variant: "destructive"
-          });
-          return;
-        } else {
-          throw dbError;
-        }
-      }
-      
-      // Remover da lista local (interface)
-      setInstances(prev => prev.filter(instance => instance.instanceName !== instanceName));
-      
-      // Mensagem de sucesso adequada
-      const successMessage = deletedFromApi 
-        ? `"${instanceName}" foi deletada da Evolution API e banco local`
-        : `"${instanceName}" foi removida do banco local (não existia na Evolution API)`;
-      
+      setIsLoading(true);
+
+      // Deletar da Evolution API
+      await evolutionApi.deleteInstance(instanceName);
+
+      // Deletar do banco (soft delete)
+      const { error } = await supabase
+        .from('evolution_instances')
+        .update({ is_active: false })
+        .eq('instance_name', instanceName);
+
+      if (error) throw error;
+
+      // Recarregar dados
+      await loadDepartmentInstances();
+
       toast({
-        title: "🗑️ Instância removida",
-        description: successMessage,
+        title: "✅ Instância deletada",
+        description: "A instância foi removida com sucesso.",
       });
-      
     } catch (error: any) {
-      console.error('❌ Erro geral ao deletar instância:', error);
+      console.error('❌ Erro ao deletar instância:', error);
       toast({
-        title: "❌ Erro ao deletar",
-        description: error.message || 'Erro desconhecido ao deletar instância',
+        title: "⚠️ Erro ao deletar instância",
+        description: error.message,
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -931,6 +661,48 @@ export const DepartmentEvolutionManager = ({
   const connectedCount = instances.filter(i => i.connected).length;
   const totalInstances = instances.length;
 
+  // Função para recuperar instância com problemas
+  const handleInstanceRecovery = async (instanceName: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Tentar reconectar a instância
+      await evolutionApi.createInstance({
+        instanceName,
+        qrcode: true,
+        webhook: `${window.location.origin}/webhook/evolution`
+      });
+
+      // Recarregar dados
+      await loadDepartmentInstances();
+
+      toast({
+        title: "✅ Instância recuperada",
+        description: "A instância foi reconectada com sucesso.",
+      });
+    } catch (error: any) {
+      console.error('❌ Erro ao recuperar instância:', error);
+      toast({
+        title: "⚠️ Erro ao recuperar instância",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Função para verificar se instância existe
+  const checkInstanceExists = async (instanceName: string): Promise<boolean> => {
+    try {
+      const instances = await evolutionApi.fetchInstances(instanceName);
+      return instances.length > 0;
+    } catch (error) {
+      console.error('❌ Erro ao verificar instância:', error);
+      return false;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header do Departamento */}
@@ -973,7 +745,7 @@ export const DepartmentEvolutionManager = ({
                   let connected = false;
                   
                                      try {
-                     const statusResponse = await evolutionApiService.getInstanceStatus(dbInstance.instance_name);
+                     const statusResponse = await evolutionApi.getInstanceStatus(dbInstance.instance_name);
                      currentStatus = statusResponse.instance.state as 'open' | 'close' | 'connecting';
                      connected = currentStatus === 'open';
                    } catch (error) {
