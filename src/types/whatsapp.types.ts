@@ -57,6 +57,7 @@ export interface UseWhatsAppInstancesReturn {
   error: string | null;
   refreshInstances: () => Promise<void>;
   createInstance: (departmentId: string, params: CreateInstanceParams) => Promise<WhatsAppInstance>;
+  createInstanceEvolutionAPI: (instanceData: any) => Promise<any>;
   connectInstance: (instanceName: string) => Promise<void>;
   getQRCode: (instanceName: string) => Promise<QRCodeResponse>;
   updateSettings: (instanceName: string, settings: Partial<WhatsAppSettings>) => Promise<void>;

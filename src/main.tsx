@@ -293,6 +293,12 @@ import './utils/websocket-production-debug.ts'
 import './utils/test-websocket-final.ts'
 import './utils/supabase-debug-keys.ts'
 
+// Importar scripts de debug para desenvolvimento
+if (import.meta.env.DEV) {
+  import('./utils/debug-evolution-api.js');
+  import('./utils/test-instance-creation.js');
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>

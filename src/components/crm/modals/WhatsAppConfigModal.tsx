@@ -165,12 +165,23 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
 
   // Criar nova instância
   const handleCreateInstance = async () => {
-    if (!departmentId) return;
+    if (!departmentId) {
+      console.error('❌ Department ID não fornecido');
+      toast({
+        title: "Erro",
+        description: "ID do departamento não encontrado",
+        variant: "destructive"
+      });
+      return;
+    }
 
     setIsCreating(true);
     try {
-      await createInstanceEvolutionAPI({
+      console.log('🚀 Iniciando criação da instância para departamento:', departmentId, departmentName);
+
+      const instanceData = {
         instanceName: `whatsapp-dep-${departmentId}`,
+        departmentId: departmentId,
         token: '', // preencha se necessário
         qrcode: true,
         integration: 'WHATSAPP-BAILEYS',
@@ -180,16 +191,24 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
         readStatus: true,
         rejectCall: true,
         syncFullHistory: false,
-        // ...adicione outros campos obrigatórios conforme necessário
-      });
+        webhook: 'https://webhook.bkcrm.devsible.com.br/webhook/evolution'
+      };
+
+      console.log('📋 Dados da instância:', instanceData);
+
+      const result = await createInstanceEvolutionAPI(instanceData);
+      
+      console.log('✅ Instância criada com sucesso:', result);
 
       toast({
         title: "Integração criada",
-        description: "WhatsApp configurado para este departamento",
+        description: `WhatsApp configurado para ${departmentName}`,
       });
 
       await refreshInstances();
     } catch (error: any) {
+      console.error('❌ Erro detalhado ao criar integração:', error);
+      
       toast({
         title: "Erro ao criar integração",
         description: error.message || "Ocorreu um erro inesperado",
@@ -282,39 +301,65 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : !departmentInstance ? (
-              <BorderBeam intensity="normal">
-                <div className="text-center space-y-4 py-2">
-                  <div className="flex flex-col items-center gap-3">
-                    <Smartphone className="w-12 h-12 text-muted-foreground/50" />
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">
-                        Nenhuma integração configurada
-                      </p>
-                      <p className="text-xs text-muted-foreground/70">
-                        Configure o WhatsApp para este departamento
-                      </p>
-                    </div>
+              <BentoItem className="col-span-2 p-6">
+                <div className="text-center">
+                  <Smartphone className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Nenhuma integração configurada</h3>
+                  <p className="text-gray-600 mb-6">Configure o WhatsApp para este departamento</p>
+                  
+                  <div className="space-y-3">
+                    <Button
+                      onClick={handleCreateInstance}
+                      disabled={isCreating}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white"
+                      size="lg"
+                    >
+                      {isCreating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Criando Integração...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Criar Integração WhatsApp
+                        </>
+                      )}
+                    </Button>
+                    
+                    <Button
+                      onClick={async () => {
+                        console.log('🧪 Testando conectividade...');
+                        try {
+                          if (window.quickTestEvolution) {
+                            const result = await window.quickTestEvolution();
+                            toast({
+                              title: result ? "✅ Conectividade OK" : "❌ Problema de conectividade",
+                              description: result ? "Evolution API está respondendo" : "Verifique o console para detalhes",
+                              variant: result ? "default" : "destructive"
+                            });
+                          } else {
+                            console.log('⚠️ Função de teste não carregada. Execute: debugEvolutionAPI()');
+                          }
+                        } catch (error) {
+                          console.error('❌ Erro no teste:', error);
+                          toast({
+                            title: "Erro no teste",
+                            description: "Verifique o console para detalhes",
+                            variant: "destructive"
+                          });
+                        }
+                      }}
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      <Settings2 className="w-4 h-4 mr-2" />
+                      Testar Conectividade
+                    </Button>
                   </div>
-
-                  <Button
-                    onClick={handleCreateInstance}
-                    disabled={isCreating}
-                    className="w-full max-w-sm mx-auto bg-green-600 hover:bg-green-700"
-                  >
-                    {isCreating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Configurando...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Criar Integração WhatsApp
-                      </>
-                    )}
-                  </Button>
                 </div>
-              </BorderBeam>
+              </BentoItem>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <BentoItem>
