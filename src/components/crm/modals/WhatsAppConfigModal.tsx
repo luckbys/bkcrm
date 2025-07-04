@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import WhatsAppSettingsModal from './WhatsAppSettingsModal';
+import { CompleteFlowValidator } from '@/components/chat/CompleteFlowValidator';
 
 // Bento Grid Item Component
 const BentoItem = ({ children, className }: { children: React.ReactNode; className?: string }) => (
@@ -141,6 +142,7 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showValidation, setShowValidation] = useState(false);
 
   // Configurações padrão
   const defaultSettings = {
@@ -549,6 +551,15 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
                   <Settings2 className="w-4 h-4 mr-2" />
                   Configurações
                 </Button>
+
+                <Button
+                  onClick={() => setShowValidation(true)}
+                  variant="outline"
+                  className="border-blue-200"
+                >
+                  <Zap className="w-4 h-4 mr-2 text-blue-600" />
+                  Validar Integração
+                </Button>
               </div>
             )}
 
@@ -578,6 +589,19 @@ const WhatsAppConfigModal: React.FC<WhatsAppConfigModalProps> = ({
           onClose={() => setShowSettings(false)}
           instance={departmentInstance}
         />
+      )}
+
+      {showValidation && (
+        <Dialog open={showValidation} onOpenChange={setShowValidation}>
+          <DialogContent className="max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>Validação Completa da Instância WhatsApp</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <CompleteFlowValidator />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
