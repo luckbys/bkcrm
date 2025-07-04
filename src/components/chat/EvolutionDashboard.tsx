@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useEvolutionWebhook } from '@/hooks/useEvolutionWebhook';
-import { evolutionApi, HealthCheckResponse, StatsResponse, EvolutionInstance } from '@/services/evolutionApiService';
+import { evolutionApi, HealthCheckResponse, StatsResponse, EvolutionInstance } from '@/services/evolutionApi.';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { evolutionApi } from '@/services/evolutionApiService';
+import { evolutionApi } from '@/services/evolutionApi.';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Smartphone, 

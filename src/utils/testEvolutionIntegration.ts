@@ -1,5 +1,5 @@
 // Test Evolution API Integration
-import { evolutionApi } from '@/services/evolutionApiService';
+import { evolutionApi } from '@/services/evolutionApi';
 import { API_CONFIG } from '@/config';
 
 export interface IntegrationTestResult {

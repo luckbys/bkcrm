@@ -660,9 +660,9 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
   
   try {
     // Importar dinamicamente o serviço
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const { evolutionApi } = await import('@/services/evolutionApi');
     
-    const result = await evolutionApiService.testConnection();
+    const result = await evolutionApi.testConnection();
     
     if (result.success) {
       console.log('✅ [DEV] Evolution API conectada com sucesso!');
@@ -684,8 +684,8 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
   console.log('📋 [DEV] Listando instâncias existentes...');
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
-    const instances = await evolutionApiService.listInstances();
+    const { evolutionApi } = await import('@/services/evolutionApi');
+    const instances = await evolutionApi.listInstances();
     
     console.log(`✅ [DEV] Encontradas ${instances?.length || 0} instância(s):`);
     instances?.forEach((instance: any, index: number) => {
@@ -709,9 +709,9 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
   console.log(`🆕 [DEV] Criando instância de teste: ${instanceName}`);
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const { evolutionApi } = await import('@/services/evolutionApi');
     
-    const result = await evolutionApiService.testCreateInstance(instanceName);
+    const result = await evolutionApi.testCreateInstance(instanceName);
       
       if (result.success) {
       console.log('✅ [DEV] Instância criada com sucesso!');
@@ -733,15 +733,15 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
   console.log(`📱 [DEV] Testando QR Code para instância: ${instanceName}`);
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const { evolutionApi } = await import('@/services/evolutionApi');
     
     // Verificar se existe primeiro
-    const exists = await evolutionApiService.instanceExists(instanceName);
+    const exists = await evolutionApi.instanceExists(instanceName);
     console.log(`🔍 [DEV] Instância ${instanceName} existe:`, exists);
     
     if (!exists) {
       console.log('⚠️ [DEV] Instância não existe. Criando...');
-      const createResult = await evolutionApiService.testCreateInstance(instanceName);
+      const createResult = await evolutionApi.testCreateInstance(instanceName);
       
       if (!createResult.success) {
         throw new Error('Falha ao criar instância: ' + createResult.error);
@@ -752,7 +752,7 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
     }
     
     // Tentar obter QR Code
-    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
+    const qrResult = await evolutionApi.getInstanceQRCode(instanceName);
     
     if (qrResult && qrResult.base64) {
       console.log('✅ [DEV] QR Code obtido com sucesso!');
@@ -779,8 +779,8 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
   console.log(`📊 [DEV] Verificando status da instância: ${instanceName}`);
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
-    const status = await evolutionApiService.getInstanceStatus(instanceName);
+    const { evolutionApi } = await import('@/services/evolutionApi');
+    const status = await evolutionApi.getInstanceStatus(instanceName);
     
     console.log('✅ [DEV] Status obtido:', status);
     return status;
@@ -795,8 +795,8 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
   console.log(`🔄 [DEV] Reiniciando conexão da instância: ${instanceName}`);
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
-    const result = await evolutionApiService.restartInstanceConnection(instanceName);
+    const { evolutionApi } = await import('@/services/evolutionApi');
+    const result = await evolutionApi.restartInstanceConnection(instanceName);
     
     console.log('✅ [DEV] Conexão reiniciada:', result);
     return result;
@@ -811,8 +811,8 @@ console.log('🛠️ [DEV] Dev Helpers carregados! Digite devHelp() para ver com
   console.log(`🗑️ [DEV] Deletando instância: ${instanceName}`);
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
-    await evolutionApiService.deleteInstance(instanceName);
+    const { evolutionApi } = await import('@/services/evolutionApi');
+    await evolutionApi.deleteInstance(instanceName);
     
     console.log('✅ [DEV] Instância deletada com sucesso!');
     return { success: true };
@@ -883,14 +883,14 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
   console.log('📱 [DEV] Testando QR Code da instância financeiro-encontra...');
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const { evolutionApi } = await import('@/services/evolutionApi');
     
     // Verificar status primeiro
-    const status = await evolutionApiService.getInstanceStatus('financeiro-encontra');
+    const status = await evolutionApi.getInstanceStatus('financeiro-encontra');
     console.log('📊 [DEV] Status atual:', status);
     
     // Tentar obter QR Code
-    const qrResult = await evolutionApiService.getInstanceQRCode('financeiro-encontra');
+    const qrResult = await evolutionApi.getInstanceQRCode('financeiro-encontra');
     
     if (qrResult && qrResult.base64) {
       console.log('✅ [DEV] QR Code obtido com sucesso!');
@@ -944,11 +944,11 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
   console.log('🔍 [DEV] Investigando problemas de nomes de instâncias...');
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const { evolutionApi } = await import('@/services/evolutionApi');
     
     // 1. Listar todas as instâncias
     console.log('📋 [DEV] Listando instâncias existentes...');
-    const instances = await evolutionApiService.listInstances();
+    const instances = await evolutionApi.listInstances();
     
     if (instances && instances.length > 0) {
       console.log(`✅ [DEV] Encontradas ${instances.length} instância(s):`);
@@ -976,7 +976,7 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
       console.log(`\n🧪 [DEV] Testando instância: "${instanceName}"`);
       
       try {
-        const status = await evolutionApiService.getInstanceStatus(instanceName);
+        const status = await evolutionApi.getInstanceStatus(instanceName);
         console.log(`✅ [DEV] "${instanceName}" existe! Status:`, status);
       } catch (error: any) {
         if (error.message.includes('404')) {
@@ -999,10 +999,10 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
   console.log('🎯 [DEV] Testando com instância correta...');
   
   try {
-    const { evolutionApiService } = await import('@/services/evolutionApiService');
+    const { evolutionApi } = await import('@/services/evolutionApi');
     
     // Primeiro descobrir qual instância do financeiro existe
-    const instances = await evolutionApiService.listInstances();
+    const instances = await evolutionApi.listInstances();
     const financeiroInstance = instances?.find((inst: any) => {
       const name = inst.name || inst.instanceName || '';
       return name.includes('financeiro');
@@ -1016,7 +1016,7 @@ console.log('💡 [DEV] Digite evolutionCommands() para ver todos os comandos');
     const instanceName = financeiroInstance.name || financeiroInstance.instanceName;
     console.log(`📱 [DEV] Testando QR Code da instância encontrada: "${instanceName}"`);
     
-    const qrResult = await evolutionApiService.getInstanceQRCode(instanceName);
+    const qrResult = await evolutionApi.getInstanceQRCode(instanceName);
     
     if (qrResult) {
       console.log('✅ [DEV] QR Code obtido com sucesso!');
@@ -1160,7 +1160,7 @@ export const configureWebhookToCRM = async (crmDomain: string = 'localhost:3007'
     console.log('🎯 Configurando webhook para o próprio CRM...');
     
     // Importar funções específicas do Evolution API Service
-    const { listInstances, getInstanceWebhook, removeInstanceWebhook, setInstanceWebhook } = await import('@/services/evolutionApiService');
+    const { listInstances, getInstanceWebhook, removeInstanceWebhook, setInstanceWebhook } = await import('@/services/evolutionApi');
     
     // Determinar URL baseada no ambiente
     const webhookUrl = crmDomain.includes('localhost') 
@@ -1323,11 +1323,11 @@ export const checkWebhookStatus = async () => {
   try {
     console.log('🔍 Verificando status atual dos webhooks...');
     
-    const instances = await evolutionApiService.listInstances();
+    const instances = await evolutionApi.listInstances();
     
     for (const instance of instances.data) {
       try {
-        const webhook = await evolutionApiService.getInstanceWebhook(instance.name);
+        const webhook = await evolutionApi.getInstanceWebhook(instance.name);
         
         console.log(`📱 ${instance.name}:`);
         console.log(`   Estado: ${instance.state}`);

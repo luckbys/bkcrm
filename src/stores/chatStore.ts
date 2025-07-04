@@ -54,7 +54,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     
     try {
       // A lógica de envio será implementada nos componentes específicos
-      // que usam evolutionApiService diretamente
+      // que usam evolutionApi diretamente
       console.log('✅ [CHAT] Mensagem enviada com sucesso');
     } catch (error) {
       console.error('❌ [CHAT] Erro ao enviar mensagem:', error);

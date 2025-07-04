@@ -1,339 +1,397 @@
-import {
-  EvolutionAPIConfig,
-  CreateInstanceData,
-  WhatsAppInstance,
-  QRCodeResponse,
-  ConnectionState,
-  SendMessageData,
-  EvolutionAPIResponse,
-  DepartmentWhatsAppConfig
-} from '../types/whatsapp.types';
+import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios';
+import { API_CONFIG, EVOLUTION_CONFIG, APP_CONFIG } from '@/config';
 
-class EvolutionAPIService {
-  private config: EvolutionAPIConfig;
-  private baseHeaders: Record<string, string>;
+// Configurações da Evolution API
+const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL || 'https://webhook.bkcrm.devsible.com.br/api';
+const API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
-  constructor(config?: EvolutionAPIConfig) {
-    // Usar import.meta.env ao invés de process.env no Vite
-    this.config = config || {
-      baseUrl: import.meta.env.VITE_EVOLUTION_API_URL || 'http://localhost:8080',
-      apiKey: import.meta.env.VITE_EVOLUTION_API_KEY || '',
-      globalApiKey: import.meta.env.VITE_EVOLUTION_GLOBAL_API_KEY || ''
+export interface WebhookPayload {
+  event: string;
+  instance: string;
+  data: any;
+  timestamp: string;
+  type?: string;
+}
+
+// Rate limiting e retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 segundo
+const RATE_LIMIT_DELAY = 100; // 100ms entre requests
+
+interface HealthCheckResponse {
+  status: string;
+  timestamp: string;
+  uptime: number;
+  version?: string;
+}
+
+interface StatsResponse {
+  success: boolean;
+  server: {
+    uptime: number;
+    memory: {
+      rss: number;
+      heapTotal: number;
+      heapUsed: number;
+      external: number;
     };
+    cpu: any;
+  };
+  websocket: {
+    connectedClients: number;
+    totalConnections: number;
+    rooms: string[];
+  };
+  evolution: {
+    instances: number;
+    connected: number;
+    disconnected: number;
+  };
+}
 
-    this.baseHeaders = {
-      'Content-Type': 'application/json',
-      'apikey': this.config.globalApiKey || this.config.apiKey
-    };
-  }
+interface EvolutionInstance {
+  instanceName: string;
+  status: 'open' | 'close' | 'connecting';
+  serverUrl: string;
+  apikey: string;
+  qrcode?: {
+    base64: string;
+    code: string;
+  };
+}
 
-  // Configurar URL e API Key
-  setConfig(config: Partial<EvolutionAPIConfig>) {
-    this.config = { ...this.config, ...config };
-    this.baseHeaders.apikey = this.config.globalApiKey || this.config.apiKey;
-  }
+interface SendMessageRequest {
+  instance: string;
+  to: string;
+  message: string;
+  type?: 'text' | 'image' | 'video' | 'audio' | 'document';
+  options?: {
+    delay?: number;
+    presence?: 'composing' | 'recording';
+    quoted?: string;
+  };
+}
 
-  private async makeRequest<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${this.config.baseUrl}${endpoint}`;
-    
-    const response = await fetch(url, {
+interface SendMessageResponse {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+interface MessagesResponse {
+  success: boolean;
+  messages: any[];
+  count: number;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+}
+
+class EvolutionApiService {
+  private api: AxiosInstance;
+
+  constructor() {
+    this.api = axios.create({
+      baseURL: API_CONFIG.API_BASE_URL,
+      timeout: APP_CONFIG.API_TIMEOUT,
       headers: {
-        ...this.baseHeaders,
-        ...options.headers
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    this.setupInterceptors();
+  }
+
+  private setupInterceptors(): void {
+    // Request interceptor
+    this.api.interceptors.request.use(
+      (config) => {
+        const method = config.method?.toUpperCase() || 'GET';
+        const url = config.url || '';
+        
+        if (APP_CONFIG.DEBUG) {
+          console.log(`🚀 [Evolution API] ${method} ${url}`);
+          if (config.data) {
+            console.log('📤 Request Data:', config.data);
+          }
+        }
+        
+      return config;
       },
-      ...options
-    });
+      (error) => {
+        console.error('❌ [Evolution API] Request Error:', error);
+        return Promise.reject(error);
+      }
+    );
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Evolution API Error: ${response.status} - ${errorData}`);
+    // Response interceptor
+    this.api.interceptors.response.use(
+      (response: AxiosResponse) => {
+        const method = response.config.method?.toUpperCase() || 'GET';
+        const url = response.config.url || '';
+        const status = response.status;
+        
+        if (APP_CONFIG.DEBUG) {
+          console.log(`✅ [Evolution API] ${method} ${url} - ${status}`);
+          if (response.data) {
+            console.log('📥 Response Data:', response.data);
+          }
+        }
+        
+        return response;
+      },
+      (error) => {
+        const method = error.config?.method?.toUpperCase() || 'GET';
+        const url = error.config?.url || '';
+        const status = error.response?.status || 'No Response';
+        
+        console.error(`❌ [Evolution API] ${method} ${url} - ${status}`, error.message);
+        
+        if (error.response?.data) {
+          console.error('📥 Error Response:', error.response.data);
+        }
+        
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  // Health check do servidor webhook
+  async checkHealth(): Promise<HealthCheckResponse> {
+    try {
+      const response = await this.api.get<HealthCheckResponse>('/health');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Health check failed: ${error.message}`);
     }
-
-    return response.json();
   }
 
-  // ===== GERENCIAMENTO DE INSTÂNCIAS =====
-
-  // Criar nova instância
-  async createInstance(data: CreateInstanceData): Promise<EvolutionAPIResponse<WhatsAppInstance>> {
-    return this.makeRequest(`/instance/create`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
+  // Buscar estatísticas do servidor
+  async getStats(): Promise<StatsResponse> {
+    try {
+      const response = await this.api.get<StatsResponse>('/stats');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to get stats: ${error.message}`);
+    }
   }
 
-  // Listar todas as instâncias
-  async fetchInstances(): Promise<WhatsAppInstance[]> {
-    const response = await this.makeRequest<WhatsAppInstance[]>('/instance/fetchInstances');
-    return Array.isArray(response) ? response : [];
+  // Buscar estatísticas WebSocket
+  async getWebSocketStats(): Promise<any> {
+    try {
+      const response = await this.api.get('/ws-stats');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to get WebSocket stats: ${error.message}`);
+    }
   }
 
-  // Buscar instância específica
-  async fetchInstance(instanceName: string): Promise<WhatsAppInstance> {
-    return this.makeRequest(`/instance/fetchInstance/${instanceName}`);
+  // Buscar instâncias Evolution API
+  async fetchInstances(instanceName?: string): Promise<EvolutionInstance[]> {
+    try {
+      const url = instanceName 
+        ? `/instance/fetchInstances?instanceName=${instanceName}` 
+        : '/instance/fetchInstances';
+      
+      const response = await this.api.get<EvolutionInstance[]>(url);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to fetch instances: ${error.message}`);
+    }
   }
 
-  // Conectar instância
-  async connectInstance(instanceName: string): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/instance/connect/${instanceName}`, {
-      method: 'GET'
-    });
+  // Buscar status de uma instância específica
+  async getInstanceStatus(instanceName: string): Promise<EvolutionInstance> {
+    try {
+      const response = await this.api.get<EvolutionInstance>(`/instance/status/${instanceName}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to get instance status: ${error.message}`);
+    }
   }
 
-  // Desconectar instância
-  async logoutInstance(instanceName: string): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/instance/logout/${instanceName}`, {
-      method: 'DELETE'
-    });
+  // Buscar QR Code de uma instância
+  async getInstanceQRCode(instanceName: string): Promise<string | null> {
+    try {
+      const response = await this.api.get(`/instance/qrcode/${instanceName}`);
+      return response.data.qrCode || null;
+    } catch (error: any) {
+      console.warn(`QR Code not available for ${instanceName}:`, error.message);
+      return null;
+    }
   }
 
-  // Deletar instância
-  async deleteInstance(instanceName: string): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/instance/delete/${instanceName}`, {
-      method: 'DELETE'
-    });
+  // Buscar mensagens de uma instância
+  async getMessages(
+    instanceName: string, 
+    limit: number = 50, 
+    offset: number = 0,
+    filters?: {
+      fromMe?: boolean;
+      messageType?: string;
+      startDate?: string;
+      endDate?: string;
+    }
+  ): Promise<MessagesResponse> {
+    try {
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        offset: offset.toString(),
+        ...filters
+      });
+
+      const response = await this.api.get<MessagesResponse>(
+        `/messages/${instanceName}?${params}`
+      );
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to get messages: ${error.message}`);
+    }
   }
 
-  // Restart instância
-  async restartInstance(instanceName: string): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/instance/restart/${instanceName}`, {
-      method: 'PUT'
-    });
+  // Enviar mensagem (através do webhook)
+  async sendMessage(request: SendMessageRequest): Promise<SendMessageResponse> {
+    try {
+      const response = await this.api.post<SendMessageResponse>('/send-message', {
+        instance: request.instance,
+        to: request.to,
+        message: request.message,
+        type: request.type || 'text',
+        options: request.options || {}
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to send message: ${error.message}`);
+    }
   }
 
-  // ===== STATUS E CONEXÃO =====
-
-  // Obter estado da conexão
-  async getConnectionState(instanceName: string): Promise<ConnectionState> {
-    return this.makeRequest(`/instance/connectionState/${instanceName}`);
+  // Testar envio de mensagem
+  async testSendMessage(instanceName?: string): Promise<SendMessageResponse> {
+    try {
+      const instance = instanceName || EVOLUTION_CONFIG.DEFAULT_INSTANCE;
+      const response = await this.api.post<SendMessageResponse>('/test-send', {
+        instance,
+        to: '5511999999999@s.whatsapp.net', // Número de teste
+        message: `🧪 Teste de envio - ${new Date().toLocaleString()}`,
+        type: 'text'
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to test send message: ${error.message}`);
+    }
   }
 
-  // Obter QR Code - O QR code é retornado pelo endpoint /connect quando a instância está NOT_CONNECTED
-  async getQRCode(instanceName: string): Promise<QRCodeResponse> {
-    return this.makeRequest(`/instance/connect/${instanceName}`);
+  // Verificar instância na Evolution API
+  async checkEvolutionInstance(instanceName?: string): Promise<any> {
+    try {
+      const instance = instanceName || EVOLUTION_CONFIG.DEFAULT_INSTANCE;
+      const response = await this.api.get(`/check-instance?instance=${instance}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to check Evolution instance: ${error.message}`);
+    }
   }
 
-  // Status da instância
-  async getInstanceStatus(instanceName: string): Promise<{ instance: { state: string; status: string } }> {
-    return this.makeRequest(`/instance/status/${instanceName}`);
+  // Criar/configurar instância Evolution API
+  async createInstance(instanceData: {
+    instanceName: string;
+    token?: string;
+    qrcode?: boolean;
+    webhook?: string;
+  }): Promise<any> {
+    try {
+      const response = await this.api.post('/create-instance', {
+        instanceName: instanceData.instanceName,
+        token: instanceData.token || EVOLUTION_CONFIG.GLOBAL_API_KEY,
+        qrcode: instanceData.qrcode !== false,
+        webhook: instanceData.webhook || EVOLUTION_CONFIG.WEBHOOK_URL,
+        events: [
+      'APPLICATION_STARTUP',
+      'QRCODE_UPDATED',
+          'CONNECTION_UPDATE',
+      'MESSAGES_UPSERT',
+      'MESSAGES_UPDATE', 
+      'MESSAGES_DELETE',
+      'SEND_MESSAGE',
+          'CONTACTS_SET',
+          'CONTACTS_UPSERT',
+          'CONTACTS_UPDATE',
+      'PRESENCE_UPDATE',
+      'CHATS_SET',
+      'CHATS_UPSERT',
+      'CHATS_UPDATE',
+          'CHATS_DELETE'
+        ]
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to create instance: ${error.message}`);
+    }
   }
 
-  // ===== ENVIO DE MENSAGENS =====
-
-  // Enviar mensagem de texto
-  async sendTextMessage(instanceName: string, data: SendMessageData): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/message/sendText/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  // Enviar mídia
-  async sendMediaMessage(instanceName: string, data: SendMessageData): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/message/sendMedia/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  // Enviar mensagem com botões
-  async sendButtonMessage(instanceName: string, data: SendMessageData): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/message/sendButtons/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  // ===== CONFIGURAÇÕES =====
-
-  // Configurar webhook
-  async setWebhook(instanceName: string, webhookUrl: string, events?: string[]): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/webhook/set/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        url: webhookUrl,
-        enabled: true,
-        events: events || [
+  // Configurar webhook para instância
+  async configureWebhook(instanceName: string, webhookUrl?: string): Promise<any> {
+    try {
+      const response = await this.api.post('/configure-webhook', {
+        instance: instanceName,
+        webhook: webhookUrl || EVOLUTION_CONFIG.WEBHOOK_URL,
+        events: [
           'APPLICATION_STARTUP',
           'QRCODE_UPDATED',
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE',
-          'MESSAGES_DELETE',
-          'SEND_MESSAGE',
-          'CONNECTION_UPDATE'
+          'CONNECTION_UPDATE',
+          'MESSAGES_UPSERT'
         ]
-      })
-    });
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to configure webhook: ${error.message}`);
+    }
   }
 
-  // Obter configurações do webhook
-  async getWebhook(instanceName: string): Promise<any> {
-    return this.makeRequest(`/webhook/find/${instanceName}`);
-  }
-
-  // Configurar Chatwoot
-  async setChatwoot(instanceName: string, config: any): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/chatwoot/set/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify(config)
-    });
-  }
-
-  // ===== INFORMAÇÕES DO PROFILE =====
-
-  // Obter informações do perfil
-  async getProfileInfo(instanceName: string): Promise<any> {
-    return this.makeRequest(`/chat/whatsappProfile/${instanceName}`);
-  }
-
-  // Atualizar nome do perfil
-  async updateProfileName(instanceName: string, name: string): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/chat/updateProfileName/${instanceName}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name })
-    });
-  }
-
-  // Atualizar foto do perfil
-  async updateProfilePicture(instanceName: string, picture: string): Promise<EvolutionAPIResponse> {
-    return this.makeRequest(`/chat/updateProfilePicture/${instanceName}`, {
-      method: 'PUT',
-      body: JSON.stringify({ picture })
-    });
-  }
-
-  // ===== UTILITÁRIOS =====
-
-  // Verificar se o número é válido no WhatsApp
-  async checkWhatsAppNumber(instanceName: string, numbers: string[]): Promise<any> {
-    return this.makeRequest(`/chat/whatsappNumbers/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify({ numbers })
-    });
-  }
-
-  // Buscar conversas
-  async fetchChats(instanceName: string): Promise<any> {
-    return this.makeRequest(`/chat/findChats/${instanceName}`);
-  }
-
-  // Buscar mensagens de um chat
-  async fetchMessages(instanceName: string, remoteJid: string, limit = 20): Promise<any> {
-    return this.makeRequest(`/chat/findMessages/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        where: { remoteJid },
-        limit
-      })
-    });
-  }
-
-  // ===== MÉTODOS ESPECÍFICOS PARA DEPARTAMENTOS =====
-
-  // Criar instância para departamento
-  async createDepartmentInstance(
-    departmentId: string, 
-    departmentName: string,
-    config: Partial<CreateInstanceData> = {}
-  ): Promise<DepartmentWhatsAppConfig> {
-    // Criar um nome de instância mais simples usando apenas o nome do departamento e um timestamp curto
-    const timestamp = Date.now().toString().slice(-6); // Últimos 6 dígitos do timestamp
-    const sanitizedName = departmentName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
-    const instanceName = `${sanitizedName}_${timestamp}`;
-    
-    const instanceData: CreateInstanceData = {
-      instanceName,
-      qrcode: true,
-      integration: 'WHATSAPP-BAILEYS',
-      reject_call: false,
-      groups_ignore: false,
-      always_online: true,
-      read_messages: true,
-      read_status: false,
-      sync_full_history: false,
-      webhook_by_events: true,
-      webhook_base64: false,
-      ...config
-    };
-
-    const response = await this.createInstance(instanceData);
-
-    const whatsappConfig: DepartmentWhatsAppConfig = {
-      id: `wa_${Date.now()}`,
-      departmentId,
-      instanceName,
-      integration: instanceData.integration || 'WHATSAPP-BAILEYS',
-      status: 'connecting',
-      autoReply: false,
-      businessHours: {
-        enabled: false,
-        days: [1, 2, 3, 4, 5], // Segunda a sexta
-        timezone: 'America/Sao_Paulo'
-      },
-      settings: {
-        reject_call: instanceData.reject_call || false,
-        msg_call: instanceData.msg_call,
-        groups_ignore: instanceData.groups_ignore || false,
-        always_online: instanceData.always_online || true,
-        read_messages: instanceData.read_messages || true,
-        read_status: instanceData.read_status || false,
-        sync_full_history: instanceData.sync_full_history || false
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    return whatsappConfig;
-  }
-
-  // Verificar saúde da instância
-  async checkInstanceHealth(instanceName: string): Promise<{
-    isHealthy: boolean;
-    status: string;
-    lastSeen?: string;
-    error?: string;
+  // Métodos de diagnóstico
+  async runDiagnostics(): Promise<{
+    health: HealthCheckResponse;
+    stats: StatsResponse;
+    instances: EvolutionInstance[];
+    websocketStats: any;
   }> {
     try {
-      const status = await this.getInstanceStatus(instanceName);
-      const connectionState = await this.getConnectionState(instanceName);
+      console.log('🔍 Executando diagnóstico completo...');
       
-      return {
-        isHealthy: status.instance.status === 'open' && connectionState.state === 'open',
-        status: status.instance.status,
-        lastSeen: new Date().toISOString()
-      };
-    } catch (error) {
-      return {
-        isHealthy: false,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
+      const [health, stats, instances, websocketStats] = await Promise.allSettled([
+        this.checkHealth(),
+        this.getStats(),
+        this.fetchInstances(),
+        this.getWebSocketStats()
+      ]);
 
-  // Configurar mensagens automáticas para departamento
-  async setupDepartmentAutoMessages(
-    instanceName: string,
-    config: {
-      welcomeMessage?: string;
-      awayMessage?: string;
-      businessHours?: {
-        enabled: boolean;
-        start?: string;
-        end?: string;
-        days?: number[];
+      return {
+        health: health.status === 'fulfilled' ? health.value : { status: 'error', timestamp: new Date().toISOString(), uptime: 0 },
+        stats: stats.status === 'fulfilled' ? stats.value : {} as StatsResponse,
+        instances: instances.status === 'fulfilled' ? instances.value : [],
+        websocketStats: websocketStats.status === 'fulfilled' ? websocketStats.value : {}
       };
+    } catch (error: any) {
+      throw new Error(`Diagnostics failed: ${error.message}`);
     }
-  ): Promise<void> {
-    // Esta funcionalidade seria implementada via webhook ou integração com Typebot
-    // Por enquanto, salvamos a configuração no banco de dados
-    console.log('Configurando mensagens automáticas para:', instanceName, config);
   }
 }
 
-// Singleton instance
-export const evolutionAPI = new EvolutionAPIService();
-export default EvolutionAPIService; 
+// Exportar instância única
+export const evolutionApi = new EvolutionApiService();
+
+// Exportar classe para casos especiais
+export { EvolutionApiService };
+
+// Exportar tipos
+export type {
+  HealthCheckResponse,
+  StatsResponse,
+  EvolutionInstance,
+  SendMessageRequest,
+  SendMessageResponse,
+  MessagesResponse
+}; 

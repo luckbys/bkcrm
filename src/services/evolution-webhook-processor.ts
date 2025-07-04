@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { evolutionApi, WebhookPayload } from './evolutionApiService';
+import { evolutionApi, WebhookPayload } from './evolutionApi';
 
 export interface ProcessedMessage {
   ticketId: string;
@@ -153,7 +153,7 @@ export class EvolutionWebhookProcessor {
         isFromMe: false
       });
 
-      // TODO: Implementar função markMessageAsRead no evolutionApiService se necessário
+      // TODO: Implementar função markMessageAsRead no evolutionApi se necessário
       console.log('📨 Mensagem processada, ignorando marcação de lida por enquanto');
 
       console.log('✅ Mensagem processada com sucesso');

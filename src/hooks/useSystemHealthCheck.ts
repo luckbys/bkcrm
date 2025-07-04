@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { evolutionApi } from '../services/evolutionApiService';
+import { evolutionApi } from '../services/evolutionApi';
 
 interface SystemHealth {
   evolution: 'connected' | 'disconnected' | 'checking';

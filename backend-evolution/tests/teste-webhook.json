@@ -1,0 +1,14 @@
+{
+  "event": "MESSAGES_UPSERT",
+  "instance": "teste",
+  "data": {
+    "key": {
+      "remoteJid": "5511999999999@s.whatsapp.net",
+      "fromMe": false
+    },
+    "message": {
+      "conversation": "Teste de mensagem com credenciais corretas"
+    },
+    "pushName": "Usuario Teste"
+  }
+} 

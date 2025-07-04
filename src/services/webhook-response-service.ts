@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { WebhookPayload } from './evolutionApiService';
+import { WebhookPayload } from './evolutionApi';
 
 // UUID fixo para sistema webhook (resolve problema mencionado nas memórias)
 const WEBHOOK_SYSTEM_UUID = '00000000-0000-0000-0000-000000000001';
