@@ -302,6 +302,9 @@ if (import.meta.env.DEV) {
 // Import test utilities for webhook v2 (makes functions globally available)
 import './utils/test-webhook-v2-integration';
 
+// Import complete chat system test utilities
+import './utils/test-complete-chat-system';
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
