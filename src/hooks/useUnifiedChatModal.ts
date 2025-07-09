@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useChatStore } from '../stores/chatStore';
+import { useWebhookV2Integration } from './useWebhookV2Integration';
+import { MessagePayload } from '../services/webhookServerV2';
 import { ChatMessage } from '../types';
+import { toast } from 'sonner';
 
 interface UseUnifiedChatModalProps {
   ticketId: string;
@@ -40,6 +43,10 @@ interface UseUnifiedChatModalReturn {
   isSending: boolean;
   showEmojiPicker: boolean;
   
+  // Estados webhook v2
+  webhookV2Connected: boolean;
+  webhookV2QueuedMessages: number;
+  
   // Refs
   messagesEndRef: React.RefObject<HTMLDivElement>;
   searchInputRef: React.RefObject<HTMLInputElement>;
@@ -58,6 +65,10 @@ interface UseUnifiedChatModalReturn {
   cancelReply: () => void;
   copyMessage: (content: string) => void;
   favoriteMessage: (messageId: string) => void;
+  
+  // Funções webhook v2
+  testWebhookV2: () => Promise<void>;
+  retryWebhookV2Messages: () => Promise<void>;
   
   // Funções de input
   setSearchTerm: (term: string) => void;
@@ -86,18 +97,33 @@ export const useUnifiedChatModal = ({
 }: UseUnifiedChatModalProps): UseUnifiedChatModalReturn => {
   
   // Store do chat
-  const {
-    connect,
-    disconnect,
-    joinTicket,
-    sendMessage: storeSendMessage,
-    messages,
-    isConnected,
-    isLoading,
-    error,
-    currentTicket,
-    addMessage
-  } = useChatStore();
+  const chatStore = useChatStore();
+
+  // Integração webhook v2
+  const webhookV2 = useWebhookV2Integration({
+    enableAutoRetry: true,
+    healthCheckInterval: 30000,
+    onMessageSent: (payload, response) => {
+      console.log('✅ [CHAT-HOOK] Mensagem enviada via webhook v2:', payload.ticketId);
+      toast.success('Mensagem processada pelo servidor', {
+        description: 'Webhook v2 processou com sucesso'
+      });
+    },
+    onMessageFailed: (payload, error) => {
+      console.error('❌ [CHAT-HOOK] Falha no webhook v2:', error);
+      toast.error('Falha no processamento', {
+        description: 'Webhook v2 indisponível - mensagem salva localmente'
+      });
+    },
+    onConnectionChange: (isConnected) => {
+      console.log(`🔌 [CHAT-HOOK] Webhook v2 ${isConnected ? 'conectado' : 'desconectado'}`);
+      if (isConnected) {
+        toast.success('Webhook v2 conectado');
+      } else {
+        toast.warning('Webhook v2 desconectado');
+      }
+    }
+  });
 
   // Estados locais da UI
   const [showSearch, setShowSearch] = useState(false);
@@ -120,36 +146,40 @@ export const useUnifiedChatModal = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Verificar se está próximo ao final da lista de mensagens
+  const [isNearBottom, setIsNearBottom] = useState(true);
+
   // Mensagens filtradas por busca
   const filteredMessages = useMemo(() => {
-    if (!searchTerm || !messages) return messages || [];
+    const allMessages = chatStore.messages || [];
+    if (!searchTerm) return allMessages;
     
     const term = searchTerm.toLowerCase();
-    return messages.filter(msg => 
+    return allMessages.filter(msg => 
       msg.content.toLowerCase().includes(term) ||
       (msg.sender === 'client' ? 'cliente' : 'agente').includes(term)
     );
-  }, [messages, searchTerm]);
+  }, [chatStore.messages, searchTerm]);
 
   // Estatísticas das mensagens
   const messageStats = useMemo(() => {
-    const msgs = messages || [];
+    const msgs = chatStore.messages || [];
     return {
       total: msgs.length,
       fromClient: msgs.filter(m => m.sender === 'client').length,
       fromAgent: msgs.filter(m => m.sender === 'agent' && !m.isInternal).length,
       internal: msgs.filter(m => m.isInternal).length,
-      unread: msgs.filter(m => m.timestamp > lastSeen && m.sender === 'client').length
+      unread: msgs.filter(m => new Date(m.timestamp) > lastSeen && m.sender === 'client').length
     };
-  }, [messages, lastSeen]);
+  }, [chatStore.messages, lastSeen]);
 
   // Status de conexão
   const connectionStatus = useMemo(() => {
-    if (error) return 'error';
-    if (isLoading) return 'connecting';
-    if (isConnected) return 'connected';
+    if (chatStore.error) return 'error';
+    if (chatStore.isLoading) return 'connecting';
+    if (chatStore.isConnected) return 'connected';
     return 'disconnected';
-  }, [isConnected, isLoading, error]);
+  }, [chatStore.isConnected, chatStore.isLoading, chatStore.error]);
 
   // Controle de exibição de mensagens não lidas
   const hasUnreadMessages = messageStats.unread > 0;
@@ -161,16 +191,24 @@ export const useUnifiedChatModal = ({
   useEffect(() => {
     if (isOpen && ticketId) {
       console.log('🔌 Conectando ao chat para ticket:', ticketId);
-      connect();
       
-      // Aguardar conexão antes de entrar no ticket
-      if (isConnected) {
-        joinTicket(ticketId);
+      // Usar função do store se disponível
+      if (typeof chatStore.connect === 'function') {
+        chatStore.connect();
+        
+        // Aguardar conexão antes de entrar no ticket
+        if (chatStore.isConnected && typeof chatStore.joinTicket === 'function') {
+          chatStore.joinTicket(ticketId);
+        }
+      } else {
+        console.warn('⚠️ Funções de chat store não disponíveis');
       }
     } else if (!isOpen) {
-      disconnect();
+      if (typeof chatStore.disconnect === 'function') {
+        chatStore.disconnect();
+      }
     }
-  }, [isOpen, ticketId, isConnected, connect, disconnect, joinTicket]);
+  }, [isOpen, ticketId, chatStore]);
 
   // Auto-scroll para última mensagem
   useEffect(() => {
@@ -188,13 +226,13 @@ export const useUnifiedChatModal = ({
 
   // Marcar como visto quando houver novas mensagens
   useEffect(() => {
-    if (isOpen && messages && messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.sender === 'client' && lastMessage.timestamp > lastSeen) {
+    if (isOpen && chatStore.messages && chatStore.messages.length > 0) {
+      const lastMessage = chatStore.messages[chatStore.messages.length - 1];
+      if (lastMessage.sender === 'client' && new Date(lastMessage.timestamp) > lastSeen) {
         setLastSeen(new Date());
       }
     }
-  }, [messages, isOpen, lastSeen]);
+  }, [chatStore.messages, isOpen, lastSeen]);
 
   // Limpar timeout de digitação
   useEffect(() => {
@@ -230,9 +268,9 @@ export const useUnifiedChatModal = ({
     setShowSearch(false);
   }, []);
 
-  // Função para enviar mensagem
+  // Função para enviar mensagem - ATUALIZADA COM WEBHOOK V2
   const sendMessage = useCallback(async () => {
-    if (!messageText.trim() || isSending || !currentTicket) return;
+    if (!messageText.trim() || isSending) return;
 
     setIsSending(true);
     
@@ -243,11 +281,49 @@ export const useUnifiedChatModal = ({
         replyTo: replyingTo?.id 
       });
 
-      await storeSendMessage({
+      // Preparar payload para webhook v2
+      const webhookPayload: MessagePayload = {
+        ticketId: ticketId,
         content: messageText.trim(),
+        sender: 'agent',
+        messageType: 'text',
         isInternal: activeMode === 'internal',
-        replyTo: replyingTo?.id
-      });
+        metadata: {
+          replyTo: replyingTo?.id,
+          timestamp: new Date().toISOString(),
+          source: 'unified-chat-modal'
+        }
+      };
+
+      // Enviar via sistema original (se disponível)
+      let originalSendPromise = Promise.resolve();
+      if (typeof chatStore.send === 'function') {
+        originalSendPromise = chatStore.send(ticketId, messageText.trim(), activeMode === 'internal');
+      } else {
+        console.warn('⚠️ Função send não disponível no chatStore');
+      }
+
+      // Enviar via webhook v2 (paralelo)
+      const webhookV2SendPromise = webhookV2.sendMessage(webhookPayload);
+
+      // Aguardar ambos os envios
+      const [originalResult, webhookResult] = await Promise.allSettled([
+        originalSendPromise,
+        webhookV2SendPromise
+      ]);
+
+      // Log dos resultados
+      if (originalResult.status === 'fulfilled') {
+        console.log('✅ Mensagem enviada via sistema original');
+      } else {
+        console.error('❌ Falha no sistema original:', originalResult.reason);
+      }
+
+      if (webhookResult.status === 'fulfilled' && webhookResult.value.success) {
+        console.log('✅ Mensagem processada via webhook v2');
+      } else {
+        console.warn('⚠️ Webhook v2 falhou ou indisponível');
+      }
 
       // Limpar formulário
       setMessageText('');
@@ -259,12 +335,47 @@ export const useUnifiedChatModal = ({
         textareaRef.current.focus();
       }
 
+      // Toast de confirmação
+      toast.success('Mensagem enviada', {
+        description: webhookResult.status === 'fulfilled' && webhookResult.value.success 
+          ? 'Processada pelos 2 sistemas' 
+          : 'Salva localmente'
+      });
+
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
+      toast.error('Erro no envio', {
+        description: 'Tente novamente'
+      });
     } finally {
       setIsSending(false);
     }
-  }, [messageText, isSending, currentTicket, activeMode, replyingTo, storeSendMessage]);
+  }, [messageText, isSending, activeMode, replyingTo, ticketId, webhookV2, chatStore]);
+
+  // Funções webhook v2
+  const testWebhookV2 = useCallback(async () => {
+    try {
+      const result = await webhookV2.webhookService.testConnection();
+      
+      if (result.success) {
+        toast.success('Webhook v2 funcionando!', {
+          description: 'Conectividade testada com sucesso'
+        });
+      } else {
+        toast.error('Webhook v2 indisponível', {
+          description: result.error
+        });
+      }
+    } catch (error: any) {
+      toast.error('Erro no teste', {
+        description: error.message
+      });
+    }
+  }, [webhookV2]);
+
+  const retryWebhookV2Messages = useCallback(async () => {
+    await webhookV2.retryFailedMessages();
+  }, [webhookV2]);
 
   // Funções de mensagem
   const replyToMessage = useCallback((message: ChatMessage) => {
@@ -379,7 +490,8 @@ export const useUnifiedChatModal = ({
   }, []);
 
   const exportChat = useCallback(() => {
-    if (!messages || messages.length === 0) return;
+    const messages = chatStore.messages || [];
+    if (messages.length === 0) return;
 
     const chatText = messages.map(msg => {
       const time = new Date(msg.timestamp).toLocaleString();
@@ -395,50 +507,22 @@ export const useUnifiedChatModal = ({
     a.download = `chat_ticket_${ticketId}_${new Date().toISOString().split('T')[0]}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [messages, ticketId]);
+  }, [chatStore.messages, ticketId]);
 
   const retryConnection = useCallback(() => {
     console.log('🔄 Tentando reconectar...');
-    connect();
-  }, [connect]);
-
-  const handleNewMessage = useCallback((message: any) => {
-    console.log('🔔 [UNIFIED-CHAT-HOOK] Nova mensagem recebida:', {
-      ticketId: message.ticket_id,
-      sender: message.sender,
-      isFromClient: message.metadata?.is_from_client,
-      content: message.content?.substring(0, 50),
-      metadata: message.metadata
-    });
-
-    if (!message || !message.ticket_id) {
-      console.warn('⚠️ [UNIFIED-CHAT-HOOK] Mensagem inválida:', message);
-      return;
+    if (typeof chatStore.connect === 'function') {
+      chatStore.connect();
     }
-
-    // Processar a mensagem
-    const processedMessage = {
-      ...message,
-      sender: message.sender || (message.metadata?.is_from_client ? 'client' : 'agent'),
-      senderName: message.sender_name || (message.sender === 'client' ? 'Cliente' : 'Agente')
-    };
-
-    console.log('✅ [UNIFIED-CHAT-HOOK] Mensagem processada:', {
-      ticketId: processedMessage.ticket_id,
-      sender: processedMessage.sender,
-      senderName: processedMessage.senderName
-    });
-
-    addMessage(processedMessage);
-  }, [addMessage]);
+  }, [chatStore]);
 
   return {
     // Estado básico
-    isLoading,
-    error,
+    isLoading: chatStore.isLoading || false,
+    error: chatStore.error || null,
     
     // Mensagens
-    messages: messages || [],
+    messages: chatStore.messages || [],
     filteredMessages,
     messageStats,
     
@@ -456,6 +540,10 @@ export const useUnifiedChatModal = ({
     isTyping,
     isSending,
     showEmojiPicker,
+    
+    // Estados webhook v2
+    webhookV2Connected: webhookV2.isConnected,
+    webhookV2QueuedMessages: webhookV2.messageQueue.length,
     
     // Refs
     messagesEndRef,
@@ -475,6 +563,10 @@ export const useUnifiedChatModal = ({
     cancelReply,
     copyMessage,
     favoriteMessage,
+    
+    // Funções webhook v2
+    testWebhookV2,
+    retryWebhookV2Messages,
     
     // Funções de input
     setSearchTerm,

@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useTicketsDB } from '@/hooks/useTicketsDB';
 import { useDepartments } from '@/hooks/useDepartments';
+import { CardSkeleton, LoadingSpinner } from '@/components/ui/loading';
 
 interface DashboardProps {
   onViewChange?: (view: string) => void;
@@ -148,7 +149,7 @@ export const Dashboard = ({ onViewChange, onOpenAddTicket }: DashboardProps = { 
             disabled={isRefreshing}
             className="flex items-center gap-2"
           >
-            <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+            {isRefreshing ? <LoadingSpinner size="sm" /> : <RefreshCw className="w-4 h-4" />}
             Atualizar
           </Button>
           

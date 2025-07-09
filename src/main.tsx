@@ -299,6 +299,9 @@ if (import.meta.env.DEV) {
   import('./utils/test-instance-creation.js');
 }
 
+// Import test utilities for webhook v2 (makes functions globally available)
+import './utils/test-webhook-v2-integration';
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>

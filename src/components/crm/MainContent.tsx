@@ -1,227 +1,259 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  BarChart3, 
+  Users, 
+  MessageSquare, 
+  Settings, 
+  Plus, 
+  Search,
+  Filter,
+  Download,
+  RefreshCw,
+  ChevronRight,
+  Target,
+  Clock,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle,
+  Eye,
+  Edit,
+  Trash2,
+  MoreHorizontal,
+  Calendar,
+  Activity,
+  Bell,
+  Zap,
+  Globe
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Dashboard } from './Dashboard';
 import { TicketManagement } from './TicketManagement';
 import { CustomerManagement } from './customers/CustomerManagement';
-import { SalesFunnel } from './SalesFunnel';
-import { DepartmentDiagnostic } from './admin/DepartmentDiagnostic';
-import { DepartmentEvolutionManager } from './admin/DepartmentEvolutionManager';
-import { Dashboard } from './Dashboard';
-import { ChatDemo } from '../chat/ChatDemo';
-import { Loader2, MessageSquare, Filter, Users, Plus, Settings, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { AnalyticsAndReports } from './analytics/AnalyticsAndReports';
+import { useToast } from '@/hooks/use-toast';
+import { LoadingSpinner, PageLoadingSpinner } from '@/components/ui/loading';
 
 interface MainContentProps {
-  selectedSector: any;
-  currentView: string;
+  activeView: string;
   onViewChange: (view: string) => void;
-  isLoading: boolean;
-  sidebarCollapsed: boolean;
-  onOpenAddTicket: () => void;
+  userRole: string;
+  userName: string;
+  isLoading?: boolean;
 }
 
-export const MainContent = ({ 
-  selectedSector, 
-  currentView, 
-  onViewChange, 
-  isLoading, 
-  sidebarCollapsed,
-  onOpenAddTicket 
-}: MainContentProps) => {
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center p-8">
-            <div className="relative mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg mx-auto flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-white" />
-              </div>
-              
-              <div className="absolute inset-0 rounded-2xl bg-blue-400/20 animate-ping" />
-              <div className="absolute inset-2 rounded-xl bg-blue-400/10 animate-ping animation-delay-200" />
-            </div>
-            
-            <div className="space-y-2">
-              <p className="text-lg font-semibold text-gray-900">Carregando...</p>
-              <p className="text-sm text-gray-500">Preparando a melhor experiência para você</p>
-            </div>
-            
-            <div className="flex justify-center space-x-2 mt-4">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-100" />
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce animation-delay-200" />
-            </div>
-          </div>
-        </div>
-      );
-    }
+interface QuickAction {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  color: string;
+}
 
-    switch (currentView) {
-      case 'conversas':
+export const MainContent: React.FC<MainContentProps> = ({
+  activeView,
+  onViewChange,
+  userRole,
+  userName,
+  isLoading = false
+}) => {
+  const { toast } = useToast();
+  const [showAddTicketModal, setShowAddTicketModal] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Loading de página inicial
+  if (isLoading) {
+    return <PageLoadingSpinner message="Carregando BKCRM..." />;
+  }
+
+  const quickActions: QuickAction[] = [
+    {
+      id: 'new-ticket',
+      label: 'Novo Ticket',
+      icon: <Plus className="w-5 h-5" />,
+      onClick: () => setShowAddTicketModal(true),
+      color: 'bg-blue-500 hover:bg-blue-600'
+    },
+    {
+      id: 'search-customer',
+      label: 'Buscar Cliente',
+      icon: <Search className="w-5 h-5" />,
+      onClick: () => onViewChange('customers'),
+      color: 'bg-green-500 hover:bg-green-600'
+    },
+    {
+      id: 'analytics',
+      label: 'Relatórios',
+      icon: <BarChart3 className="w-5 h-5" />,
+      onClick: () => onViewChange('analytics'),
+      color: 'bg-purple-500 hover:bg-purple-600'
+    },
+    {
+      id: 'settings',
+      label: 'Configurações',
+      icon: <Settings className="w-5 h-5" />,
+      onClick: () => onViewChange('settings'),
+      color: 'bg-gray-500 hover:bg-gray-600'
+    }
+  ];
+
+  const handleQuickAction = (action: QuickAction) => {
+    action.onClick();
+    toast({
+      title: "Ação executada",
+      description: `${action.label} foi acionado`,
+      duration: 2000
+    });
+  };
+
+  const renderMainContent = () => {
+    switch (activeView) {
+      case 'dashboard':
         return (
-          <TicketManagement 
-            sector={selectedSector} 
-            onOpenAddTicket={onOpenAddTicket}
+          <Dashboard 
+            onViewChange={onViewChange}
+            onOpenAddTicket={() => setShowAddTicketModal(true)}
           />
         );
-      case 'funil':
-        return <SalesFunnel sector={selectedSector} />;
-      case 'clientes':
+      
+      case 'tickets':
+        return (
+          <TicketManagement 
+            sector={userRole}
+            onOpenAddTicket={() => setShowAddTicketModal(true)}
+          />
+        );
+      
+      case 'customers':
         return <CustomerManagement />;
-      case 'dashboard':
-        return <Dashboard onViewChange={onViewChange} onOpenAddTicket={onOpenAddTicket} />;
-      case 'produtos':
+      
+      case 'analytics':
+        return <AnalyticsAndReports />;
+      
+      case 'settings':
         return (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 max-w-md">
-              <div className="bg-gradient-to-br from-emerald-100 via-green-50 to-teal-100 rounded-3xl p-8 mb-6 relative overflow-hidden">
-                <div className="absolute top-2 right-2">
-                  <Sparkles className="w-6 h-6 text-emerald-500 animate-pulse" />
+          <Card>
+            <CardHeader>
+              <CardTitle>Configurações do Sistema</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          <Settings className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">Configurações Gerais</h3>
+                          <p className="text-sm text-gray-600">Preferências do sistema</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <Users className="w-5 h-5 text-green-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">Gerenciar Usuários</h3>
+                          <p className="text-sm text-gray-600">Permissões e acessos</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-                <MessageSquare className="w-16 h-16 text-emerald-600 mb-4 mx-auto" />
-                <h3 className="text-xl font-bold text-gray-900 mb-3">
-                  Produtos
-                </h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Funcionalidade em desenvolvimento. Em breve você poderá gerenciar todos os seus produtos aqui.
-                </p>
               </div>
-              
-              <div className="flex justify-center">
-                <div className="bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-emerald-200 text-emerald-700 text-sm font-medium">
-                  🚧 Em breve...
-                </div>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         );
-      case 'disparos':
-        return (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 max-w-md">
-              <div className="bg-gradient-to-br from-orange-100 via-red-50 to-pink-100 rounded-3xl p-8 mb-6 relative overflow-hidden">
-                <div className="absolute top-2 right-2">
-                  <Sparkles className="w-6 h-6 text-orange-500 animate-pulse" />
-                </div>
-                <MessageSquare className="w-16 h-16 text-orange-600 mb-4 mx-auto" />
-                <h3 className="text-xl font-bold text-gray-900 mb-3">
-                  Disparos em Massa
-                </h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Sistema de disparos em massa em desenvolvimento. Em breve você poderá enviar mensagens para múltiplos contatos.
-                </p>
-              </div>
-              
-              <div className="flex justify-center">
-                <div className="bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-orange-200 text-orange-700 text-sm font-medium">
-                  🚧 Em breve...
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      case 'whatsapp':
-      case 'evolution-api':
-        return (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 max-w-md">
-              <div className="bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 rounded-3xl p-8 mb-6 relative overflow-hidden">
-                <div className="absolute top-2 right-2">
-                  <Sparkles className="w-6 h-6 text-blue-500 animate-pulse" />
-                </div>
-                <MessageSquare className="w-16 h-16 text-blue-600 mb-4 mx-auto" />
-                <h3 className="text-xl font-bold text-gray-900 mb-3">
-                  WhatsApp Integration
-                </h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Integração WhatsApp em desenvolvimento. Em breve você poderá gerenciar suas conexões aqui.
-                </p>
-              </div>
-              
-              <div className="flex justify-center">
-                <div className="bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-blue-200 text-blue-700 text-sm font-medium">
-                  🚧 Em breve...
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      case 'admin':
-        return <DepartmentDiagnostic />;
-      case 'chat-demo':
-        return <ChatDemo />;
+      
       default:
         return (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 max-w-2xl">
-              <div className="bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 rounded-3xl p-12 mb-8 relative overflow-hidden">
-                <div className="absolute top-4 right-4">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse animation-delay-100" />
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse animation-delay-200" />
-                  </div>
-                </div>
-                
-                <div className="relative">
-                  <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-lg">
-                    <MessageSquare className="w-10 h-10 text-white" />
-                  </div>
-                  
-                  <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                    Bem-vindo ao CRM Sistema
-                  </h3>
-                  <p className="text-gray-600 leading-relaxed text-lg">
-                    Sua plataforma completa para gerenciamento de relacionamento com clientes. 
-                    Selecione uma opção do menu para começar a explorar.
-                  </p>
-                </div>
+          <Card>
+            <CardContent className="p-8 text-center">
+              <div className="mb-4">
+                <Activity className="w-16 h-16 mx-auto text-gray-400" />
               </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button
-                  onClick={() => onViewChange('conversas')}
-                  className="group flex items-center p-4 bg-white/80 backdrop-blur-sm rounded-2xl border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                >
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mr-4 group-hover:bg-blue-200 transition-colors">
-                    <MessageSquare className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-900">Conversas</p>
-                    <p className="text-sm text-gray-500">Gerencie tickets</p>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={() => onViewChange('funil')}
-                  className="group flex items-center p-4 bg-white/80 backdrop-blur-sm rounded-2xl border border-purple-200 hover:border-purple-300 transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                >
-                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mr-4 group-hover:bg-purple-200 transition-colors">
-                    <Filter className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-900">Funil</p>
-                    <p className="text-sm text-gray-500">Acompanhe vendas</p>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Seção em Desenvolvimento
+              </h3>
+              <p className="text-gray-600">
+                Esta funcionalidade estará disponível em breve.
+              </p>
+            </CardContent>
+          </Card>
         );
     }
   };
 
   return (
-    <div 
-      className={cn(
-        'flex-1 min-h-screen transition-all duration-300 ease-out',
-        sidebarCollapsed 
-          ? 'pl-[80px]' // Espaço para dock colapsado centralizado (14 * 4 + 24px margin)
-          : 'pl-[296px]' // Espaço para dock expandido centralizado (64 * 4 + 40px margin)
-      )}
-    >
-      <div className="container mx-auto p-4 sm:p-6 lg:p-8 min-h-screen">
-        {renderContent()}
+    <div className="flex-1 space-y-6 p-6">
+      {/* Header com ações rápidas */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {activeView === 'dashboard' && 'Dashboard'}
+            {activeView === 'tickets' && 'Gerenciamento de Tickets'}
+            {activeView === 'customers' && 'Gestão de Clientes'}
+            {activeView === 'analytics' && 'Analytics & Relatórios'}
+            {activeView === 'settings' && 'Configurações'}
+          </h1>
+          <p className="text-gray-600">
+            Olá, {userName}! Bem-vindo ao BKCRM
+          </p>
+        </div>
+        
+        {/* Ações rápidas */}
+        <div className="flex flex-wrap items-center gap-2">
+          {quickActions.map((action) => (
+            <Button
+              key={action.id}
+              onClick={() => handleQuickAction(action)}
+              className={cn(
+                "flex items-center gap-2 text-white transition-all duration-200",
+                action.color
+              )}
+              size="sm"
+            >
+              {action.icon}
+              {action.label}
+            </Button>
+          ))}
+        </div>
       </div>
+
+      {/* Conteúdo principal */}
+      <div className="min-h-[600px]">
+        {renderMainContent()}
+      </div>
+
+      {/* Modal de Novo Ticket */}
+      <Dialog open={showAddTicketModal} onOpenChange={setShowAddTicketModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Criar Novo Ticket</DialogTitle>
+          </DialogHeader>
+          <div className="p-6">
+            <p className="text-gray-600">
+              Formulário de criação de ticket será implementado aqui.
+            </p>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => setShowAddTicketModal(false)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

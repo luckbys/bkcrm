@@ -30,6 +30,16 @@ export const EVOLUTION_CONFIG = {
   DEFAULT_INSTANCE: 'atendimento-ao-cliente-suporte'
 };
 
+// Configuração do novo webhook server v2
+export const WEBHOOK_SERVER_V2_CONFIG = {
+  BASE_URL: 'https://bkcrm-serverv2.oqrrne.easypanel.host',
+  WEBHOOK_URL: 'https://bkcrm-serverv2.oqrrne.easypanel.host/webhook',
+  HEALTH_CHECK_URL: 'https://bkcrm-serverv2.oqrrne.easypanel.host/health',
+  TIMEOUT: 15000,
+  RETRY_ATTEMPTS: 3,
+  RETRY_DELAY: 1000
+};
+
 // Configuração de ambiente
 export const APP_CONFIG = {
   ENV: isDevelopment ? 'development' : 'production',

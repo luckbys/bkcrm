@@ -49,6 +49,13 @@ import { useUserDepartment } from '@/hooks/useUserDepartment';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import UnifiedChatModalWrapper from '../chat/UnifiedChatModalWrapper';
+import { 
+  ListSkeleton, 
+  LoadingSpinner, 
+  ButtonLoadingSpinner,
+  TableSkeleton,
+  CardSkeleton
+} from '@/components/ui/loading';
 
 // Função helper para extrair informações do cliente do ticket
 const extractClientInfo = (ticket: any) => {
@@ -875,10 +882,49 @@ export const TicketManagement = ({ sector, onOpenAddTicket }: TicketManagementPr
 
           {/* Lista de tickets */}
           {isLoading ? (
+            <ListSkeleton items={5} />
+          ) : paginatedTickets.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-                <p className="text-gray-600">Carregando tickets...</p>
+                <div className="mb-4">
+                  {filteredAndSortedTickets.length === 0 ? (
+                    <div>
+                      <div className="text-gray-400 mb-2">
+                        <Search className="w-16 h-16 mx-auto" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Nenhum ticket encontrado
+                      </h3>
+                      <p className="text-gray-600 text-sm">
+                        {searchTerm || Object.values(filters).some(f => f !== '' && f !== 'todos') 
+                          ? 'Tente ajustar os filtros ou termo de busca'
+                          : 'Crie seu primeiro ticket para começar'
+                        }
+                      </p>
+                      {(!searchTerm && !Object.values(filters).some(f => f !== '' && f !== 'todos')) && (
+                        <Button 
+                          onClick={onOpenAddTicket}
+                          className="mt-4"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Criar Primeiro Ticket
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-gray-400 mb-2">
+                        <Search className="w-16 h-16 mx-auto" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Nenhum ticket na página atual
+                      </h3>
+                      <p className="text-gray-600 text-sm">
+                        Há {filteredAndSortedTickets.length} tickets no total. Navegue pelas páginas ou ajuste os filtros.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ) : paginatedTickets.length === 0 ? (

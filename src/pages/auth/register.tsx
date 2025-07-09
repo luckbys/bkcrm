@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Icons } from '@/components/ui/icons';
+import { ButtonLoadingSpinner } from '@/components/ui/loading';
 import { AuthError } from '@supabase/supabase-js';
 import { Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -354,10 +355,7 @@ export default function RegisterPage() {
                 disabled={loading || success !== null}
               >
                 {loading ? (
-                  <>
-                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                    Criando conta...
-                  </>
+                  <ButtonLoadingSpinner />
                 ) : success ? (
                   <>
                     <CheckCircle className="mr-2 h-4 w-4" />

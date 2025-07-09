@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { SidebarLoading } from '../ui/loading-spinner';
 import { cn } from '../../lib/utils';
 import DepartmentCreateModal from './DepartmentCreateModal';
-import WhatsAppConfigModal from './modals/WhatsAppConfigModal';
+import { WhatsAppHub } from '../whatsapp/WhatsAppHub';
 // Função para determinar cor baseada na prioridade
 const getPriorityColor = (priority) => {
     switch (priority) {
@@ -280,7 +280,7 @@ export const Sidebar = ({ onDepartmentSelect, selectedDepartmentId, className = 
                         name: editingDepartment.name,
                         priority: editingDepartment.priority,
                         description: editingDepartment.description || ''
-                    } : undefined }), selectedDepartment && (_jsx(WhatsAppConfigModal, { isOpen: showWhatsAppModal, onClose: () => {
+                    } : undefined }), selectedDepartment && (_jsx(WhatsAppHub, { isOpen: showWhatsAppModal, onClose: () => {
                         console.log('🔍 [Sidebar] Fechando modal WhatsApp');
                         setShowWhatsAppModal(false);
                         setSelectedDepartment(null);

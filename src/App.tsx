@@ -9,14 +9,10 @@ import RegisterPage from './pages/auth/register';
 import ForgotPasswordPage from './pages/auth/forgot-password';
 import { EmailConfirmation } from './pages/auth/EmailConfirmation';
 import Index from "./pages/Index";
-import { useState } from 'react';
-import WhatsAppConfigModal from './components/crm/modals/WhatsAppConfigModal';
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
@@ -38,20 +34,6 @@ const App = () => {
             {/* Rota padrão */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-md"
-          >
-            Configurar WhatsApp
-          </button>
-
-          <WhatsAppConfigModal
-            isOpen={isModalOpen}
-            onClose={() => setIsModalOpen(false)}
-            departmentId="1"
-            departmentName="Vendas"
-          />
         </TooltipProvider>
       </QueryClientProvider>
     </AuthProvider>

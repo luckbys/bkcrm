@@ -7,7 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Icons } from '@/components/ui/icons';
+import { Ripple } from '@/components/magicui/ripple';
+import { ButtonLoadingSpinner } from '@/components/ui/loading';
 import { AuthError } from '@supabase/supabase-js';
+import { cn } from '@/lib/utils';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -17,94 +20,79 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redireciona se já estiver logado
   useEffect(() => {
     if (user) {
-      navigate('/', { replace: true });
+      navigate('/');
     }
   }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
     setLoading(true);
+    setError(null);
 
     try {
-      await signIn(email, password);
-      // O redirecionamento será feito pelo useEffect quando o user for atualizado
-    } catch (err: any) {
-      console.error('Erro ao fazer login:', err);
-      
-      // Usar a mensagem de erro personalizada do hook useAuth
-      if (err.message) {
-        setError(err.message);
-      } else if (err instanceof AuthError) {
-        switch (err.message) {
-          case 'Invalid login credentials':
-            setError('Email ou senha inválidos');
-            break;
-          case 'Email not confirmed':
-            setError('Por favor, confirme seu email antes de fazer login');
-            break;
-          case 'Too many requests':
-            setError('Muitas tentativas de login. Por favor, aguarde alguns minutos');
-            break;
-          default:
-            setError('Ocorreu um erro ao fazer login. Por favor, tente novamente');
-        }
-      } else {
-        setError('Ocorreu um erro ao fazer login. Por favor, tente novamente');
+      const { error } = await signIn(email, password);
+      if (error) {
+        setError(error.message);
       }
+    } catch (err) {
+      setError('Erro inesperado. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (user) {
+    return null; // or loading spinner
+  }
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <div className="w-full max-w-[400px] space-y-6">
-        {/* Logo e Título */}
-        <div className="flex flex-col items-center space-y-2 text-center">
-          <Icons.logo className="h-12 w-12" />
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Bem-vindo ao BKCRM
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Faça login para acessar sua conta
-          </p>
+    <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
+      {/* Background Ripple Effect */}
+      <Ripple 
+        variant="elegant"
+        mainCircleSize={200}
+        mainCircleOpacity={0.06}
+        numCircles={8}
+        className="absolute inset-0 z-0"
+      />
+      
+      {/* Subtle Gradient Overlay */}
+      <div className="absolute inset-0 z-10 bg-gradient-to-br from-white/40 via-transparent to-white/20" />
+      
+      {/* Content Container */}
+      <div className="relative z-20 w-full max-w-md mx-auto px-4">
+        {/* Logo/Brand */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 mb-4 shadow-lg shadow-blue-500/20">
+            <span className="text-2xl font-bold text-white">BK</span>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">BKCRM</h1>
+          <p className="text-gray-600">Sistema de Gestão Omnichannel</p>
         </div>
 
-        {/* Card de Login */}
-        <Card>
+        {/* Login Card */}
+        <Card className="backdrop-blur-sm bg-white/80 border-gray-200/50 shadow-xl shadow-gray-900/5">
+          <CardHeader className="space-y-1 pb-6">
+            <CardTitle className="text-2xl font-bold text-center text-gray-900">
+              Bem-vindo de volta
+            </CardTitle>
+            <CardDescription className="text-center text-gray-600">
+              Entre com suas credenciais para acessar o sistema
+            </CardDescription>
+          </CardHeader>
+
           <form onSubmit={handleSubmit}>
-            <CardHeader>
-              <CardTitle>Login</CardTitle>
-              <CardDescription>
-                Entre com suas credenciais para acessar o sistema
-              </CardDescription>
-            </CardHeader>
             <CardContent className="space-y-4">
               {error && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>
-                    {error}
-                    {error.includes('Email ainda não foi confirmado') && (
-                      <div className="mt-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate('/auth/email-confirmation')}
-                          className="w-full"
-                        >
-                          📧 Reenviar Email de Confirmação
-                        </Button>
-                      </div>
-                    )}
-                  </AlertDescription>
+                <Alert className="border-red-200 bg-red-50 text-red-800">
+                  <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
+
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-gray-700 font-medium">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -112,76 +100,44 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  disabled={loading}
-                  className="w-full"
-                  autoComplete="email"
+                  className="border-gray-300 bg-white/70 focus:border-blue-500 focus:ring-blue-500/20"
                 />
               </div>
+
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Senha</Label>
-                  <Button
-                    variant="link"
-                    className="px-0 font-normal"
-                    type="button"
-                    onClick={() => navigate('/auth/forgot-password')}
-                  >
-                    Esqueceu a senha?
-                  </Button>
-                </div>
+                <Label htmlFor="password" className="text-gray-700 font-medium">Senha</Label>
                 <Input
                   id="password"
                   type="password"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  disabled={loading}
-                  className="w-full"
-                  autoComplete="current-password"
+                  className="border-gray-300 bg-white/70 focus:border-blue-500 focus:ring-blue-500/20"
                 />
               </div>
             </CardContent>
+
             <CardFooter className="flex flex-col space-y-4">
-              <Button
-                type="submit"
-                className="w-full"
+              <Button 
+                type="submit" 
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium shadow-lg shadow-blue-500/20 transition-all duration-200"
                 disabled={loading}
               >
-                {loading ? (
-                  <>
-                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                    Entrando...
-                  </>
-                ) : (
-                  'Entrar'
-                )}
+                {loading ? <ButtonLoadingSpinner /> : 'Entrar'}
               </Button>
-              <div className="text-center text-sm">
-                Não tem uma conta?{' '}
-                <Button
-                  variant="link"
-                  className="px-0"
-                  type="button"
-                  onClick={() => navigate('/auth/register')}
-                >
-                  Cadastre-se
-                </Button>
+
+              <div className="text-center text-sm text-gray-500">
+                <p>Esqueceu sua senha? Entre em contato com o administrador</p>
               </div>
             </CardFooter>
           </form>
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-sm text-muted-foreground">
-          Ao fazer login, você concorda com nossos{' '}
-          <Button variant="link" className="px-0" type="button">
-            Termos de Serviço
-          </Button>{' '}
-          e{' '}
-          <Button variant="link" className="px-0" type="button">
-            Política de Privacidade
-          </Button>
-        </p>
+        <div className="text-center mt-8 text-gray-500 text-sm">
+          <p>© 2024 BKCRM. Todos os direitos reservados.</p>
+        </div>
       </div>
     </div>
   );

@@ -245,4 +245,364 @@
   .loading-shine::before {
     animation: none;
   }
+}
+
+/* Animações customizadas para componentes de loading */
+
+/* Delays de animação para criar efeitos sequenciais */
+.animation-delay-200 {
+  animation-delay: 0.2s;
+}
+
+.animation-delay-300 {
+  animation-delay: 0.3s;
+}
+
+.animation-delay-400 {
+  animation-delay: 0.4s;
+}
+
+.animation-delay-500 {
+  animation-delay: 0.5s;
+}
+
+.animation-delay-700 {
+  animation-delay: 0.7s;
+}
+
+.animation-delay-1000 {
+  animation-delay: 1s;
+}
+
+/* Animação de pulsação personalizada */
+@keyframes custom-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+.animate-custom-pulse {
+  animation: custom-pulse 2s ease-in-out infinite;
+}
+
+/* Animação de bounce suave */
+@keyframes soft-bounce {
+  0%, 20%, 53%, 80%, 100% {
+    animation-timing-function: cubic-bezier(0.215, 0.610, 0.355, 1.000);
+    transform: translate3d(0,0,0);
+  }
+  40%, 43% {
+    animation-timing-function: cubic-bezier(0.755, 0.050, 0.855, 0.060);
+    transform: translate3d(0, -8px, 0);
+  }
+  70% {
+    animation-timing-function: cubic-bezier(0.755, 0.050, 0.855, 0.060);
+    transform: translate3d(0, -4px, 0);
+  }
+  90% {
+    transform: translate3d(0,-1px,0);
+  }
+}
+
+.animate-soft-bounce {
+  animation: soft-bounce 1s ease-in-out infinite;
+}
+
+/* Animação de giro suave */
+@keyframes gentle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-gentle-spin {
+  animation: gentle-spin 3s linear infinite;
+}
+
+/* Animação de fade in/out */
+@keyframes fade-in-out {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in-out {
+  animation: fade-in-out 2s ease-in-out infinite;
+}
+
+/* Animação de escala pulsante */
+@keyframes scale-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+.animate-scale-pulse {
+  animation: scale-pulse 1.5s ease-in-out infinite;
+}
+
+/* Animação de ondas (para loading de conexão) */
+@keyframes wave {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.animate-wave {
+  animation: wave 2s ease-out infinite;
+}
+
+/* Animação de shimmer para skeletons */
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  background-size: 200px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Animação de progresso líquido */
+@keyframes liquid-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-liquid-progress {
+  animation: liquid-progress 2s ease-in-out infinite;
+}
+
+/* Animação de respiração */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Animação de glow */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.6);
+  }
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Animação de typing dots */
+@keyframes typing-dots {
+  0%, 20% {
+    color: rgba(0, 0, 0, 0);
+    text-shadow: 0.25em 0 0 rgba(0, 0, 0, 0),
+                 0.5em 0 0 rgba(0, 0, 0, 0);
+  }
+  40% {
+    color: black;
+    text-shadow: 0.25em 0 0 rgba(0, 0, 0, 0),
+                 0.5em 0 0 rgba(0, 0, 0, 0);
+  }
+  60% {
+    text-shadow: 0.25em 0 0 black,
+                 0.5em 0 0 rgba(0, 0, 0, 0);
+  }
+  80%, 100% {
+    text-shadow: 0.25em 0 0 black,
+                 0.5em 0 0 black;
+  }
+}
+
+.animate-typing-dots::after {
+  content: " ...";
+  animation: typing-dots 1.4s ease-in-out infinite;
+}
+
+/* Efeitos de hover para loading interativo */
+.loading-hover:hover {
+  transform: scale(1.1);
+  transition: transform 0.3s ease;
+}
+
+/* Loading com gradiente animado */
+.animated-gradient {
+  background: linear-gradient(-45deg, #3B82F6, #8B5CF6, #06D6A0, #3B82F6);
+  background-size: 400% 400%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Efeito de glassmorphism melhorado */
+.glass-enhanced {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Animação de conexão (ondas de radar) */
+@keyframes radar {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-radar {
+  animation: radar 2s ease-out infinite;
+}
+
+/* Animação de loading dots sequencial */
+.loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.loading-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: loading-dot 1.4s ease-in-out infinite both;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+.loading-dots span:nth-child(3) { animation-delay: 0s; }
+
+@keyframes loading-dot {
+  0%, 80%, 100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Responsividade para animações */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .animate-pulse,
+  .animate-bounce,
+  .animate-custom-pulse,
+  .animate-soft-bounce,
+  .animate-gentle-spin,
+  .animate-fade-in-out,
+  .animate-scale-pulse,
+  .animate-wave,
+  .animate-liquid-progress,
+  .animate-breathe,
+  .animate-glow,
+  .animate-float,
+  .animate-typing-dots,
+  .animated-gradient,
+  .animate-radar {
+    animation: none;
+  }
+  
+  .shimmer {
+    background: rgba(255, 255, 255, 0.1);
+    animation: none;
+  }
+}
+
+/* Estados de loading para diferentes contextos */
+.loading-context-success {
+  background: linear-gradient(135deg, #10B981, #059669);
+}
+
+.loading-context-warning {
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+}
+
+.loading-context-error {
+  background: linear-gradient(135deg, #EF4444, #DC2626);
+}
+
+.loading-context-info {
+  background: linear-gradient(135deg, #3B82F6, #2563EB);
+}
+
+/* Otimizações de performance */
+.loading-optimized {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .glass-enhanced {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
 } 
